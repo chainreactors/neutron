@@ -2,8 +2,8 @@ package file
 
 import (
 	"fmt"
-	"github.com/chainreactors/found/pkg/proton/common"
 	"github.com/chainreactors/logs"
+	"github.com/chainreactors/neutron/common"
 	"io"
 	"io/fs"
 	"os"

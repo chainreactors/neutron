@@ -1,11 +1,10 @@
 package file
 
 import (
-	"github.com/chainreactors/found/pkg/proton/operators"
+	"github.com/chainreactors/neutron/operators"
+	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/parsers/iutils"
 	"time"
-
-	"github.com/chainreactors/found/pkg/proton/protocols"
 )
 
 // Match matches a generic data response again a given matcher

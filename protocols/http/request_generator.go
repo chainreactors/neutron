@@ -2,8 +2,6 @@ package http
 
 import (
 	"fmt"
-	"github.com/chainreactors/found/pkg/proton/common"
-	"github.com/chainreactors/found/pkg/proton/protocols"
 	"github.com/chainreactors/parsers/iutils"
 	"io/ioutil"
 	"net"

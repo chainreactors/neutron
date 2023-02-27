@@ -1,7 +1,7 @@
 package protocols
 
 import (
-	"github.com/chainreactors/found/pkg/proton/operators"
+	"github.com/chainreactors/neutron/operators"
 	"time"
 )
 

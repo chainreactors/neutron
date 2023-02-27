@@ -3,8 +3,6 @@ package http
 import (
 	"errors"
 	"fmt"
-	"github.com/chainreactors/found/pkg/proton/operators"
-	"github.com/chainreactors/found/pkg/proton/protocols"
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/parsers"
 	"github.com/chainreactors/parsers/iutils"

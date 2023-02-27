@@ -2,14 +2,13 @@ package file
 
 import (
 	"fmt"
-	"github.com/chainreactors/found/pkg/proton/common"
-	"github.com/chainreactors/found/pkg/proton/operators"
+	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/operators"
+	"github.com/chainreactors/neutron/protocols"
 	"path/filepath"
 	"strings"
 
 	"github.com/h2non/filetype"
-
-	"github.com/chainreactors/found/pkg/proton/protocols"
 )
 
 var (

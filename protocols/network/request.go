@@ -3,9 +3,7 @@ package network
 import (
 	"encoding/hex"
 	"errors"
-	"github.com/chainreactors/found/pkg/proton/common"
-	"github.com/chainreactors/found/pkg/proton/operators"
-	protocols "github.com/chainreactors/found/pkg/proton/protocols"
+	protocols "github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/parsers/iutils"
 	"io"
 	"net"

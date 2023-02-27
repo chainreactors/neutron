@@ -1,8 +1,8 @@
 package executer
 
 import (
-	"github.com/chainreactors/found/pkg/proton/operators"
-	"github.com/chainreactors/found/pkg/proton/protocols"
+	"github.com/chainreactors/neutron/operators"
+	"github.com/chainreactors/neutron/protocols"
 )
 
 type Executer struct {

@@ -1,6 +1,6 @@
 package protocols
 
-import "github.com/chainreactors/found/pkg/proton/operators"
+import "github.com/chainreactors/neutron/operators"
 
 // CreateEvent wraps the outputEvent with the result of the operators defined on the request
 func CreateEvent(request Request, outputEvent InternalEvent) *InternalWrappedEvent {

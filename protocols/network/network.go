@@ -1,8 +1,7 @@
 package network
 
 import (
-	"github.com/chainreactors/found/pkg/proton/operators"
-	protocols "github.com/chainreactors/found/pkg/proton/protocols"
+	protocols "github.com/chainreactors/neutron/protocols"
 	"net"
 	"strings"
 )
