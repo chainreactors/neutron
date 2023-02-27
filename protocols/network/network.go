@@ -1,6 +1,7 @@
 package network
 
 import (
+	"github.com/chainreactors/neutron/operators"
 	protocols "github.com/chainreactors/neutron/protocols"
 	"net"
 	"strings"

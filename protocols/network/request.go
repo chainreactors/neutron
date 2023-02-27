@@ -3,6 +3,8 @@ package network
 import (
 	"encoding/hex"
 	"errors"
+	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/operators"
 	protocols "github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/parsers/iutils"
 	"io"
