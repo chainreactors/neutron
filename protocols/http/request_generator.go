@@ -2,6 +2,8 @@ package http
 
 import (
 	"fmt"
+	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/parsers/iutils"
 	"io/ioutil"
 	"net"

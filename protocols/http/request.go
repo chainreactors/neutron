@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chainreactors/logs"
+	"github.com/chainreactors/neutron/operators"
+	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/parsers"
 	"github.com/chainreactors/parsers/iutils"
 	"io"
