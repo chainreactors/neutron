@@ -151,6 +151,7 @@ func (raw rawRequest) makeRequest() *http.Request {
 	return req
 
 }
+
 func parse(method, path, body, baseURL string, headers map[string]string, unsafe bool) (*rawRequest, error) {
 	rawRequest := &rawRequest{
 		Headers: make(map[string]string),
