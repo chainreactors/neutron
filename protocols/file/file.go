@@ -19,12 +19,12 @@ var (
 // Request contains a File matching mechanism for local disk operations.
 type Request struct {
 	// Operators for the current request go here.
-	operators.Operators `yaml:",inline"`
+	operators.Operators `json:",inline" yaml:",inline"`
 	// description: |
 	//   Extensions is the list of extensions or mime types to perform matching on.
 	// examples:
 	//   - value: '[]string{".txt", ".go", ".json"}'
-	Extensions []string `yaml:"extensions,omitempty" jsonschema:"title=extensions to match,description=List of extensions to perform matching on"`
+	Extensions []string `json:"extensions,omitempty" yaml:"extensions,omitempty" jsonschema:"title=extensions to match,description=List of extensions to perform matching on"`
 	// description: |
 	//   DenyList is the list of file, directories, mime types or extensions to deny during matching.
 	//
@@ -32,10 +32,10 @@ type Request struct {
 	//   in nuclei.
 	// examples:
 	//   - value: '[]string{".avi", ".mov", ".mp3"}'
-	DenyList []string `yaml:"denylist,omitempty" jsonschema:"title=denylist, directories and extensions to deny match,description=List of files, directories and extensions to deny during matching"`
+	DenyList []string `yaml:"json,omitempty" yaml:"denylist,omitempty" jsonschema:"title=denylist, directories and extensions to deny match,description=List of files, directories and extensions to deny during matching"`
 
 	// ID is the optional id of the request
-	ID string `yaml:"id,omitempty" jsonschema:"title=id of the request,description=ID is the optional ID for the request"`
+	ID string `json:"id,omitempty" yaml:"id,omitempty" jsonschema:"title=id of the request,description=ID is the optional ID for the request"`
 
 	// description: |
 	//   MaxSize is the maximum size of the file to run request on.
@@ -45,7 +45,7 @@ type Request struct {
 	//   If set to "no" then all content will be processed
 	// examples:
 	//   - value: "\"5Mb\""
-	MaxSize string `yaml:"max-size,omitempty" jsonschema:"title=max size data to run request on,description=Maximum size of the file to run request on"`
+	MaxSize string `json:"max-size,omitempty"  yaml:"max-size,omitempty" jsonschema:"title=max size data to run request on,description=Maximum size of the file to run request on"`
 	maxSize int64
 
 	// description: |
@@ -56,7 +56,7 @@ type Request struct {
 	//   enables mime types check
 	MimeType bool
 
-	CompiledOperators *operators.Operators `yaml:"-"`
+	CompiledOperators *operators.Operators `json:"-" yaml:"-"`
 
 	// cache any variables that may be needed for operation.
 	options             *protocols.ExecuterOptions
@@ -67,7 +67,7 @@ type Request struct {
 
 	// description: |
 	//   NoRecursive specifies whether to not do recursive checks if folders are provided.
-	NoRecursive bool `yaml:"no-recursive,omitempty" jsonschema:"title=do not perform recursion,description=Specifies whether to not do recursive checks if folders are provided"`
+	NoRecursive bool `json:"no-recursive,omitempty" yaml:"no-recursive,omitempty" jsonschema:"title=do not perform recursion,description=Specifies whether to not do recursive checks if folders are provided"`
 
 	allExtensions bool
 }

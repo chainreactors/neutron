@@ -7,6 +7,7 @@ require (
 	github.com/chainreactors/parsers v0.3.0
 	github.com/h2non/filetype v1.1.3
 	github.com/mholt/archiver v3.1.1+incompatible
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

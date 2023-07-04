@@ -9,26 +9,26 @@ import (
 
 // Request contains a Network protocol request to be made from a template
 type Request struct {
-	ID string `json:"id"`
+	ID string `json:"id" yaml:"id"`
 
 	// Address is the address to send requests to (host:port:tls combos generally)
-	Address   []string `json:"host"`
+	Address   []string `json:"host" yaml:"host"`
 	addresses []addressKV
 
 	// AttackType is the attack type
 	// Sniper, PitchFork and ClusterBomb. Default is Sniper
-	AttackType string `json:"attack"`
+	AttackType string `json:"attack" yaml:"attack"`
 	// Path contains the path/s for the request variables
-	Payloads map[string]interface{} `json:"payloads"`
+	Payloads map[string]interface{} `json:"payloads" yaml:"payloads"`
 
 	// Payload is the payload to send for the network request
-	Inputs []*Input `json:"inputs"`
+	Inputs []*Input `json:"inputs" yaml:"inputs"`
 	// ReadSize is the size of response to read (1024 if not provided by default)
-	ReadSize int `json:"read-size"`
+	ReadSize int `json:"read-size" yaml:"read-size"`
 
-	ReadAll bool `json:"read-all"`
+	ReadAll bool `json:"read-all" yaml:"read-all"`
 
-	operators.Operators `json:",inline,omitempty"`
+	operators.Operators `json:",inline,omitempty" yaml:",inline,omitempty"`
 	// Operators for the current request go here.
 	CompiledOperators *operators.Operators
 	dialer            *net.Dialer

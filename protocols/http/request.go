@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chainreactors/logs"
+	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/parsers"
@@ -21,46 +22,46 @@ var _ protocols.Request = &Request{}
 
 type Request struct {
 	// operators for the current request go here.
-	operators.Operators `json:",inline"`
+	operators.Operators `json:",inline" yaml:",inline"`
 	// Path contains the path/s for the request
-	Path []string `json:"path"`
+	Path []string `json:"path" yaml:"path"`
 	// Raw contains raw requests
-	Raw []string `json:"raw"`
-	ID  string   `json:"id"`
+	Raw []string `json:"raw" yaml:"raw"`
+	ID  string   `json:"id" yaml:"id"`
 	// Name is the name of the request
-	Name string `json:"Name"`
+	Name string `json:"name" yaml:"name"`
 	// AttackType is the attack type
 	// Sniper, PitchFork and ClusterBomb. Default is Sniper
-	AttackType string `json:"attack"`
+	AttackType string `json:"attack" yaml:"attack"`
 	// Method is the request method, whether GET, POST, PUT, etc
-	Method string `json:"method"`
+	Method string `json:"method" yaml:"method"`
 	// Body is an optional parameter which contains the request body for POST methods, etc
-	Body string `json:"body"`
+	Body string `json:"body" yaml:"body"`
 	// Path contains the path/s for the request variables
-	Payloads map[string]interface{} `json:"payloads"`
+	Payloads map[string]interface{} `json:"payloads" yaml:"payloads"`
 	// Headers contains headers to send with the request
-	Headers map[string]string `json:"headers"`
+	Headers map[string]string `json:"headers" yaml:"headers"`
 	// MaxRedirects is the maximum number of redirects that should be followed.
-	MaxRedirects int `json:"max-redirects"`
+	MaxRedirects int `json:"max-redirects" yaml:"max-redirects"`
 	// PipelineConcurrentConnections is number of connections in pipelining
-	Threads int `json:"threads"`
+	Threads int `json:"threads" yaml:"threads"`
 
 	// MaxSize is the maximum size of http response body to read in bytes.
-	MaxSize int `json:"max-size"`
+	MaxSize int `json:"max-size" yaml:"max-size"`
 
 	// CookieReuse is an optional setting that makes cookies shared within requests
-	CookieReuse bool `json:"cookie-reuse"`
+	CookieReuse bool `json:"cookie-reuse" yaml:"cookie-reuse"`
 	// Redirects specifies whether redirects should be followed.
-	Redirects bool `json:"redirects"`
+	Redirects bool `json:"redirects" yaml:"redirects"`
 	// Pipeline defines if the attack should be performed with HTTP 1.1 Pipelining (race conditions/billions requests)
 	// All requests must be indempotent (GET/POST)
-	Unsafe bool `json:"unsafe"`
+	Unsafe bool `json:"unsafe" yaml:"unsafe"`
 	// ReqCondition automatically assigns numbers to requests and preserves
 	// their history for being matched at the end.
 	// Currently only works with sequential http requests.
-	ReqCondition bool `json:"req-condition"`
+	ReqCondition bool `json:"req-condition" yaml:"req-condition"`
 	//   StopAtFirstMatch stops the execution of the requests and template as soon as a match is found.
-	StopAtFirstMatch  bool                 `json:"stop-at-first-match"`
+	StopAtFirstMatch  bool                 `json:"stop-at-first-match" yaml:"stop-at-first-match"`
 	generator         *protocols.Generator // optional, only enabled when using payloads
 	httpClient        *http.Client
 	httpresp          *http.Response
@@ -295,6 +296,7 @@ func (r *Request) ExecuteRequestWithResults(reqURL string, dynamicValues map[str
 	generator := r.newGenerator()
 	requestCount := 1
 	var requestErr error
+	var gotDynamicValues map[string][]string
 	for {
 		// returns two values, error and skip, which skips the execution for the request instance.
 		executeFunc := func(data string, payloads, dynamicValue map[string]interface{}) (bool, error) {
@@ -308,13 +310,12 @@ func (r *Request) ExecuteRequestWithResults(reqURL string, dynamicValues map[str
 			if generatedHttpRequest.request.Header.Get("User-Agent") == "" {
 				generatedHttpRequest.request.Header.Set("User-Agent", ua)
 			}
-			var gotOutput bool
+			var gotMatches bool
 			err = r.executeRequest(generatedHttpRequest, dynamicValues, func(event *protocols.InternalWrappedEvent) {
 				// Add the extracts to the dynamic values if any.
 				if event.OperatorsResult != nil {
-					gotOutput = true
-					//	gotDynamicValues := MergeMaps(event.OperatorsResult.DynamicValues, dynamicValues)
-					//	gotDynamicValues = MergeMaps(gotDynamicValues, gotDynamicValues)
+					gotMatches = event.OperatorsResult.Matched
+					gotDynamicValues = common.MergeMapsMany(event.OperatorsResult.DynamicValues, dynamicValues, gotDynamicValues)
 				}
 				callback(event)
 			})
@@ -330,7 +331,7 @@ func (r *Request) ExecuteRequestWithResults(reqURL string, dynamicValues map[str
 			//request.options.Progress.IncrementRequests()
 
 			// If this was a match, and we want to stop at first match, skip all further requests.
-			if r.StopAtFirstMatch && gotOutput {
+			if r.StopAtFirstMatch && gotMatches {
 				return true, nil
 			}
 			return false, nil
@@ -346,7 +347,16 @@ func (r *Request) ExecuteRequestWithResults(reqURL string, dynamicValues map[str
 		var gotErr error
 		var skip bool
 
-		skip, gotErr = executeFunc(inputData, payloads, dynamicValues)
+		if len(gotDynamicValues) > 0 {
+			operators.MakeDynamicValuesCallback(gotDynamicValues, true, func(data map[string]interface{}) bool {
+				if skip, gotErr = executeFunc(inputData, payloads, data); skip || gotErr != nil {
+					return true
+				}
+				return false
+			})
+		} else {
+			skip, gotErr = executeFunc(inputData, payloads, dynamicValues)
+		}
 		if gotErr != nil && requestErr == nil {
 			requestErr = gotErr
 		}
@@ -355,20 +365,6 @@ func (r *Request) ExecuteRequestWithResults(reqURL string, dynamicValues map[str
 		}
 	}
 	return requestErr
-	//for {
-	//	inputData, payloads, ok := generator.nextValue()
-	//	if !ok {
-	//		break
-	//	}
-	//	req, err := generator.Make(url,payloads, dynamicValues)
-	//	if err != nil {
-	//		return false, err
-	//	}
-	//	ok, err := r.executeRequest(req, dynamicValues, callback)
-	//	if ok {
-	//		return true, err
-	//	}
-	//}
 }
 
 func (r *Request) executeRequest(request *generatedRequest, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {

@@ -53,10 +53,10 @@ type Extractor struct {
 	//   spaces or underscores (_).
 	// examples:
 	//   - value: "\"cookie-extractor\""
-	Name string `json:"name,omitempty" `
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 	// description: |
 	//   Type is the type of the extractor.
-	Type string `json:"type"`
+	Type string `json:"type" yaml:"type"`
 	// extractorType is the internal type of the extractor
 	extractorType ExtractorType
 
@@ -72,13 +72,13 @@ type Extractor struct {
 	//   - name: Wordpress Author Extraction regex
 	//     value: >
 	//       []string{"Author:(?:[A-Za-z0-9 -\\_=\"]+)?<span(?:[A-Za-z0-9 -\\_=\"]+)?>([A-Za-z0-9]+)<\\/span>"}
-	Regex []string `json:"regex,omitempty" `
+	Regex []string `json:"regex,omitempty" yaml:"regex,omitempty"`
 	// description: |
 	//   Group specifies a numbered group to extract from the regex.
 	// examples:
 	//   - name: Example Regex Group
 	//     value: "1"
-	RegexGroup int `json:"group,omitempty" `
+	RegexGroup int `json:"group,omitempty" yaml:"group,omitempty"`
 	// regexCompiled is the compiled variant
 	regexCompiled []*regexp.Regexp
 
@@ -99,7 +99,7 @@ type Extractor struct {
 	//   - name: Extracting value of Content-Type Cookie
 	//     value: >
 	//       []string{"content_type"}
-	KVal []string `json:"kval,omitempty" `
+	KVal []string `json:"kval,omitempty" yaml:"kval,omitempty"`
 
 	// description: |
 	//   JSON allows using jq-style syntax to extract items from json response
@@ -135,18 +135,18 @@ type Extractor struct {
 	// examples:
 	//   - value: "\"body\""
 	//   - value: "\"raw\""
-	Part string `json:"part,omitempty" `
+	Part string `json:"part,omitempty" yaml:"part,omitempty"`
 	// description: |
 	//   Internal, when set to true will allow using the value extracted
 	//   in the next request for some protocols (like HTTP).
-	Internal bool `json:"internal,omitempty"`
+	Internal bool `json:"internal,omitempty" yaml:"internal,omitempty"`
 
 	// description: |
 	//   CaseInsensitive enables case-insensitive extractions. Default is false.
 	// values:
 	//   - false
 	//   - true
-	CaseInsensitive bool `json:"case-insensitive,omitempty" `
+	CaseInsensitive bool `json:"case-insensitive,omitempty" yaml:"case-insensitive,omitempty"`
 }
 
 // CompileExtractors performs the initial setup operation on an extractor

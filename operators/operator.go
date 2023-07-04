@@ -6,13 +6,13 @@ import "github.com/chainreactors/parsers/iutils"
 type Operators struct {
 	// Matchers contains the detection mechanism for the request to identify
 	// whether the request was successful
-	Matchers []*Matcher `json:"matchers,omitempty"`
+	Matchers []*Matcher `json:"matchers,omitempty" yaml:"matchers,omitempty"`
 	// Extractors contains the extraction mechanism for the request to identify
 	// and extract parts of the response.
-	Extractors []*Extractor `json:"extractors,omitempty"`
+	Extractors []*Extractor `json:"extractors,omitempty" yaml:"extractors,omitempty"`
 	// MatchersCondition is the condition of the matchers
 	// whether to use AND or OR. Default is OR.
-	MatchersCondition string `json:"matchers-condition,omitempty"`
+	MatchersCondition string `json:"matchers-condition,omitempty" yaml:"matchers-condition,omitempty"`
 	// cached variables that may be used along with request.
 	matchersCondition ConditionType
 
@@ -156,4 +156,57 @@ func (operators *Operators) ExecuteInternalExtractors(data map[string]interface{
 		}
 	}
 	return dynamicValues
+}
+
+// MakeDynamicValuesCallback takes an input dynamic values map and calls
+// the callback function with all variations of the data in input in form
+// of map[string]string (interface{}).
+func MakeDynamicValuesCallback(input map[string][]string, iterateAllValues bool, callback func(map[string]interface{}) bool) {
+	output := make(map[string]interface{}, len(input))
+
+	if !iterateAllValues {
+		for k, v := range input {
+			if len(v) > 0 {
+				output[k] = v[0]
+			}
+		}
+		callback(output)
+		return
+	}
+	inputIndex := make(map[string]int, len(input))
+
+	var maxValue int
+	for _, v := range input {
+		if len(v) > maxValue {
+			maxValue = len(v)
+		}
+	}
+
+	for i := 0; i < maxValue; i++ {
+		for k, v := range input {
+			if len(v) == 0 {
+				continue
+			}
+			if len(v) == 1 {
+				output[k] = v[0]
+				continue
+			}
+			if gotIndex, ok := inputIndex[k]; !ok {
+				inputIndex[k] = 0
+				output[k] = v[0]
+			} else {
+				newIndex := gotIndex + 1
+				if newIndex >= len(v) {
+					output[k] = v[len(v)-1]
+					continue
+				}
+				output[k] = v[newIndex]
+				inputIndex[k] = newIndex
+			}
+		}
+		// skip if the callback says so
+		if callback(output) {
+			return
+		}
+	}
 }

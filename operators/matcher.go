@@ -9,37 +9,37 @@ import (
 
 type Matcher struct {
 	// Type is the type of the matcher
-	Type string `json:"type"`
+	Type string `json:"type" yaml:"type"`
 	// Condition is the optional condition between two matcher variables
 	//
 	// By default, the condition is assumed to be OR.
-	Condition string `json:"condition,omitempty"`
+	Condition string `json:"condition,omitempty" yaml:"condition,omitempty"`
 
 	// Part is the part of the data to match
-	Part string `json:"part,omitempty"`
+	Part string `json:"part,omitempty" yaml:"part,omitempty"`
 
 	// Negative specifies if the match should be reversed
 	// It will only match if the condition is not true.
-	Negative bool `json:"negative,omitempty"`
+	Negative bool `json:"negative,omitempty" yaml:"negative,omitempty"`
 
 	// Name is matcher Name
-	Name string `json:"name,omitempty"`
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 	// Status are the acceptable status codes for the response
-	Status []int `json:"status,omitempty"`
+	Status []int `json:"status,omitempty" yaml:"status,omitempty"`
 	// Size is the acceptable size for the response
-	Size []int `json:"size,omitempty"`
+	Size []int `json:"size,omitempty" yaml:"size,omitempty"`
 	// Words are the words required to be present in the response
-	Words []string `json:"words,omitempty"`
+	Words []string `json:"words,omitempty" yaml:"words,omitempty"`
 	// Regex are the regex pattern required to be present in the response
-	Regex []string `json:"regex,omitempty"`
+	Regex []string `json:"regex,omitempty" yaml:"regex,omitempty"`
 	// Binary are the binary characters required to be present in the response
-	Binary []string `json:"binary,omitempty"`
+	Binary []string `json:"binary,omitempty" yaml:"binary,omitempty"`
 	// DSL are the dsl queries
-	DSL []string `json:"dsl,omitempty"`
+	DSL []string `json:"dsl,omitempty" yaml:"dsl,omitempty"`
 	// Encoding specifies the encoding for the word content if any.
-	Encoding string `json:"encoding,omitempty"`
+	Encoding string `json:"encoding,omitempty" yaml:"encoding,omitempty"`
 
-	MatchersCondition string `json:"matchers-condition"`
+	MatchersCondition string `json:"matchers-condition" yaml:"matchers-condition"`
 	Matchers          []Matcher
 	condition         ConditionType
 	matcherType       MatcherType
