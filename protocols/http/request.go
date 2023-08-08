@@ -8,7 +8,7 @@ import (
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/parsers"
-	"github.com/chainreactors/parsers/iutils"
+	"github.com/chainreactors/utils/iutils"
 	"io"
 	"io/ioutil"
 	"net/http"

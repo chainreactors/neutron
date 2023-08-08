@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/parsers/iutils"
+	"github.com/chainreactors/utils/iutils"
 	"io/ioutil"
 	"net"
 	"net/http"

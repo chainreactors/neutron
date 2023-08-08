@@ -2,7 +2,7 @@ package protocols
 
 import (
 	"errors"
-	"github.com/chainreactors/parsers/iutils"
+	"github.com/chainreactors/utils/iutils"
 	"strings"
 )
 

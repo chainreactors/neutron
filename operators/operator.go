@@ -1,6 +1,6 @@
 package operators
 
-import "github.com/chainreactors/parsers/iutils"
+import "github.com/chainreactors/utils/iutils"
 
 // operators contains the operators that can be applied on protocols
 type Operators struct {

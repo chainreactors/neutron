@@ -2,7 +2,7 @@ package operators
 
 import (
 	"fmt"
-	"github.com/chainreactors/parsers/iutils"
+	"github.com/chainreactors/utils/iutils"
 	"regexp"
 	"strings"
 )

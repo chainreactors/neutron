@@ -1,7 +1,7 @@
 package common
 
 import (
-	"github.com/chainreactors/parsers/iutils"
+	"github.com/chainreactors/utils/iutils"
 	"strings"
 )
 
