@@ -2,7 +2,6 @@ package templates
 
 import (
 	"github.com/chainreactors/neutron/protocols/executer"
-	"github.com/chainreactors/neutron/protocols/file"
 	"github.com/chainreactors/neutron/protocols/http"
 	"github.com/chainreactors/neutron/protocols/network"
 )
@@ -22,7 +21,7 @@ type Template struct {
 	} `json:"info" yaml:"info"`
 	RequestsHTTP    []http.Request    `json:"requests" yaml:"requests"`
 	RequestsNetwork []network.Request `json:"network" yaml:"network"`
-	RequestFile     []file.Request    `json:"request_file" yaml:"file"`
+	//RequestsFile    []file.Request `json:"file" yaml:"file"`
 
 	//RequestsTCP []tcp.Request `json:"network"`
 	// TotalRequests is the total number of requests for the template.

@@ -3,16 +3,16 @@ module github.com/chainreactors/neutron
 go 1.17
 
 require (
-	github.com/chainreactors/logs v0.0.0-20231018081339-ab8c18542a5f
-	github.com/chainreactors/parsers v0.0.0-20231027073450-b7894df18dcf
-	github.com/chainreactors/utils v0.0.0-20230928082055-ef5e1ae47f3e
 	github.com/h2non/filetype v1.1.3
 	github.com/mholt/archiver v3.1.1+incompatible
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/chainreactors/files v0.2.4 // indirect
+	github.com/chainreactors/files v0.0.0-20230731174853-acee21c8c45a // indirect
+	github.com/chainreactors/logs v0.0.0-20231027075331-6c5f5ec35435 // indirect
+	github.com/chainreactors/parsers v0.0.0-20231027075644-5d67f3a109d8 // indirect
+	github.com/chainreactors/utils v0.0.0-20230928082055-ef5e1ae47f3e // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/frankban/quicktest v1.14.4 // indirect
 	github.com/go-dedup/megophone v0.0.0-20170830025436-f01be21026f5 // indirect

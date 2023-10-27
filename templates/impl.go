@@ -32,12 +32,12 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 		t.Executor = executer.NewExecuter(requests, options)
 	}
 
-	if len(t.RequestFile) > 0 {
-		for _, req := range t.RequestFile {
-			requests = append(requests, &req)
-		}
-		t.Executor = executer.NewExecuter(requests, options)
-	}
+	//if len(t.RequestFile) > 0 {
+	//	for _, req := range t.RequestFile {
+	//		requests = append(requests, &req)
+	//	}
+	//	t.Executor = executer.NewExecuter(requests, options)
+	//}
 
 	if t.Executor != nil {
 		err = t.Executor.Compile()

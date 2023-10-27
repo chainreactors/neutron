@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 )
 
@@ -13,6 +14,7 @@ var (
 )
 
 func main() {
+	os.Chdir("..")
 	var needs []string
 	flag.StringVar(&templatePath, "t", ".", "templates repo path")
 	flag.StringVar(&resultPath, "o", "templates.go", "result filename")
