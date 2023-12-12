@@ -10,6 +10,7 @@ type Template struct {
 	Id      string   `json:"id" yaml:"id"`
 	Fingers []string `json:"finger" yaml:"finger"`
 	Chains  []string `json:"chain" yaml:"chain"`
+	Opsec   bool     `json:"opsec" yaml:"opsec"`
 	Info    struct {
 		Name string `json:"name" yaml:"name"`
 		//Author    string `json:"author"`

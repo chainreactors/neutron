@@ -1,11 +1,14 @@
 package templates
 
 import (
+	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/neutron/protocols/executer"
 	"strings"
 )
+
+var OPSEC = false
 
 func (t *Template) GetTags() []string {
 	if t.Info.Tags != "" {
@@ -41,6 +44,10 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 }
 
 func (t *Template) Execute(input string) (*operators.Result, bool) {
+	if OPSEC == true && t.Opsec == true {
+		common.NeutronLog.Debugf("(opsec!!!) skip template %s", t.Id)
+		return nil, false
+	}
 	res, err := t.Executor.Execute(input)
 	if err != nil || res == nil {
 		return nil, false

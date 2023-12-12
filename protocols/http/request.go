@@ -3,7 +3,6 @@ package http
 import (
 	"errors"
 	"fmt"
-	"github.com/chainreactors/logs"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
@@ -342,7 +341,7 @@ func (r *Request) ExecuteRequestWithResults(reqURL string, dynamicValues map[str
 			break
 		}
 		if len(payloads) > 0 {
-			logs.Log.Debugf("payloads: %s", iutils.MapToString(payloads))
+			common.NeutronLog.Debugf("payloads: %s", iutils.MapToString(payloads))
 		}
 		var gotErr error
 		var skip bool
@@ -370,7 +369,7 @@ func (r *Request) ExecuteRequestWithResults(reqURL string, dynamicValues map[str
 func (r *Request) executeRequest(request *generatedRequest, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
 	resp, err := r.httpClient.Do(request.request)
 	if err != nil {
-		logs.Log.Debugf("%s nuclei request failed, %s", request.request.URL, err.Error())
+		common.NeutronLog.Debugf("%s nuclei request failed, %s", request.request.URL, err.Error())
 		return err
 	}
 	data := respToMap(resp, request.request)

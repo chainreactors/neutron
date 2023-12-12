@@ -1,9 +1,12 @@
 package common
 
 import (
+	"github.com/chainreactors/logs"
 	"os"
 	"reflect"
 )
+
+var NeutronLog = logs.Log
 
 func IsExist(filename string) bool {
 	var exist = true

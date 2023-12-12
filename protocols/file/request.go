@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/chainreactors/logs"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
@@ -61,7 +60,7 @@ func (request *Request) ExecuteWithResults(input string, previous map[string]int
 								//request.options.Progress.IncrementRequests()
 								return nil
 							}
-							logs.Log.Errorf("%s\n", err)
+							common.NeutronLog.Errorf("%s\n", err)
 							// error while elaborating the file
 							//request.options.Progress.IncrementFailedRequestsBy(1)
 							return err
@@ -74,7 +73,7 @@ func (request *Request) ExecuteWithResults(input string, previous map[string]int
 						return nil
 					})
 					if err != nil {
-						logs.Log.Errorf("%s\n", err)
+						common.NeutronLog.Errorf("%s\n", err)
 						return
 					}
 				case archiver.Decompressor:
@@ -82,7 +81,7 @@ func (request *Request) ExecuteWithResults(input string, previous map[string]int
 					//request.options.Progress.AddToTotal(1)
 					file, err := os.Open(filePath)
 					if err != nil {
-						logs.Log.Errorf("%s\n", err)
+						common.NeutronLog.Errorf("%s\n", err)
 						// error while elaborating the file
 						//request.options.Progress.IncrementFailedRequestsBy(1)
 						return
@@ -91,7 +90,7 @@ func (request *Request) ExecuteWithResults(input string, previous map[string]int
 					fileStat, _ := file.Stat()
 					tmpFileOut, err := os.CreateTemp("", "")
 					if err != nil {
-						logs.Log.Errorf("%s\n", err)
+						common.NeutronLog.Errorf("%s\n", err)
 						// error while elaborating the file
 						//request.options.Progress.IncrementFailedRequestsBy(1)
 						return
@@ -99,7 +98,7 @@ func (request *Request) ExecuteWithResults(input string, previous map[string]int
 					defer tmpFileOut.Close()
 					defer os.RemoveAll(tmpFileOut.Name())
 					if err := archiveInstance.Decompress(file, tmpFileOut); err != nil {
-						logs.Log.Errorf("%s\n", err)
+						common.NeutronLog.Errorf("%s\n", err)
 						// error while elaborating the file
 						//request.options.Progress.IncrementFailedRequestsBy(1)
 						return
@@ -134,7 +133,7 @@ func (request *Request) ExecuteWithResults(input string, previous map[string]int
 						//request.options.Progress.IncrementRequests()
 						return
 					}
-					logs.Log.Errorf("%s\n", err)
+					common.NeutronLog.Errorf("%s\n", err)
 					// error while elaborating the file
 					//request.options.Progress.IncrementFailedRequestsBy(1)
 					return
@@ -169,7 +168,7 @@ func (request *Request) processFile(filePath, input string, previousInternalEven
 	}
 	if stat.Size() >= request.maxSize {
 		maxSizeString := common.HumanSize(float64(request.maxSize))
-		logs.Log.Debugf("Limiting %s processed data to %s bytes: exceeded max size\n", filePath, maxSizeString)
+		common.NeutronLog.Debugf("Limiting %s processed data to %s bytes: exceeded max size\n", filePath, maxSizeString)
 	}
 
 	return request.processReader(file, filePath, input, stat.Size(), previousInternalEvent)
@@ -248,7 +247,7 @@ func (request *Request) findMatchesWithReader(reader io.Reader, input, filePath 
 		currentBytes := bytesCount + n
 		//processedBytes := common.BytesSize(float64(currentBytes))
 
-		//logs.Log.Importantf("[%s] Processing file %s chunk %s/%s", request.options.TemplateID, filePath, processedBytes, totalBytesString)
+		//common.NeutronLog.Importantf("[%s] Processing file %s chunk %s/%s", request.options.TemplateID, filePath, processedBytes, totalBytesString)
 		dslMap := request.responseToDSLMap(lineContent, input, filePath)
 		for k, v := range previous {
 			dslMap[k] = v
@@ -356,7 +355,7 @@ func dumpResponse(event *protocols.InternalWrappedEvent, requestOptions *protoco
 	//			lineContent = hex.Dump([]byte(lineContent))
 	//		}
 	//		highlightedResponse := responsehighlighter.Highlight(event.OperatorsResult, lineContent, cliOptions.NoColor, hexDump)
-	//		logs.Log.Debugf("[%s] Dumped match/extract file snippet for %s at line %d\n\n%s", requestOptions.TemplateID, filePath, fileMatch.Line, highlightedResponse)
+	//		common.NeutronLog.Debugf("[%s] Dumped match/extract file snippet for %s at line %d\n\n%s", requestOptions.TemplateID, filePath, fileMatch.Line, highlightedResponse)
 	//	}
 	//}
 }

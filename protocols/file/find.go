@@ -2,7 +2,6 @@ package file
 
 import (
 	"fmt"
-	"github.com/chainreactors/logs"
 	"github.com/chainreactors/neutron/common"
 	"io"
 	"io/fs"
@@ -136,7 +135,7 @@ func (request *Request) validatePath(absPath, item string, inArchive bool) bool 
 	}
 
 	if matchingRule, ok := request.isInDenyList(absPath, item); ok {
-		logs.Log.Warnf("Ignoring path %s due to denylist item %s\n", item, matchingRule)
+		common.NeutronLog.Warnf("Ignoring path %s due to denylist item %s\n", item, matchingRule)
 		return false
 	}
 
