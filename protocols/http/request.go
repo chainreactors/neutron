@@ -6,7 +6,7 @@ import (
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/parsers"
+	"github.com/chainreactors/utils/encode"
 	"github.com/chainreactors/utils/iutils"
 	"io"
 	"io/ioutil"
@@ -268,7 +268,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 			case []string:
 				tmp := make([]string, len(payload.([]string)))
 				for i, p := range payload.([]string) {
-					tmp[i], _ = parsers.DSLParserToString(iutils.ToString(p))
+					tmp[i], _ = encode.DSLParserToString(iutils.ToString(p))
 				}
 				r.Payloads[k] = tmp
 			}
