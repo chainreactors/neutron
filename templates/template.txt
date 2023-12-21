@@ -19,7 +19,6 @@ type Template struct {
 		Tags string `json:"tags" yaml:"tags"`
 	} `json:"info" yaml:"info"`
 %s
-	//RequestsTCP []tcp.Request `json:"network"`
 	// TotalRequests is the total number of requests for the template.
 	TotalRequests int `yaml:"-" json:"-"`
 	// Executor is the actual template executor for running template requests

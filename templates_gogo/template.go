@@ -20,8 +20,8 @@ type Template struct {
 		//Vendor    string `json:"vendor"`
 		Tags string `json:"tags" yaml:"tags"`
 	} `json:"info" yaml:"info"`
-	RequestsHTTP    []http.Request    `json:"requests" yaml:"requests"`
-	RequestsNetwork []network.Request `json:"network" yaml:"network"`
+	RequestsHTTP    []*http.Request    `json:"requests" yaml:"requests"`
+	RequestsNetwork []*network.Request `json:"network" yaml:"network"`
 
 	//RequestsTCP []tcp.Request `json:"network"`
 	// TotalRequests is the total number of requests for the template.

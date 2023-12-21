@@ -21,14 +21,14 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 
 	if len(t.RequestsHTTP) > 0 {
 		for _, req := range t.RequestsHTTP {
-			requests = append(requests, &req)
+			requests = append(requests, req)
 		}
 		t.Executor = executer.NewExecuter(requests, options)
 	}
 
 	if len(t.RequestsNetwork) > 0 {
 		for _, req := range t.RequestsNetwork {
-			requests = append(requests, &req)
+			requests = append(requests, req)
 		}
 		t.Executor = executer.NewExecuter(requests, options)
 	}

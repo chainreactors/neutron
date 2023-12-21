@@ -35,13 +35,13 @@ func main() {
 		switch n {
 		case "file":
 			im.WriteString("\t\"github.com/chainreactors/neutron/protocols/file\"\n")
-			s.WriteString("\tRequestFile     []file.Request    `json:\"request_file\" yaml:\"file\"`\n")
+			s.WriteString("\tRequestFile     []*file.Request    `json:\"request_file\" yaml:\"file\"`\n")
 		case "http":
 			im.WriteString("\t\"github.com/chainreactors/neutron/protocols/http\"\n")
-			s.WriteString("\tRequestsHTTP    []http.Request    `json:\"requests\" yaml:\"requests\"`\n")
+			s.WriteString("\tRequestsHTTP    []*http.Request    `json:\"requests\" yaml:\"requests\"`\n")
 		case "network":
 			im.WriteString("\t\"github.com/chainreactors/neutron/protocols/network\"\n")
-			s.WriteString("\tRequestsNetwork []network.Request `json:\"network\" yaml:\"network\"`\n")
+			s.WriteString("\tRequestsNetwork []*network.Request `json:\"network\" yaml:\"network\"`\n")
 		default:
 			println("invalid type: ", n)
 		}
