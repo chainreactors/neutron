@@ -20,7 +20,7 @@ type Template struct {
 		//Vendor    string `json:"vendor"`
 		Tags string `json:"tags" yaml:"tags"`
 	} `json:"info" yaml:"info"`
-	RequestsHTTP    []*http.Request    `json:"requests" yaml:"requests"`
+	RequestsHTTP    []*http.Request    `json:"http" yaml:"http"`
 	RequestsNetwork []*network.Request `json:"network" yaml:"network"`
 
 	//RequestsTCP []tcp.Request `json:"network"`
