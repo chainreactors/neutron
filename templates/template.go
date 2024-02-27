@@ -2,6 +2,9 @@ package templates
 
 import (
 	"github.com/chainreactors/neutron/protocols/executer"
+	"github.com/chainreactors/neutron/protocols/file"
+	"github.com/chainreactors/neutron/protocols/http"
+	"github.com/chainreactors/neutron/protocols/network"
 )
 
 var OPSEC = false
@@ -20,9 +23,9 @@ type Template struct {
 		//Vendor    string `json:"vendor"`
 		Tags string `json:"tags" yaml:"tags"`
 	} `json:"info" yaml:"info"`
-	//RequestsHTTP    []*http.Request    `json:"requests" yaml:"requests"`
-	//RequestsNetwork []*network.Request `json:"network" yaml:"network"`
-	//RequestsFile    []*file.Request    `json:"file" yaml:"file"`
+	RequestsHTTP    []*http.Request    `json:"requests" yaml:"requests"`
+	RequestsNetwork []*network.Request `json:"network" yaml:"network"`
+	RequestsFile    []*file.Request    `json:"file" yaml:"file"`
 
 	//RequestsTCP []tcp.Request `json:"network"`
 	// TotalRequests is the total number of requests for the template.

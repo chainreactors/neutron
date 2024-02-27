@@ -3,6 +3,7 @@ package executer
 import (
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
+	"github.com/chainreactors/utils/iutils"
 )
 
 type Executer struct {
@@ -34,6 +35,10 @@ func (e *Executer) Compile() error {
 	return nil
 }
 
+func (e *Executer) Options() *protocols.ExecuterOptions {
+	return e.options
+}
+
 // Requests returns the total number of requests the rule will perform
 func (e *Executer) Requests() int {
 	var count int
@@ -44,14 +49,12 @@ func (e *Executer) Requests() int {
 }
 
 // Execute executes the protocol group and returns true or false if results were found.
-func (e *Executer) Execute(input string) (*operators.Result, error) {
+func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, error) {
 	var result *operators.Result
 
-	dynamicValues := make(map[string]interface{})
-	//previous := make(map[string]interface{})
+	dynamicValues := iutils.MergeMaps(make(map[string]interface{}), input.Payloads)
 	for _, req := range e.requests {
-		err := req.ExecuteWithResults(input, dynamicValues, func(event *protocols.InternalWrappedEvent) {
-			//ID := req.GetID()
+		err := req.ExecuteWithResults(input.Input, dynamicValues, func(event *protocols.InternalWrappedEvent) {
 			if event.OperatorsResult != nil {
 				result = event.OperatorsResult
 			}

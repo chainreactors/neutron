@@ -3,6 +3,7 @@ package templates
 import (
 	"fmt"
 	"github.com/chainreactors/neutron/protocols"
+	"github.com/chainreactors/neutron/templates"
 	"gopkg.in/yaml.v3"
 	"os"
 	"testing"
@@ -12,7 +13,7 @@ var ExecuterOptions *protocols.ExecuterOptions
 
 func TestTemplate_Compile(t1 *testing.T) {
 	content, _ := os.ReadFile("tmp.yml")
-	t := &Template{}
+	t := &templates.Template{}
 	err := yaml.Unmarshal(content, t)
 	if err != nil {
 		println(err.Error())
@@ -30,7 +31,7 @@ func TestTemplate_Compile(t1 *testing.T) {
 
 func TestTemplate_Execute(t1 *testing.T) {
 	content, _ := os.ReadFile("tmp.yml")
-	t := &Template{}
+	t := &templates.Template{}
 	err := yaml.Unmarshal(content, t)
 	if err != nil {
 		println(err.Error())
@@ -46,7 +47,7 @@ func TestTemplate_Execute(t1 *testing.T) {
 
 	println("load success")
 
-	res, ok := t.Execute("http://101.132.126.116")
+	res, ok := t.Execute("http://101.132.126.116", nil)
 	if ok {
 		println("ok")
 	} else {

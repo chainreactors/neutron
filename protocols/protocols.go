@@ -21,9 +21,10 @@ type Executer interface {
 	// Requests returns the total number of requests the rule will perform
 	Requests() int
 	// Execute executes the protocol group and returns true or false if results were found.
-	Execute(input string) (*operators.Result, error)
+	Execute(input *ScanContext) (*operators.Result, error)
 	// ExecuteWithResults executes the protocol requests and returns results instead of writing them.
 	//ExecuteWithResults(input string) error
+	Options() *ExecuterOptions
 }
 
 // Request is an interface implemented any protocol based request generator.
@@ -82,7 +83,7 @@ type ResultEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 	// Interaction is the full details of interactsh interaction.
 	//Interaction *server.Interaction `json:"interaction,omitempty"`
-
+	Error string `json:"error,omitempty"`
 	//FileToIndexPosition map[string]int `json:"-"`
 }
 
