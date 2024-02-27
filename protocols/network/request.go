@@ -145,7 +145,7 @@ func (r *Request) executeRequestWithPayloads(variables map[string]interface{}, a
 	_ = conn.SetReadDeadline(time.Now().Add(time.Duration(2) * time.Second))
 
 	responseBuilder := &strings.Builder{}
-	reqBuilder := &strings.Builder{}
+	//reqBuilder := &strings.Builder{}
 
 	inputEvents := make(map[string]interface{})
 	for _, input := range r.Inputs {
@@ -160,17 +160,21 @@ func (r *Request) executeRequestWithPayloads(variables map[string]interface{}, a
 		if err != nil {
 			return err
 		}
-		reqBuilder.Grow(len(input.Data))
+		//reqBuilder.Grow(len(input.Data))
 
-		finalData := []byte(common.Replace(string(data), payloads))
+		finalData, err := common.Evaluate(string(data), payloads)
+		if err != nil {
+			return err
+		}
+
 		//if dataErr != nil {
 		//	r.options.Output.Request(r.options.TemplateID, address, "network", dataErr)
 		//	r.options.Progress.IncrementFailedRequestsBy(1)
 		//	return errors.Wrap(dataErr, "could not evaluate template expressions")
 		//}
-		reqBuilder.Write(finalData)
+		//reqBuilder.Write(finalData)
 
-		_, err = conn.Write(finalData)
+		_, err = conn.Write([]byte(finalData))
 		if err != nil {
 			return err
 		}
