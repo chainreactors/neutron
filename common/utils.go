@@ -4,6 +4,7 @@ import (
 	"github.com/chainreactors/logs"
 	"os"
 	"reflect"
+	"strings"
 )
 
 var NeutronLog = logs.Log
@@ -53,4 +54,13 @@ func MergeMapsMany(maps ...interface{}) map[string][]string {
 		}
 	}
 	return m
+}
+
+// IndexAt look for a substring starting at position x
+func IndexAt(s, sep string, n int) int {
+	idx := strings.Index(s[n:], sep)
+	if idx > -1 {
+		idx += n
+	}
+	return idx
 }

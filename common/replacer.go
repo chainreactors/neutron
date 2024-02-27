@@ -36,6 +36,17 @@ func Replace(template string, values map[string]interface{}) string {
 	return final
 }
 
+// Replace replaces one placeholder in template with one value on the fly.
+func ReplaceOne(template string, key string, value interface{}) string {
+	data := replaceOneWithMarkers(template, key, value, ParenthesisOpen, ParenthesisClose)
+	return replaceOneWithMarkers(data, key, value, General, General)
+}
+
+// replaceOneWithMarkers is a helper function that perform one time replacement
+func replaceOneWithMarkers(template, key string, value interface{}, openMarker, closeMarker string) string {
+	return strings.Replace(template, openMarker+key+closeMarker, iutils.ToString(value), 1)
+}
+
 //func ReplaceRawRequest(rawrequest rawRequest, values map[string]interface{}) rawRequest {
 //	rawrequest.Data = Replace(rawrequest.Data, values)
 //	rawrequest.FullURL = Replace(rawrequest.FullURL, values)

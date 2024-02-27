@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"errors"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
@@ -19,6 +20,11 @@ func (t *Template) GetTags() []string {
 func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 	var requests []protocols.Request
 	var err error
+	if options == nil {
+		options = &protocols.ExecuterOptions{
+			Options: &protocols.Options{},
+		}
+	}
 	if len(t.RequestsHTTP) > 0 {
 		for _, req := range t.RequestsHTTP {
 			requests = append(requests, req)
@@ -38,6 +44,8 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 			return err
 		}
 		t.TotalRequests += t.Executor.Requests()
+	} else {
+		return errors.New("cannot compiled any executor")
 	}
 	return nil
 }

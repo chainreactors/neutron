@@ -7,8 +7,6 @@ import (
 	"github.com/chainreactors/neutron/protocols/network"
 )
 
-var OPSEC = false
-
 type Template struct {
 	Id      string   `json:"id" yaml:"id"`
 	Fingers []string `json:"finger" yaml:"finger"`

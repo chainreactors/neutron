@@ -102,9 +102,13 @@ func (r *requestGenerator) Total() int {
 // It returns io.EOF as error when all the requests have been exhausted.
 func (r *requestGenerator) Make(baseURL, data string, payloads, dynamicValues map[string]interface{}) (*generatedRequest, error) {
 	// We get the next payload for the request.
-
+	var err error
+	allVars := iutils.MergeMaps(payloads, dynamicValues)
 	for payloadName, payloadValue := range payloads {
-		payloads[payloadName] = iutils.ToString(payloadValue)
+		payloads[payloadName], err = common.Evaluate(iutils.ToString(payloadValue), allVars)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	parsed, err := url.Parse(baseURL)
@@ -119,11 +123,13 @@ func (r *requestGenerator) Make(baseURL, data string, payloads, dynamicValues ma
 	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(data, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
-	values := iutils.MergeMaps(dynamicValues, generateVariables(parsed, trailingSlash))
-	values = iutils.MergeMaps(payloads, values)
+	values := iutils.MergeMaps(allVars, generateVariables(parsed, trailingSlash))
 
-	// If data contains \n it's a raw request, process it like raw. Else
-	// continue with the template based request flow.
+	data, err = common.Evaluate(data, values)
+	if err != nil {
+		return nil, err
+	}
+
 	if isRawRequest {
 		return r.makeHTTPRequestFromRaw(parsed.String(), data, values, payloads)
 	}
@@ -160,7 +166,10 @@ func (r *requestGenerator) makeHTTPRequestFromModel(data string, values, generat
 		return nil, err
 	}
 
-	request := r.fillRequest(req, values)
+	request, err := r.fillRequest(req, values)
+	if err != nil {
+		return nil, err
+	}
 	return &generatedRequest{request: request, original: r.request, meta: generatorValues}, nil
 }
 
@@ -174,7 +183,6 @@ func (r *requestGenerator) handleRawWithPayloads(rawRequest, baseURL string, val
 	// Combine the template payloads along with base
 	// request values.
 	var request *http.Request
-	rawRequest = common.Replace(rawRequest, values)
 	rawRequestData, err := parseRaw(rawRequest, baseURL, r.request.Unsafe)
 	if err != nil {
 		return nil, err
@@ -204,17 +212,31 @@ func (r *requestGenerator) handleRawWithPayloads(rawRequest, baseURL string, val
 			req.Host = value
 		}
 	}
-	request = r.fillRequest(req, values)
+	request, err = r.fillRequest(req, values)
+	if err != nil {
+		return nil, err
+	}
 	return &generatedRequest{request: request, meta: generatorValues, original: r.request}, nil
 }
 
 // fillRequest fills various headers in the request with values
-func (r *requestGenerator) fillRequest(req *http.Request, values map[string]interface{}) *http.Request {
+func (r *requestGenerator) fillRequest(req *http.Request, values map[string]interface{}) (*http.Request, error) {
 	// Set the header values requested
+	var err error
+	for i, value := range r.request.Path {
+		r.request.Path[i], err = common.Evaluate(value, values)
+		if err != nil {
+			return nil, common.EvalError
+		}
+	}
 	for header, value := range r.request.Headers {
-		req.Header[header] = []string{common.Replace(value, values)}
+		value, err := common.Evaluate(value, values)
+		if err != nil {
+			return nil, common.EvalError
+		}
+		req.Header[header] = []string{value}
 		if header == "Host" {
-			req.Host = common.Replace(value, values)
+			req.Host = value
 		}
 	}
 
@@ -225,7 +247,10 @@ func (r *requestGenerator) fillRequest(req *http.Request, values map[string]inte
 
 	// Check if the user requested a request body
 	if r.request.Body != "" {
-		body := common.Replace(r.request.Body, values)
+		body, err := common.Evaluate(r.request.Body, values)
+		if err != nil {
+			return nil, common.EvalError
+		}
 		req.Body = ioutil.NopCloser(strings.NewReader(body))
 	}
 
@@ -234,7 +259,7 @@ func (r *requestGenerator) fillRequest(req *http.Request, values map[string]inte
 		setHeader(req, "Accept", "*/*")
 		setHeader(req, "Accept-Language", "en")
 	}
-	return req
+	return req, nil
 }
 
 //
