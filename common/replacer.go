@@ -1,7 +1,6 @@
 package common
 
 import (
-	"github.com/chainreactors/utils/iutils"
 	"strings"
 )
 
@@ -22,14 +21,14 @@ func Replace(template string, values map[string]interface{}) string {
 		builder.WriteString(markerParenthesisClose)
 		replacerItems = append(replacerItems, builder.String())
 		builder.Reset()
-		replacerItems = append(replacerItems, iutils.ToString(val))
+		replacerItems = append(replacerItems, ToString(val))
 
 		builder.WriteString(markerGeneral)
 		builder.WriteString(key)
 		builder.WriteString(markerGeneral)
 		replacerItems = append(replacerItems, builder.String())
 		builder.Reset()
-		replacerItems = append(replacerItems, iutils.ToString(val))
+		replacerItems = append(replacerItems, ToString(val))
 	}
 	replacer := strings.NewReplacer(replacerItems...)
 	final := replacer.Replace(template)
@@ -44,7 +43,7 @@ func ReplaceOne(template string, key string, value interface{}) string {
 
 // replaceOneWithMarkers is a helper function that perform one time replacement
 func replaceOneWithMarkers(template, key string, value interface{}, openMarker, closeMarker string) string {
-	return strings.Replace(template, openMarker+key+closeMarker, iutils.ToString(value), 1)
+	return strings.Replace(template, openMarker+key+closeMarker, ToString(value), 1)
 }
 
 //func ReplaceRawRequest(rawrequest rawRequest, values map[string]interface{}) rawRequest {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/utils/iutils"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -109,9 +108,9 @@ func (r *requestGenerator) Total() int {
 func (r *requestGenerator) Make(baseURL, data string, payloads, dynamicValues map[string]interface{}) (*generatedRequest, error) {
 	// We get the next payload for the request.
 	var err error
-	allVars := iutils.MergeMaps(payloads, dynamicValues)
+	allVars := common.MergeMaps(payloads, dynamicValues)
 	for payloadName, payloadValue := range payloads {
-		payloads[payloadName], err = common.Evaluate(iutils.ToString(payloadValue), allVars)
+		payloads[payloadName], err = common.Evaluate(common.ToString(payloadValue), allVars)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +128,7 @@ func (r *requestGenerator) Make(baseURL, data string, payloads, dynamicValues ma
 	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(data, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
-	values := iutils.MergeMaps(allVars, generateVariables(parsed, trailingSlash))
+	values := common.MergeMaps(allVars, generateVariables(parsed, trailingSlash))
 
 	data, err = common.Evaluate(data, values)
 	if err != nil {

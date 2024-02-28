@@ -1,9 +1,9 @@
 package file
 
 import (
+	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/utils/iutils"
 	"time"
 )
 
@@ -52,7 +52,7 @@ func (request *Request) getMatchPart(part string, data protocols.InternalEvent) 
 	if !ok {
 		return "", false
 	}
-	itemStr := iutils.ToString(item)
+	itemStr := common.ToString(item)
 
 	return itemStr, true
 }
@@ -85,15 +85,15 @@ func (request *Request) GetCompiledOperators() []*operators.Operators {
 func (request *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *protocols.ResultEvent {
 	data := &protocols.ResultEvent{
 		//MatcherStatus: true,
-		TemplateID: iutils.ToString(wrapped.InternalEvent["template-id"]),
-		//TemplatePath:     iutils.ToString(wrapped.InternalEvent["template-path"]),
+		TemplateID: common.ToString(wrapped.InternalEvent["template-id"]),
+		//TemplatePath:     common.ToString(wrapped.InternalEvent["template-path"]),
 		//Info:             wrapped.InternalEvent["template-info"].(model.Info),
-		Type:             iutils.ToString(wrapped.InternalEvent["type"]),
-		Path:             iutils.ToString(wrapped.InternalEvent["path"]),
-		Matched:          iutils.ToString(wrapped.InternalEvent["matched"]),
-		Host:             iutils.ToString(wrapped.InternalEvent["host"]),
+		Type:             common.ToString(wrapped.InternalEvent["type"]),
+		Path:             common.ToString(wrapped.InternalEvent["path"]),
+		Matched:          common.ToString(wrapped.InternalEvent["matched"]),
+		Host:             common.ToString(wrapped.InternalEvent["host"]),
 		ExtractedResults: wrapped.OperatorsResult.OutputExtracts,
-		//Response:         iutils.ToString(wrapped.InternalEvent["raw"]),
+		//Response:         common.ToString(wrapped.InternalEvent["raw"]),
 		Timestamp: time.Now(),
 	}
 	return data

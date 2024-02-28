@@ -1,9 +1,9 @@
 package executer
 
 import (
+	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/utils/iutils"
 )
 
 type Executer struct {
@@ -52,7 +52,7 @@ func (e *Executer) Requests() int {
 func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, error) {
 	var result *operators.Result
 
-	dynamicValues := iutils.MergeMaps(make(map[string]interface{}), input.Payloads)
+	dynamicValues := common.MergeMaps(make(map[string]interface{}), input.Payloads)
 	for _, req := range e.requests {
 		err := req.ExecuteWithResults(input, dynamicValues, func(event *protocols.InternalWrappedEvent) {
 			if event.OperatorsResult != nil {

@@ -6,7 +6,6 @@ import (
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/utils/iutils"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -133,15 +132,15 @@ func (r *Request) getMatchPart(part string, data protocols.InternalEvent) (strin
 
 	if part == "all" {
 		builder := &strings.Builder{}
-		builder.WriteString(iutils.ToString(data["body"]))
-		builder.WriteString(iutils.ToString(data["all_headers"]))
+		builder.WriteString(common.ToString(data["body"]))
+		builder.WriteString(common.ToString(data["all_headers"]))
 		itemStr = builder.String()
 	} else {
 		item, ok := data[part]
 		if !ok {
 			return "", false
 		}
-		itemStr = iutils.ToString(item)
+		itemStr = common.ToString(item)
 	}
 	return itemStr, true
 }
@@ -184,15 +183,15 @@ func (r *Request) MakeResultEvent(wrapped *protocols.InternalWrappedEvent) []*pr
 
 func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *protocols.ResultEvent {
 	data := &protocols.ResultEvent{
-		TemplateID: iutils.ToString(wrapped.InternalEvent["template-id"]),
+		TemplateID: common.ToString(wrapped.InternalEvent["template-id"]),
 		//Info:             wrapped.InternalEvent["template-info"].(map[string]interface{}),
 		Type:             "http",
-		Host:             iutils.ToString(wrapped.InternalEvent["host"]),
-		Matched:          iutils.ToString(wrapped.InternalEvent["matched"]),
+		Host:             common.ToString(wrapped.InternalEvent["host"]),
+		Matched:          common.ToString(wrapped.InternalEvent["matched"]),
 		Metadata:         wrapped.OperatorsResult.PayloadValues,
 		ExtractedResults: wrapped.OperatorsResult.OutputExtracts,
 		Timestamp:        time.Now(),
-		IP:               iutils.ToString(wrapped.InternalEvent["ip"]),
+		IP:               common.ToString(wrapped.InternalEvent["ip"]),
 	}
 	return data
 }
@@ -252,7 +251,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		} else if r.AttackType != "" {
 			attackType = r.AttackType
 		} else {
-			attackType = "sniper"
+			attackType = "pitchfork"
 		}
 
 		r.attackType = protocols.StringToType[attackType]
@@ -267,7 +266,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 			case []string:
 				tmp := make([]string, len(payload.([]string)))
 				for i, p := range payload.([]string) {
-					tmp[i] = iutils.ToString(p)
+					tmp[i] = common.ToString(p)
 				}
 				r.Payloads[k] = tmp
 			}
@@ -341,7 +340,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 			break
 		}
 		if len(payloads) > 0 {
-			common.NeutronLog.Debugf("payloads: %s", iutils.MapToString(payloads))
+			common.NeutronLog.Debugf("payloads: %s", common.MapToString(payloads))
 		}
 		var gotErr error
 		var skip bool
@@ -400,7 +399,7 @@ func respToMap(resp *http.Response, req *http.Request) map[string]interface{} {
 
 	for k, v := range resp.Header {
 		for _, i := range v {
-			data["all_headers"] = iutils.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", k, i)
+			data["all_headers"] = common.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", k, i)
 		}
 	}
 

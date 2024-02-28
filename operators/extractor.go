@@ -2,7 +2,7 @@ package operators
 
 import (
 	"fmt"
-	"github.com/chainreactors/utils/iutils"
+	"github.com/chainreactors/neutron/common"
 	"regexp"
 	"strings"
 )
@@ -235,7 +235,7 @@ func (e *Extractor) ExtractKval(data map[string]interface{}) map[string]struct{}
 		if !ok {
 			continue
 		}
-		itemString := iutils.ToString(item)
+		itemString := common.ToString(item)
 		if _, ok := results[itemString]; !ok {
 			results[itemString] = struct{}{}
 		}

@@ -1,6 +1,6 @@
 package operators
 
-import "github.com/chainreactors/utils/iutils"
+import "github.com/chainreactors/neutron/common"
 
 // operators contains the operators that can be applied on protocols
 type Operators struct {
@@ -96,7 +96,7 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 			if extractor.Name != "" {
 				result.Extracts[extractor.Name] = extractorResults
 			} else {
-				result.Extracts[iutils.ToString(tmpname)] = extractorResults
+				result.Extracts[common.ToString(tmpname)] = extractorResults
 				tmpname++
 			}
 		}

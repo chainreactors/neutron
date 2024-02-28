@@ -2,7 +2,7 @@ package protocols
 
 import (
 	"errors"
-	"github.com/chainreactors/utils/iutils"
+	"github.com/chainreactors/neutron/common"
 	"strings"
 )
 
@@ -23,7 +23,7 @@ func loadPayloads(payloads map[string]interface{}) (map[string][]string, error) 
 		case interface{}:
 			s := make([]string, len(payload.([]interface{})))
 			for i, v := range pt.([]interface{}) {
-				s[i] = iutils.ToString(v)
+				s[i] = common.ToString(v)
 			}
 			loadedPayloads[name] = s
 		}
@@ -269,7 +269,7 @@ func BuildPayloadFromOptions(options *Options) map[string]interface{} {
 	m := make(map[string]interface{})
 	// merge with vars
 	if len(options.VarsPayload) > 0 {
-		m = iutils.MergeMaps(m, options.VarsPayload)
+		m = common.MergeMaps(m, options.VarsPayload)
 	}
 
 	// merge with env vars

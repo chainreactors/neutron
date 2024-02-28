@@ -46,10 +46,7 @@ func TestTemplate_Execute(t1 *testing.T) {
 
 	println("load success")
 
-	res, err := t.Execute("http://127.0.0.1:8089", map[string]interface{}{
-		"username": "admin",
-		"password": "admin",
-	})
+	res, err := t.Execute("http://127.0.0.1:8089", nil)
 	if err == nil {
 		fmt.Println("ok", res)
 	} else {

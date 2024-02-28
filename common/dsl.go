@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/Knetic/govaluate"
 	"github.com/chainreactors/neutron/common/dsl"
-	"github.com/chainreactors/utils/iutils"
 	"strings"
 )
 
@@ -147,9 +146,9 @@ func FindExpressions(data, OpenMarker, CloseMarker string, base map[string]inter
 
 func isExpression(data string, base map[string]interface{}) bool {
 	if _, err := govaluate.NewEvaluableExpression(data); err == nil {
-		if iutils.StringsContains(getFunctionsNames(base), data) {
+		if StringsContains(getFunctionsNames(base), data) {
 			return true
-		} else if iutils.StringsContains(dsl.FunctionNames, data) {
+		} else if StringsContains(dsl.FunctionNames, data) {
 			return true
 		}
 		return false
