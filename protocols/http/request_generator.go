@@ -21,9 +21,15 @@ type requestGenerator struct {
 }
 
 // newGenerator creates a NewGenerator request generator instance
-func (r *Request) newGenerator() *requestGenerator {
+func (r *Request) newGenerator(payloads map[string]interface{}) *requestGenerator {
 	generator := &requestGenerator{request: r}
-	if len(r.Payloads) > 0 {
+	if payloads != nil {
+		gen, err := protocols.NewGenerator(payloads, r.attackType)
+		if err != nil {
+			return nil
+		}
+		generator.payloadIterator = gen.NewIterator()
+	} else if len(r.Payloads) > 0 {
 		generator.payloadIterator = r.generator.NewIterator()
 	}
 	return generator

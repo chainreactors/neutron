@@ -284,29 +284,22 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 
 func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
 	var err error
-	if input.Payloads != nil {
-		r.Payloads = iutils.MergeMaps(r.Payloads, input.Payloads)
-		r.generator, err = protocols.NewGenerator(r.Payloads, r.attackType)
-		if err != nil {
-			return err
-		}
-	}
-	err = r.ExecuteRequestWithResults(input.Input, dynamicValues, callback)
+	err = r.ExecuteRequestWithResults(input, dynamicValues, callback)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *Request) ExecuteRequestWithResults(reqURL string, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
-	generator := r.newGenerator()
+func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
+	generator := r.newGenerator(input.Payloads)
 	requestCount := 1
 	var requestErr error
 	var gotDynamicValues map[string][]string
 	for {
 		// returns two values, error and skip, which skips the execution for the request instance.
 		executeFunc := func(data string, payloads, dynamicValue map[string]interface{}) (bool, error) {
-			generatedHttpRequest, err := generator.Make(reqURL, data, payloads, dynamicValue)
+			generatedHttpRequest, err := generator.Make(input.Input, data, payloads, dynamicValue)
 			if err != nil {
 				if err == io.EOF {
 					return true, nil

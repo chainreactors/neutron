@@ -77,18 +77,11 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 	if err != nil {
 		return err
 	}
-	if input.Payloads != nil {
-		r.Payloads = iutils.MergeMaps(r.Payloads, input.Payloads)
-		r.generator, err = protocols.NewGenerator(r.Payloads, r.attackType)
-		if err != nil {
-			return err
-		}
-	}
 	dynamicValues = iutils.MergeMaps(dynamicValues, map[string]interface{}{"Hostname": address})
 	for _, kv := range r.addresses {
 		variables := generateNetworkVariables(address)
 		actualAddress := common.Replace(kv.address, variables)
-		err = r.executeAddress(variables, actualAddress, address, input.Input, kv.tls, dynamicValues, callback)
+		err = r.executeAddress(input, variables, actualAddress, address, kv.tls, dynamicValues, callback)
 		if err != nil {
 			continue
 		}
@@ -97,16 +90,25 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 }
 
 // executeAddress executes the request for an address
-func (r *Request) executeAddress(variables map[string]interface{}, actualAddress, address, input string, shouldUseTLS bool, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
+func (r *Request) executeAddress(input *protocols.ScanContext, variables map[string]interface{}, actualAddress, address string, shouldUseTLS bool, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
+	var err error
 	if !strings.Contains(actualAddress, ":") {
-		err := errors.New("no port provided in network protocol request")
+		err = errors.New("no port provided in network protocol request")
 		return err
 	}
 	payloads := protocols.BuildPayloadFromOptions(r.options.Options)
 	// add Hostname variable to the payload
 	//payloads = nuclei.MergeMaps(payloads, map[string]interface{}{"Hostname": address})
-
-	if r.generator != nil {
+	var generator *protocols.Generator
+	if input.Payloads != nil {
+		generator, err = protocols.NewGenerator(input.Payloads, r.attackType)
+		if err != nil {
+			return err
+		}
+	} else {
+		generator = r.generator
+	}
+	if generator != nil {
 		iterator := r.generator.NewIterator()
 
 		for {
@@ -115,14 +117,14 @@ func (r *Request) executeAddress(variables map[string]interface{}, actualAddress
 				break
 			}
 			value = iutils.MergeMaps(value, payloads)
-			if err := r.executeRequestWithPayloads(variables, actualAddress, address, input, shouldUseTLS, value, dynamicValues, callback); err != nil {
+			if err := r.executeRequestWithPayloads(variables, actualAddress, address, input.Input, shouldUseTLS, value, dynamicValues, callback); err != nil {
 				return err
 			}
 		}
 	} else {
 		value := protocols.CopyMap(payloads)
 
-		if err := r.executeRequestWithPayloads(variables, actualAddress, address, input, shouldUseTLS, value, dynamicValues, callback); err != nil {
+		if err := r.executeRequestWithPayloads(variables, actualAddress, address, input.Input, shouldUseTLS, value, dynamicValues, callback); err != nil {
 			return err
 		}
 	}
