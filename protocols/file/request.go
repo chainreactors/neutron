@@ -35,9 +35,9 @@ type FileMatch struct {
 var emptyResultErr = errors.New("Empty result")
 
 // ExecuteWithResults executes the protocol requests and returns results instead of writing them.
-func (request *Request) ExecuteWithResults(input string, previous map[string]interface{}, callback protocols.OutputEventCallback) error {
-	//wg := sizedwaitgroup.New(request.options.Options.BulkSize)
-	err := request.getInputPaths(input, func(filePath string) {
+func (request *Request) ExecuteWithResults(input *protocols.ScanContext, previous map[string]interface{}, callback protocols.OutputEventCallback) error {
+	//wg := sizedwaitgroup.NewGenerator(request.options.Options.BulkSize)
+	err := request.getInputPaths(input.Input, func(filePath string) {
 		//wg.Add()
 		func(filePath string) {
 			//defer wg.Done()
@@ -53,7 +53,7 @@ func (request *Request) ExecuteWithResults(input string, previous map[string]int
 						// every new file in the compressed multi-file archive counts 1
 						//request.options.Progress.AddToTotal(1)
 						archiveFileName := filepath.Join(filePath, file.Name())
-						event, fileMatches, err := request.processReader(file.ReadCloser, archiveFileName, input, file.Size(), previous)
+						event, fileMatches, err := request.processReader(file.ReadCloser, archiveFileName, input.Input, file.Size(), previous)
 						if err != nil {
 							if errors.Is(err, emptyResultErr) {
 								// no matches but one file elaborated
@@ -106,7 +106,7 @@ func (request *Request) ExecuteWithResults(input string, previous map[string]int
 					_ = tmpFileOut.Sync()
 					// rewind the file
 					_, _ = tmpFileOut.Seek(0, 0)
-					event, fileMatches, err := request.processReader(tmpFileOut, filePath, input, fileStat.Size(), previous)
+					event, fileMatches, err := request.processReader(tmpFileOut, filePath, input.Input, fileStat.Size(), previous)
 					if err != nil {
 						if errors.Is(err, emptyResultErr) {
 							// no matches but one file elaborated
@@ -126,7 +126,7 @@ func (request *Request) ExecuteWithResults(input string, previous map[string]int
 			default:
 				// normal file - increments the counter by 1
 				//request.options.Progress.AddToTotal(1)
-				event, fileMatches, err := request.processFile(filePath, input, previous)
+				event, fileMatches, err := request.processFile(filePath, input.Input, previous)
 				if err != nil {
 					if errors.Is(err, emptyResultErr) {
 						// no matches but one file elaborated

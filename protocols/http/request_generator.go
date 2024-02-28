@@ -20,7 +20,7 @@ type requestGenerator struct {
 	rawRequest      *rawRequest
 }
 
-// newGenerator creates a New request generator instance
+// newGenerator creates a NewGenerator request generator instance
 func (r *Request) newGenerator() *requestGenerator {
 	generator := &requestGenerator{request: r}
 	if len(r.Payloads) > 0 {
@@ -131,9 +131,9 @@ func (r *requestGenerator) Make(baseURL, data string, payloads, dynamicValues ma
 	}
 
 	if isRawRequest {
-		return r.makeHTTPRequestFromRaw(parsed.String(), data, values, payloads)
+		return r.makeHTTPRequestFromRaw(parsed.String(), data, values)
 	}
-	return r.makeHTTPRequestFromModel(data, values, payloads)
+	return r.makeHTTPRequestFromModel(data, values)
 }
 
 // baseURLWithTemplatePrefs returns the url for BaseURL keeping
@@ -157,11 +157,9 @@ func baseURLWithTemplatePrefs(data string, parsed *url.URL) (string, *url.URL) {
 //}
 
 // MakeHTTPRequestFromModel creates a *http.Request from a request template
-func (r *requestGenerator) makeHTTPRequestFromModel(data string, values, generatorValues map[string]interface{}) (*generatedRequest, error) {
-	final := common.Replace(data, values)
-
+func (r *requestGenerator) makeHTTPRequestFromModel(data string, values map[string]interface{}) (*generatedRequest, error) {
 	// Build a request on the specified URL
-	req, err := http.NewRequest(r.request.Method, final, nil)
+	req, err := http.NewRequest(r.request.Method, data, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -170,20 +168,14 @@ func (r *requestGenerator) makeHTTPRequestFromModel(data string, values, generat
 	if err != nil {
 		return nil, err
 	}
-	return &generatedRequest{request: request, original: r.request, meta: generatorValues}, nil
+	return &generatedRequest{request: request, original: r.request, meta: values}, nil
 }
 
 // makeHTTPRequestFromRaw creates a *http.Request from a raw request
-func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values, payloads map[string]interface{}) (*generatedRequest, error) {
-	return r.handleRawWithPayloads(data, baseURL, values, payloads)
-}
-
-// handleRawWithPayloads handles raw requests along with payloads
-func (r *requestGenerator) handleRawWithPayloads(rawRequest, baseURL string, values, generatorValues map[string]interface{}) (*generatedRequest, error) {
-	// Combine the template payloads along with base
+func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values map[string]interface{}) (*generatedRequest, error) {
 	// request values.
 	var request *http.Request
-	rawRequestData, err := parseRaw(rawRequest, baseURL, r.request.Unsafe)
+	rawRequestData, err := parseRaw(data, baseURL, r.request.Unsafe)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +183,7 @@ func (r *requestGenerator) handleRawWithPayloads(rawRequest, baseURL string, val
 	// Unsafe option uses rawhttp library
 	if r.request.Unsafe {
 		request = rawRequestData.makeRequest()
-		unsafeReq := &generatedRequest{request: request, meta: generatorValues, original: r.request}
+		unsafeReq := &generatedRequest{request: request, meta: values, original: r.request}
 		return unsafeReq, nil
 	}
 
@@ -216,7 +208,7 @@ func (r *requestGenerator) handleRawWithPayloads(rawRequest, baseURL string, val
 	if err != nil {
 		return nil, err
 	}
-	return &generatedRequest{request: request, meta: generatorValues, original: r.request}, nil
+	return &generatedRequest{request: request, meta: values, original: r.request}, nil
 }
 
 // fillRequest fills various headers in the request with values

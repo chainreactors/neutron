@@ -56,8 +56,8 @@ var StringToType = map[string]Type{
 	"clusterbomb": ClusterBomb,
 }
 
-// New creates a new generator structure for payload generation
-func New(payloads map[string]interface{}, payloadType Type) (*Generator, error) {
+// NewGenerator creates a new generator structure for payload generation
+func NewGenerator(payloads map[string]interface{}, payloadType Type) (*Generator, error) {
 	generator := &Generator{}
 	//if err := generator.validate(payloads, templatePath); err != nil {
 	//	return nil, err

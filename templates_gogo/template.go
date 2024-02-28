@@ -23,7 +23,6 @@ type Template struct {
 	RequestsHTTP    []*http.Request    `json:"http" yaml:"http"`
 	RequestsNetwork []*network.Request `json:"network" yaml:"network"`
 
-	//RequestsTCP []tcp.Request `json:"network"`
 	// TotalRequests is the total number of requests for the template.
 	TotalRequests int `yaml:"-" json:"-"`
 	// Executor is the actual template executor for running template requests

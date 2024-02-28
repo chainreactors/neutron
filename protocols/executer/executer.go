@@ -54,7 +54,7 @@ func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, err
 
 	dynamicValues := iutils.MergeMaps(make(map[string]interface{}), input.Payloads)
 	for _, req := range e.requests {
-		err := req.ExecuteWithResults(input.Input, dynamicValues, func(event *protocols.InternalWrappedEvent) {
+		err := req.ExecuteWithResults(input, dynamicValues, func(event *protocols.InternalWrappedEvent) {
 			if event.OperatorsResult != nil {
 				result = event.OperatorsResult
 			}

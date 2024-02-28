@@ -6,7 +6,6 @@ import (
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/utils/encode"
 	"github.com/chainreactors/utils/iutils"
 	"io"
 	"io/ioutil"
@@ -268,13 +267,13 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 			case []string:
 				tmp := make([]string, len(payload.([]string)))
 				for i, p := range payload.([]string) {
-					tmp[i], _ = encode.DSLParserToString(iutils.ToString(p))
+					tmp[i] = iutils.ToString(p)
 				}
 				r.Payloads[k] = tmp
 			}
 
 		}
-		r.generator, err = protocols.New(r.Payloads, r.attackType)
+		r.generator, err = protocols.NewGenerator(r.Payloads, r.attackType)
 		if err != nil {
 			return err
 		}
@@ -283,8 +282,16 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 	return nil
 }
 
-func (r *Request) ExecuteWithResults(input string, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
-	err := r.ExecuteRequestWithResults(input, dynamicValues, callback)
+func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
+	var err error
+	if input.Payloads != nil {
+		r.Payloads = iutils.MergeMaps(r.Payloads, input.Payloads)
+		r.generator, err = protocols.NewGenerator(r.Payloads, r.attackType)
+		if err != nil {
+			return err
+		}
+	}
+	err = r.ExecuteRequestWithResults(input.Input, dynamicValues, callback)
 	if err != nil {
 		return err
 	}

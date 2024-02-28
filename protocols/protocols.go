@@ -42,7 +42,7 @@ type Request interface {
 	// Extract performs extracting operation for a extractor on model and returns true or false.
 	Extract(data map[string]interface{}, matcher *operators.Extractor) map[string]struct{}
 	// ExecuteWithResults executes the protocol requests and returns results instead of writing them.
-	ExecuteWithResults(input string, dynamicValues map[string]interface{}, callback OutputEventCallback) error
+	ExecuteWithResults(input *ScanContext, dynamicValues map[string]interface{}, callback OutputEventCallback) error
 	MakeResultEventItem(wrapped *InternalWrappedEvent) *ResultEvent
 	// MakeResultEvent creates a flat list of result events from an internal wrapped event, based on successful matchers and extracted data
 	MakeResultEvent(wrapped *InternalWrappedEvent) []*ResultEvent

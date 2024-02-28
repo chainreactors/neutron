@@ -72,16 +72,23 @@ func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extr
 }
 
 // ExecuteWithResults executes the protocol requests and returns results instead of writing them.
-func (r *Request) ExecuteWithResults(input string, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
-	address, err := getAddress(input)
+func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
+	address, err := getAddress(input.Input)
 	if err != nil {
 		return err
+	}
+	if input.Payloads != nil {
+		r.Payloads = iutils.MergeMaps(r.Payloads, input.Payloads)
+		r.generator, err = protocols.NewGenerator(r.Payloads, r.attackType)
+		if err != nil {
+			return err
+		}
 	}
 	dynamicValues = iutils.MergeMaps(dynamicValues, map[string]interface{}{"Hostname": address})
 	for _, kv := range r.addresses {
 		variables := generateNetworkVariables(address)
 		actualAddress := common.Replace(kv.address, variables)
-		err = r.executeAddress(variables, actualAddress, address, input, kv.tls, dynamicValues, callback)
+		err = r.executeAddress(variables, actualAddress, address, input.Input, kv.tls, dynamicValues, callback)
 		if err != nil {
 			continue
 		}
@@ -306,15 +313,15 @@ func generateNetworkVariables(input string) map[string]interface{} {
 }
 
 // MakeResultEvent creates a result event from internal wrapped event
-func (request *Request) MakeResultEvent(wrapped *protocols.InternalWrappedEvent) []*protocols.ResultEvent {
-	return protocols.MakeDefaultResultEvent(request, wrapped)
+func (r *Request) MakeResultEvent(wrapped *protocols.InternalWrappedEvent) []*protocols.ResultEvent {
+	return protocols.MakeDefaultResultEvent(r, wrapped)
 }
 
-func (request *Request) GetCompiledOperators() []*operators.Operators {
-	return []*operators.Operators{request.CompiledOperators}
+func (r *Request) GetCompiledOperators() []*operators.Operators {
+	return []*operators.Operators{r.CompiledOperators}
 }
 
-func (request *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *protocols.ResultEvent {
+func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *protocols.ResultEvent {
 	data := &protocols.ResultEvent{
 		TemplateID: iutils.ToString(wrapped.InternalEvent["template-id"]),
 		//TemplatePath:     iutils.ToString(wrapped.InternalEvent["template-path"]),

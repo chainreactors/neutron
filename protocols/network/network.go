@@ -99,7 +99,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		//		r.Payloads[name] = final
 		//	}
 		//}
-		r.generator, err = protocols.New(r.Payloads, r.attackType)
+		r.generator, err = protocols.NewGenerator(r.Payloads, r.attackType)
 		if err != nil {
 			return err
 		}
