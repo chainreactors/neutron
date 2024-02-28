@@ -1,7 +1,13 @@
 package protocols
 
+import "errors"
+
 // ProtocolType is the type of the request protocol specified
 type ProtocolType int
+
+var (
+	OpsecError = errors.New("opsec!")
+)
 
 // Supported values for the ProtocolType
 // name:ProtocolType

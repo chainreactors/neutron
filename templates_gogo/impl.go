@@ -50,14 +50,10 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 	return nil
 }
 
-func (t *Template) Execute(input string, payload map[string]interface{}) (*operators.Result, bool) {
+func (t *Template) Execute(input string, payload map[string]interface{}) (*operators.Result, error) {
 	if t.Executor.Options().Options.Opsec && t.Opsec {
 		common.NeutronLog.Debugf("(opsec!!!) skip template %s", t.Id)
-		return nil, false
+		return nil, protocols.OpsecError
 	}
-	res, err := t.Executor.Execute(protocols.NewScanContext(input, payload))
-	if err != nil || res == nil {
-		return nil, false
-	}
-	return res, true
+	return t.Executor.Execute(protocols.NewScanContext(input, payload))
 }
