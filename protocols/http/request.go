@@ -92,7 +92,7 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 		if !ok {
 			return false, nil
 		}
-		return matcher.Result(matcher.MatchStatusCode(status)), []string{statusCode.(string)}
+		return matcher.Result(matcher.MatchStatusCode(status)), []string{common.ToString(statusCode)}
 	case operators.SizeMatcher:
 		return matcher.Result(matcher.MatchSize(len(item))), []string{}
 	case operators.WordsMatcher:
