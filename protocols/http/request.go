@@ -379,7 +379,7 @@ func (r *Request) executeRequest(request *generatedRequest, dynamicValues map[st
 		var ok bool
 		event.OperatorsResult, ok = r.CompiledOperators.Execute(data, r.Match, r.Extract)
 		if ok && event.OperatorsResult != nil {
-			event.OperatorsResult.PayloadValues = request.meta
+			event.OperatorsResult.PayloadValues = request.dynamicValues
 			event.Results = r.MakeResultEvent(event)
 			callback(event)
 			return nil

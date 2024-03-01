@@ -136,9 +136,9 @@ func (r *requestGenerator) Make(baseURL, data string, payloads, dynamicValues ma
 	}
 
 	if isRawRequest {
-		return r.makeHTTPRequestFromRaw(parsed.String(), data, values)
+		return r.makeHTTPRequestFromRaw(parsed.String(), data, values, allVars)
 	}
-	return r.makeHTTPRequestFromModel(data, values)
+	return r.makeHTTPRequestFromModel(data, values, allVars)
 }
 
 // baseURLWithTemplatePrefs returns the url for BaseURL keeping
@@ -162,7 +162,7 @@ func baseURLWithTemplatePrefs(data string, parsed *url.URL) (string, *url.URL) {
 //}
 
 // MakeHTTPRequestFromModel creates a *http.Request from a request template
-func (r *requestGenerator) makeHTTPRequestFromModel(data string, values map[string]interface{}) (*generatedRequest, error) {
+func (r *requestGenerator) makeHTTPRequestFromModel(data string, values, dynamicValues map[string]interface{}) (*generatedRequest, error) {
 	// Build a request on the specified URL
 	req, err := http.NewRequest(r.request.Method, data, nil)
 	if err != nil {
@@ -173,11 +173,11 @@ func (r *requestGenerator) makeHTTPRequestFromModel(data string, values map[stri
 	if err != nil {
 		return nil, err
 	}
-	return &generatedRequest{request: request, original: r.request, meta: values}, nil
+	return &generatedRequest{request: request, original: r.request, dynamicValues: dynamicValues, meta: values}, nil
 }
 
 // makeHTTPRequestFromRaw creates a *http.Request from a raw request
-func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values map[string]interface{}) (*generatedRequest, error) {
+func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values, dynamicValues map[string]interface{}) (*generatedRequest, error) {
 	// request values.
 	var request *http.Request
 	rawRequestData, err := parseRaw(data, baseURL, r.request.Unsafe)
@@ -188,7 +188,7 @@ func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values m
 	// Unsafe option uses rawhttp library
 	if r.request.Unsafe {
 		request = rawRequestData.makeRequest()
-		unsafeReq := &generatedRequest{request: request, meta: values, original: r.request}
+		unsafeReq := &generatedRequest{request: request, meta: values, dynamicValues: dynamicValues, original: r.request}
 		return unsafeReq, nil
 	}
 
@@ -213,7 +213,7 @@ func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values m
 	if err != nil {
 		return nil, err
 	}
-	return &generatedRequest{request: request, meta: values, original: r.request}, nil
+	return &generatedRequest{request: request, meta: values, dynamicValues: dynamicValues, original: r.request}, nil
 }
 
 // fillRequest fills various headers in the request with values
