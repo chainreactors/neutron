@@ -221,7 +221,7 @@ func (request *Request) findMatchesWithReader(reader io.Reader, input, filePath 
 
 	scanner := bufio.NewScanner(reader)
 	buffer := []byte{}
-	if request.CompiledOperators.GetMatchersCondition() == operators.AndCondition {
+	if request.CompiledOperators.GetMatchersCondition() == operators.ANDCondition {
 		scanner.Buffer(buffer, int(defaultMaxReadSize))
 		scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 			defaultMaxReadSizeInt := int(defaultMaxReadSize)

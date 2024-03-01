@@ -2,49 +2,11 @@ package operators
 
 import (
 	"fmt"
+	"github.com/Knetic/govaluate"
 	"github.com/chainreactors/neutron/common"
 	"regexp"
 	"strings"
 )
-
-// ExtractorType is the type of the extractor specified
-type ExtractorType int
-
-// name:ExtractorType
-const (
-	// name:regex
-	RegexExtractor ExtractorType = iota + 1
-	// name:kval
-	KValExtractor
-	limit
-)
-
-// extractorMappings is a table for conversion of extractor type from string.
-var extractorMappings = map[string]ExtractorType{
-	"regex": RegexExtractor,
-	"kval":  KValExtractor,
-	//RegexExtractor: "regex",
-	//KValExtractor:  "kval",
-}
-
-// GetType returns the type of the matcher
-func (e *Extractor) GetType() ExtractorType {
-	return e.extractorType
-}
-
-// GetSupportedExtractorTypes returns list of supported types
-func GetSupportedExtractorTypes() []ExtractorType {
-	var result []ExtractorType
-	for index := ExtractorType(1); index < limit; index++ {
-		result = append(result, index)
-	}
-	return result
-}
-
-// ExtractorTypeHolder is used to hold internal type of the extractor
-//type ExtractorTypeHolder struct {
-//	ExtractorType ExtractorType `mapping:"true"`
-//}
 
 // Extractor is used to extract part of response using a regex.
 type Extractor struct {
@@ -126,7 +88,8 @@ type Extractor struct {
 
 	// jsonCompiled is the compiled variant
 	//jsonCompiled []*gojq.Code
-
+	DSL         []string `yaml:"dsl,omitempty" json:"dsl,omitempty" `
+	dslCompiled []*govaluate.EvaluableExpression
 	// description: |
 	//   Part is the part of the request response to extract data from.
 	//
@@ -152,12 +115,12 @@ type Extractor struct {
 // CompileExtractors performs the initial setup operation on an extractor
 func (e *Extractor) CompileExtractors() error {
 	// Set up the extractor type
-
 	computedType, ok := extractorMappings[e.Type]
 	if !ok {
 		return fmt.Errorf("unknown extractor type specified: %s", e.Type)
 	}
 	e.extractorType = computedType
+
 	// Compile the regexes
 	for _, regex := range e.Regex {
 		compiled, err := regexp.Compile(regex)
@@ -181,6 +144,14 @@ func (e *Extractor) CompileExtractors() error {
 	//	}
 	//	e.jsonCompiled = append(e.jsonCompiled, compiled)
 	//}
+
+	for _, dslExp := range e.DSL {
+		compiled, err := govaluate.NewEvaluableExpressionWithFunctions(dslExp, common.HelperFunctions)
+		if err != nil {
+			return fmt.Errorf("could not compile dsl expression: %s", dslExp)
+		}
+		e.dslCompiled = append(e.dslCompiled, compiled)
+	}
 
 	if e.CaseInsensitive {
 		if e.GetType() != KValExtractor {
@@ -307,3 +278,25 @@ func (e *Extractor) ExtractKval(data map[string]interface{}) map[string]struct{}
 //	}
 //	return results
 //}
+
+// ExtractDSL execute the expression and returns the results
+func (e *Extractor) ExtractDSL(data map[string]interface{}) map[string]struct{} {
+	results := make(map[string]struct{})
+
+	for _, compiledExpression := range e.dslCompiled {
+		result, err := compiledExpression.Evaluate(data)
+		// ignore errors that are related to missing parameters
+		// eg: dns dsl can have all the parameters that are not present
+		if err != nil && !strings.HasPrefix(err.Error(), "No parameter") {
+			return results
+		}
+
+		if result != nil {
+			resultString := fmt.Sprint(result)
+			if resultString != "" {
+				results[resultString] = struct{}{}
+			}
+		}
+	}
+	return results
+}

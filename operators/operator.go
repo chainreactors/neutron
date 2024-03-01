@@ -42,7 +42,7 @@ func (r *Operators) Compile() error {
 	if r.MatchersCondition != "" {
 		r.matchersCondition = conditionTypes[r.MatchersCondition]
 	} else {
-		r.matchersCondition = OrCondition
+		r.matchersCondition = ORCondition
 	}
 	for _, matcher := range r.Matchers {
 		if err := matcher.CompileMatchers(); err != nil {
@@ -106,7 +106,7 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 		// Check if the matcher matched
 		if !match(data, matcher) {
 			// If the condition is AND we haven't matched, try next request.
-			if matcherCondition == AndCondition {
+			if matcherCondition == ANDCondition {
 				//if len(result.DynamicValues) > 0 {
 				//	return result, true
 				//}
@@ -115,7 +115,7 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 		} else {
 			// If the matcher has matched, and its an OR
 			// write the first output then move to next matcher.
-			if matcherCondition == OrCondition && matcher.Name != "" {
+			if matcherCondition == ORCondition && matcher.Name != "" {
 				result.Matches[matcher.Name] = []string{}
 			}
 			matches = true

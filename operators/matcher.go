@@ -3,6 +3,8 @@ package operators
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/Knetic/govaluate"
+	"github.com/chainreactors/neutron/common"
 	"regexp"
 	"strings"
 )
@@ -44,50 +46,8 @@ type Matcher struct {
 	condition         ConditionType
 	matcherType       MatcherType
 	regexCompiled     []*regexp.Regexp
-}
-
-// MatcherType is the type of the matcher specified
-type MatcherType = int
-
-const (
-	// WordsMatcher matches responses with words
-	WordsMatcher MatcherType = iota + 1
-	// RegexMatcher matches responses with regexes
-	RegexMatcher
-	// BinaryMatcher matches responses with words
-	BinaryMatcher
-	// StatusMatcher matches responses with status codes
-	StatusMatcher
-	// SizeMatcher matches responses with response size
-	SizeMatcher
-	// DSLMatcher matches based upon dsl syntax
-	DSLMatcher
-)
-
-// matcherTypes is an table for conversion of matcher type from string.
-var matcherTypes = map[string]MatcherType{
-	"status": StatusMatcher,
-	"size":   SizeMatcher,
-	"word":   WordsMatcher,
-	"regex":  RegexMatcher,
-	"binary": BinaryMatcher,
-	"dsl":    DSLMatcher,
-}
-
-// conditionType is the type of condition for matcher
-type ConditionType int
-
-const (
-	// AndCondition matches responses with AND condition in arguments.
-	AndCondition ConditionType = iota + 1
-	// OrCondition matches responses with AND condition in arguments.
-	OrCondition
-)
-
-// conditionTypes is an table for conversion of condition type from string.
-var conditionTypes = map[string]ConditionType{
-	"and": AndCondition,
-	"or":  OrCondition,
+	dslCompiled       []*govaluate.EvaluableExpression
+	binaryDecoded     []string
 }
 
 // Result reverts the results of the match if the matcher is of type negative.
@@ -135,8 +95,23 @@ func (m *Matcher) CompileMatchers() error {
 		m.regexCompiled = append(m.regexCompiled, compiled)
 	}
 
+	// Compile and validate binary Values in matcher
+	for _, value := range m.Binary {
+		if decoded, err := hex.DecodeString(value); err != nil {
+			return fmt.Errorf("could not hex decode binary: %s", value)
+		} else {
+			m.binaryDecoded = append(m.binaryDecoded, string(decoded))
+		}
+	}
+
 	// Compile the dsl expressions
-	// todo dsl错误处理
+	for _, dslExpression := range m.DSL {
+		compiledExpression, err := govaluate.NewEvaluableExpressionWithFunctions(dslExpression, common.HelperFunctions)
+		if err != nil {
+			return fmt.Errorf("could not compile dsl expression: %s", dslExpression)
+		}
+		m.dslCompiled = append(m.dslCompiled, compiledExpression)
+	}
 
 	// Setup the condition type, if any.
 	if m.Condition != "" {
@@ -145,7 +120,7 @@ func (m *Matcher) CompileMatchers() error {
 			return fmt.Errorf("unknown condition specified: %s", m.Condition)
 		}
 	} else {
-		m.condition = OrCondition
+		m.condition = ORCondition
 	}
 	return nil
 }
@@ -190,7 +165,7 @@ func (m *Matcher) MatchWords(corpus string) bool {
 		if !strings.Contains(corpus, word) {
 			// If we are in an AND request and a match failed,
 			// return false as the AND condition fails on any single mismatch.
-			if m.condition == AndCondition {
+			if m.condition == ANDCondition {
 				return false
 			}
 			// Continue with the flow since its an OR Condition.
@@ -198,7 +173,7 @@ func (m *Matcher) MatchWords(corpus string) bool {
 		}
 
 		// If the condition was an OR, return on the first match.
-		if m.condition == OrCondition {
+		if m.condition == ORCondition {
 			return true
 		}
 
@@ -218,7 +193,7 @@ func (m *Matcher) MatchRegex(corpus string) bool {
 		if !regex.MatchString(corpus) {
 			// If we are in an AND request and a match failed,
 			// return false as the AND condition fails on any single mismatch.
-			if m.condition == AndCondition {
+			if m.condition == ANDCondition {
 				return false
 			}
 			// Continue with the flow since its an OR Condition.
@@ -226,7 +201,7 @@ func (m *Matcher) MatchRegex(corpus string) bool {
 		}
 
 		// If the condition was an OR, return on the first match.
-		if m.condition == OrCondition {
+		if m.condition == ORCondition {
 			return true
 		}
 
@@ -239,28 +214,81 @@ func (m *Matcher) MatchRegex(corpus string) bool {
 }
 
 // MatchBinary matches a binary check against a corpus
-func (m *Matcher) MatchBinary(corpus string) bool {
+func (matcher *Matcher) MatchBinary(corpus string) (bool, []string) {
+	var matchedBinary []string
 	// Iterate over all the words accepted as valid
-	for i, binary := range m.Binary {
-		// Continue if the word doesn't match
-		hexa, _ := hex.DecodeString(binary)
-		if !strings.Contains(corpus, string(hexa)) {
+	for i, binary := range matcher.binaryDecoded {
+		if !strings.Contains(corpus, binary) {
 			// If we are in an AND request and a match failed,
 			// return false as the AND condition fails on any single mismatch.
-			if m.condition == AndCondition {
-				return false
+			switch matcher.condition {
+			case ANDCondition:
+				return false, []string{}
+			case ORCondition:
+				continue
 			}
-			// Continue with the flow since its an OR Condition.
-			continue
 		}
 
 		// If the condition was an OR, return on the first match.
-		if m.condition == OrCondition {
+		if matcher.condition == ORCondition {
+			return true, []string{binary}
+		}
+
+		matchedBinary = append(matchedBinary, binary)
+
+		// If we are at the end of the words, return with true
+		if len(matcher.Binary)-1 == i {
+			return true, matchedBinary
+		}
+	}
+	return false, []string{}
+}
+
+// MatchDSL matches on a generic map result
+func (matcher *Matcher) MatchDSL(data map[string]interface{}) bool {
+
+	// Iterate over all the expressions accepted as valid
+	for i, expression := range matcher.dslCompiled {
+		resolvedExpression, err := common.Evaluate(expression.String(), data)
+		if err != nil {
+			common.NeutronLog.Errorf(matcher.Name, err)
+			return false
+		}
+		expression, err = govaluate.NewEvaluableExpressionWithFunctions(resolvedExpression, common.HelperFunctions)
+		if err != nil {
+			common.NeutronLog.Errorf(matcher.Name, err)
+			return false
+		}
+
+		result, err := expression.Evaluate(data)
+		if err != nil {
+			if matcher.condition == ANDCondition {
+				return false
+			}
+			continue
+		}
+
+		if boolResult, ok := result.(bool); !ok {
+			common.NeutronLog.Warnf("[%s] The return value of a DSL statement must return a boolean value.", data["template-id"])
+			continue
+		} else if !boolResult {
+			// If we are in an AND request and a match failed,
+			// return false as the AND condition fails on any single mismatch.
+			switch matcher.condition {
+			case ANDCondition:
+				return false
+			case ORCondition:
+				continue
+			}
+		}
+
+		// If the condition was an OR, return on the first match.
+		if matcher.condition == ORCondition {
 			return true
 		}
 
-		// If we are at the end of the words, return with true
-		if len(m.Binary)-1 == i {
+		// If we are at the end of the dsl, return with true
+		if len(matcher.dslCompiled)-1 == i {
 			return true
 		}
 	}
