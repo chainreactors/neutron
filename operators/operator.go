@@ -1,6 +1,10 @@
 package operators
 
-import "github.com/chainreactors/neutron/common"
+import (
+	"fmt"
+	"github.com/chainreactors/neutron/common"
+	"strconv"
+)
 
 // operators contains the operators that can be applied on protocols
 type Operators struct {
@@ -32,8 +36,9 @@ type Result struct {
 	Extracts map[string][]string
 	// OutputExtracts is the list of extracts to be displayed on screen.
 	OutputExtracts []string
+	outputUnique   map[string]struct{}
 	// DynamicValues contains any dynamic values to be templated
-	DynamicValues map[string]interface{}
+	DynamicValues map[string][]string
 	// PayloadValues contains payload values provided by user. (Optional)
 	PayloadValues map[string]interface{}
 }
@@ -62,7 +67,7 @@ func (r *Operators) GetMatchersCondition() ConditionType {
 	return r.matchersCondition
 }
 
-type matchFunc func(data map[string]interface{}, matcher *Matcher) bool
+type matchFunc func(data map[string]interface{}, matcher *Matcher) (bool, []string)
 type extractFunc func(data map[string]interface{}, matcher *Extractor) map[string]struct{}
 
 // Execute executes the operators on data and returns a result structure
@@ -73,52 +78,72 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 	result := &Result{
 		Matches:       make(map[string][]string),
 		Extracts:      make(map[string][]string),
-		DynamicValues: make(map[string]interface{}),
+		DynamicValues: make(map[string][]string),
+		outputUnique:  make(map[string]struct{}),
 	}
 
-	//// Start with the extractors first and evaluate them.
-	var tmpname int
+	// state variable to check if all extractors are internal
+	var allInternalExtractors bool = true
+	// Start with the extractors first and evaluate them.
 	for _, extractor := range operators.Extractors {
+		if !extractor.Internal && allInternalExtractors {
+			allInternalExtractors = false
+		}
 		var extractorResults []string
-
 		for match := range extract(data, extractor) {
 			extractorResults = append(extractorResults, match)
 
 			if extractor.Internal {
-				if _, ok := result.DynamicValues[extractor.Name]; !ok {
-					result.DynamicValues[extractor.Name] = match
+				if data, ok := result.DynamicValues[extractor.Name]; !ok {
+					result.DynamicValues[extractor.Name] = []string{match}
+				} else {
+					result.DynamicValues[extractor.Name] = append(data, match)
 				}
 			} else {
-				result.OutputExtracts = append(result.OutputExtracts, match)
+				if _, ok := result.outputUnique[match]; !ok {
+					result.OutputExtracts = append(result.OutputExtracts, match)
+					result.outputUnique[match] = struct{}{}
+				}
 			}
 		}
-		if len(extractorResults) > 0 && !extractor.Internal {
-			if extractor.Name != "" {
-				result.Extracts[extractor.Name] = extractorResults
-			} else {
-				result.Extracts[common.ToString(tmpname)] = extractorResults
-				tmpname++
-			}
+		if len(extractorResults) > 0 && !extractor.Internal && extractor.Name != "" {
+			result.Extracts[extractor.Name] = extractorResults
+		}
+		// update data with whatever was extracted doesn't matter if it is internal or not (skip unless it empty)
+		if len(extractorResults) > 0 {
+			data[extractor.Name] = getExtractedValue(extractorResults)
 		}
 	}
 
-	for _, matcher := range operators.Matchers {
-		// Check if the matcher matched
-		if !match(data, matcher) {
-			// If the condition is AND we haven't matched, try next request.
-			if matcherCondition == ANDCondition {
-				//if len(result.DynamicValues) > 0 {
-				//	return result, true
-				//}
-				return nil, false
+	// expose dynamic values to same request matchers
+	if len(result.DynamicValues) > 0 {
+		dataDynamicValues := make(map[string]interface{})
+		for dynName, dynValues := range result.DynamicValues {
+			if len(dynValues) > 1 {
+				for dynIndex, dynValue := range dynValues {
+					dynKeyName := fmt.Sprintf("%s%d", dynName, dynIndex)
+					dataDynamicValues[dynKeyName] = dynValue
+				}
+				dataDynamicValues[dynName] = dynValues
+			} else {
+				dataDynamicValues[dynName] = dynValues[0]
 			}
-		} else {
-			// If the matcher has matched, and its an OR
-			// write the first output then move to next matcher.
+
+		}
+		data = common.MergeMaps(data, dataDynamicValues)
+	}
+
+	for _, matcher := range operators.Matchers {
+		if isMatch, matched := match(data, matcher); isMatch {
 			if matcherCondition == ORCondition && matcher.Name != "" {
-				result.Matches[matcher.Name] = []string{}
+				result.Matches[matcher.Name] = matched
 			}
 			matches = true
+		} else if matcherCondition == ANDCondition {
+			if len(result.DynamicValues) > 0 {
+				return result, true
+			}
+			return nil, false
 		}
 	}
 
@@ -208,5 +233,23 @@ func MakeDynamicValuesCallback(input map[string][]string, iterateAllValues bool,
 		if callback(output) {
 			return
 		}
+	}
+}
+
+// getExtractedValue takes array of extracted values if it only has one value
+// then it is flattened and returned as a string else original type is returned
+func getExtractedValue(values []string) interface{} {
+	if len(values) == 1 {
+		return values[0]
+	} else {
+		return values
+	}
+}
+
+func getMatcherName(matcher *Matcher, matcherIndex int) string {
+	if matcher.Name != "" {
+		return matcher.Name
+	} else {
+		return matcher.Type + "-" + strconv.Itoa(matcherIndex+1) // making the index start from 1 to be more readable
 	}
 }

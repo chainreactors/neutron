@@ -35,37 +35,39 @@ func (r *Request) getMatchPart(part string, data protocols.InternalEvent) (strin
 	return itemStr, true
 }
 
-func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) bool {
+// Match matches a generic data response again a given matcher
+func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []string) {
 	itemStr, ok := r.getMatchPart(matcher.Part, data)
 	if !ok {
-		return ok
+		return ok, []string{}
 	}
 
 	switch matcher.GetType() {
 	case operators.SizeMatcher:
-		return matcher.Result(matcher.MatchSize(len(itemStr)))
+		return matcher.Result(matcher.MatchSize(len(itemStr))), []string{}
 	case operators.WordsMatcher:
-		return matcher.Result(matcher.MatchWords(itemStr))
+		return matcher.ResultWithMatchedSnippet(matcher.MatchWords(itemStr, data))
 	case operators.RegexMatcher:
-		return matcher.Result(matcher.MatchRegex(itemStr))
+		return matcher.ResultWithMatchedSnippet(matcher.MatchRegex(itemStr))
 	case operators.BinaryMatcher:
-		return matcher.Result(matcher.MatchBinary(itemStr))
+		return matcher.ResultWithMatchedSnippet(matcher.MatchBinary(itemStr))
 	}
-	return false
+	return false, []string{}
 }
 
 // Extract performs extracting operation for an extractor on model and returns true or false.
 func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extractor) map[string]struct{} {
-	itemStr, ok := r.getMatchPart(extractor.Part, data)
+	item, ok := r.getMatchPart(extractor.Part, data)
 	if !ok {
 		return nil
 	}
-
 	switch extractor.GetType() {
 	case operators.RegexExtractor:
-		return extractor.ExtractRegex(itemStr)
+		return extractor.ExtractRegex(item)
 	case operators.KValExtractor:
 		return extractor.ExtractKval(data)
+	case operators.DSLExtractor:
+		return extractor.ExtractDSL(data)
 	}
 	return nil
 }

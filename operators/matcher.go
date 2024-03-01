@@ -40,7 +40,13 @@ type Matcher struct {
 	DSL []string `json:"dsl,omitempty" yaml:"dsl,omitempty"`
 	// Encoding specifies the encoding for the word content if any.
 	Encoding string `json:"encoding,omitempty" yaml:"encoding,omitempty"`
-
+	// description: |
+	//   MatchAll enables matching for all matcher values. Default is false.
+	// values:
+	//   - false
+	//   - true
+	MatchAll          bool   `yaml:"match-all,omitempty" json:"match-all,omitempty" `
+	CaseInsensitive   bool   `yaml:"case-insensitive,omitempty" json:"case-insensitive,omitempty" `
 	MatchersCondition string `json:"matchers-condition" yaml:"matchers-condition"`
 	Matchers          []Matcher
 	condition         ConditionType
@@ -56,6 +62,14 @@ func (m *Matcher) Result(data bool) bool {
 		return !data
 	}
 	return data
+}
+
+// ResultWithMatchedSnippet returns true and the matched snippet, or false and an empty string
+func (m *Matcher) ResultWithMatchedSnippet(data bool, matchedSnippet []string) (bool, []string) {
+	if m.Negative {
+		return !data, []string{}
+	}
+	return data, matchedSnippet
 }
 
 // getType returns the type of the matcher
@@ -158,67 +172,28 @@ func (m *Matcher) MatchSize(length int) bool {
 }
 
 // MatchWords matches a word check against a corpus.
-func (m *Matcher) MatchWords(corpus string) bool {
+func (matcher *Matcher) MatchWords(corpus string, data map[string]interface{}) (bool, []string) {
+	if matcher.CaseInsensitive {
+		corpus = strings.ToLower(corpus)
+	}
+
+	var matchedWords []string
 	// Iterate over all the words accepted as valid
-	for i, word := range m.Words {
+	for i, word := range matcher.Words {
+		if data == nil {
+			data = make(map[string]interface{})
+		}
+
+		var err error
+		word, err = common.Evaluate(word, data)
+		if err != nil {
+			common.NeutronLog.Warnf("Error while evaluating word matcher: %q", word)
+			if matcher.condition == ANDCondition {
+				return false, []string{}
+			}
+		}
 		// Continue if the word doesn't match
 		if !strings.Contains(corpus, word) {
-			// If we are in an AND request and a match failed,
-			// return false as the AND condition fails on any single mismatch.
-			if m.condition == ANDCondition {
-				return false
-			}
-			// Continue with the flow since its an OR Condition.
-			continue
-		}
-
-		// If the condition was an OR, return on the first match.
-		if m.condition == ORCondition {
-			return true
-		}
-
-		// If we are at the end of the words, return with true
-		if len(m.Words)-1 == i {
-			return true
-		}
-	}
-	return false
-}
-
-// MatchRegex matches a regex check against a corpus
-func (m *Matcher) MatchRegex(corpus string) bool {
-	// Iterate over all the regexes accepted as valid
-	for i, regex := range m.regexCompiled {
-		// Continue if the regex doesn't match
-		if !regex.MatchString(corpus) {
-			// If we are in an AND request and a match failed,
-			// return false as the AND condition fails on any single mismatch.
-			if m.condition == ANDCondition {
-				return false
-			}
-			// Continue with the flow since its an OR Condition.
-			continue
-		}
-
-		// If the condition was an OR, return on the first match.
-		if m.condition == ORCondition {
-			return true
-		}
-
-		// If we are at the end of the regex, return with true
-		if len(m.regexCompiled)-1 == i {
-			return true
-		}
-	}
-	return false
-}
-
-// MatchBinary matches a binary check against a corpus
-func (matcher *Matcher) MatchBinary(corpus string) (bool, []string) {
-	var matchedBinary []string
-	// Iterate over all the words accepted as valid
-	for i, binary := range matcher.binaryDecoded {
-		if !strings.Contains(corpus, binary) {
 			// If we are in an AND request and a match failed,
 			// return false as the AND condition fails on any single mismatch.
 			switch matcher.condition {
@@ -230,14 +205,83 @@ func (matcher *Matcher) MatchBinary(corpus string) (bool, []string) {
 		}
 
 		// If the condition was an OR, return on the first match.
-		if matcher.condition == ORCondition {
+		if matcher.condition == ORCondition && !matcher.MatchAll {
+			return true, []string{word}
+		}
+		matchedWords = append(matchedWords, word)
+
+		// If we are at the end of the words, return with true
+		if len(matcher.Words)-1 == i && !matcher.MatchAll {
+			return true, matchedWords
+		}
+	}
+	if len(matchedWords) > 0 && matcher.MatchAll {
+		return true, matchedWords
+	}
+	return false, []string{}
+}
+
+// MatchRegex matches a regex check against a corpus
+func (matcher *Matcher) MatchRegex(corpus string) (bool, []string) {
+	var matchedRegexes []string
+	// Iterate over all the regexes accepted as valid
+	for i, regex := range matcher.regexCompiled {
+		// Continue if the regex doesn't match
+		if !regex.MatchString(corpus) {
+			// If we are in an AND request and a match failed,
+			// return false as the AND condition fails on any single mismatch.
+			switch matcher.condition {
+			case ANDCondition:
+				return false, []string{}
+			case ORCondition:
+				continue
+			}
+		}
+
+		currentMatches := regex.FindAllString(corpus, -1)
+		// If the condition was an OR, return on the first match.
+		if matcher.condition == ORCondition && !matcher.MatchAll {
+			return true, currentMatches
+		}
+
+		matchedRegexes = append(matchedRegexes, currentMatches...)
+
+		// If we are at the end of the regex, return with true
+		if len(matcher.regexCompiled)-1 == i && !matcher.MatchAll {
+			return true, matchedRegexes
+		}
+	}
+	if len(matchedRegexes) > 0 && matcher.MatchAll {
+		return true, matchedRegexes
+	}
+	return false, []string{}
+}
+
+// MatchBinary matches a binary check against a corpus
+func (m *Matcher) MatchBinary(corpus string) (bool, []string) {
+	var matchedBinary []string
+	// Iterate over all the words accepted as valid
+	for i, binary := range m.binaryDecoded {
+		if !strings.Contains(corpus, binary) {
+			// If we are in an AND request and a match failed,
+			// return false as the AND condition fails on any single mismatch.
+			switch m.condition {
+			case ANDCondition:
+				return false, []string{}
+			case ORCondition:
+				continue
+			}
+		}
+
+		// If the condition was an OR, return on the first match.
+		if m.condition == ORCondition {
 			return true, []string{binary}
 		}
 
 		matchedBinary = append(matchedBinary, binary)
 
 		// If we are at the end of the words, return with true
-		if len(matcher.Binary)-1 == i {
+		if len(m.Binary)-1 == i {
 			return true, matchedBinary
 		}
 	}
@@ -245,24 +289,24 @@ func (matcher *Matcher) MatchBinary(corpus string) (bool, []string) {
 }
 
 // MatchDSL matches on a generic map result
-func (matcher *Matcher) MatchDSL(data map[string]interface{}) bool {
+func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 
 	// Iterate over all the expressions accepted as valid
-	for i, expression := range matcher.dslCompiled {
+	for i, expression := range m.dslCompiled {
 		resolvedExpression, err := common.Evaluate(expression.String(), data)
 		if err != nil {
-			common.NeutronLog.Errorf(matcher.Name, err)
+			common.NeutronLog.Errorf(m.Name, err)
 			return false
 		}
 		expression, err = govaluate.NewEvaluableExpressionWithFunctions(resolvedExpression, common.HelperFunctions)
 		if err != nil {
-			common.NeutronLog.Errorf(matcher.Name, err)
+			common.NeutronLog.Errorf(m.Name, err)
 			return false
 		}
 
 		result, err := expression.Evaluate(data)
 		if err != nil {
-			if matcher.condition == ANDCondition {
+			if m.condition == ANDCondition {
 				return false
 			}
 			continue
@@ -274,7 +318,7 @@ func (matcher *Matcher) MatchDSL(data map[string]interface{}) bool {
 		} else if !boolResult {
 			// If we are in an AND request and a match failed,
 			// return false as the AND condition fails on any single mismatch.
-			switch matcher.condition {
+			switch m.condition {
 			case ANDCondition:
 				return false
 			case ORCondition:
@@ -283,12 +327,12 @@ func (matcher *Matcher) MatchDSL(data map[string]interface{}) bool {
 		}
 
 		// If the condition was an OR, return on the first match.
-		if matcher.condition == ORCondition {
+		if m.condition == ORCondition {
 			return true
 		}
 
 		// If we are at the end of the dsl, return with true
-		if len(matcher.dslCompiled)-1 == i {
+		if len(m.dslCompiled)-1 == i {
 			return true
 		}
 	}
