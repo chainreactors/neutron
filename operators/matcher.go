@@ -136,6 +136,14 @@ func (m *Matcher) CompileMatchers() error {
 	} else {
 		m.condition = ORCondition
 	}
+	if m.CaseInsensitive {
+		if m.GetType() != WordsMatcher {
+			return fmt.Errorf("case-insensitive flag is supported only for 'word' matchers (not '%s')", m.Type)
+		}
+		for i := range m.Words {
+			m.Words[i] = strings.ToLower(m.Words[i])
+		}
+	}
 	return nil
 }
 
