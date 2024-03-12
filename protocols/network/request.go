@@ -73,7 +73,7 @@ func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extr
 }
 
 // ExecuteWithResults executes the protocol requests and returns results instead of writing them.
-func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
+func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues, previousEvent map[string]interface{}, callback protocols.OutputEventCallback) error {
 	address, err := getAddress(input.Input)
 	if err != nil {
 		return err

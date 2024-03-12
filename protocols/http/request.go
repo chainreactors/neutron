@@ -1,13 +1,13 @@
 package http
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
@@ -74,7 +74,29 @@ type Request struct {
 
 // Type returns the type of the protocol request
 func (r *Request) Type() protocols.ProtocolType {
-	return protocols.FileProtocol
+	return protocols.HTTPProtocol
+}
+
+// NeedsRequestCondition determines if request condition should be enabled
+func (request *Request) NeedsRequestCondition() bool {
+	for _, matcher := range request.Matchers {
+		if checkRequestConditionExpressions(matcher.DSL...) {
+			return true
+		}
+		if checkRequestConditionExpressions(matcher.Part) {
+			return true
+		}
+	}
+	for _, extractor := range request.Extractors {
+		if checkRequestConditionExpressions(extractor.DSL...) {
+			return true
+		}
+		if checkRequestConditionExpressions(extractor.Part) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Match matches a generic data response again a given matcher
@@ -103,6 +125,9 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 		return matcher.ResultWithMatchedSnippet(matcher.MatchRegex(item))
 	case operators.BinaryMatcher:
 		return matcher.ResultWithMatchedSnippet(matcher.MatchBinary(item))
+	case operators.DSLMatcher:
+		return matcher.Result(matcher.MatchDSL(data)), nil
+
 	}
 	return false, []string{}
 }
@@ -287,16 +312,17 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 	return nil
 }
 
-func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
+func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues, previous map[string]interface{}, callback protocols.OutputEventCallback) error {
 	var err error
-	err = r.ExecuteRequestWithResults(input, dynamicValues, callback)
+
+	err = r.ExecuteRequestWithResults(input, dynamicValues, previous, callback)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
+func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynamicValues, previousEvent map[string]interface{}, callback protocols.OutputEventCallback) error {
 	generator := r.newGenerator(input.Payloads)
 	requestCount := 1
 	var requestErr error
@@ -315,14 +341,14 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 				generatedHttpRequest.request.Header.Set("User-Agent", ua)
 			}
 			var gotMatches bool
-			err = r.executeRequest(generatedHttpRequest, dynamicValues, func(event *protocols.InternalWrappedEvent) {
+			err = r.executeRequest(input, generatedHttpRequest, previousEvent, func(event *protocols.InternalWrappedEvent) {
 				// Add the extracts to the dynamic values if any.
 				if event.OperatorsResult != nil {
 					gotMatches = event.OperatorsResult.Matched
-					gotDynamicValues = common.MergeMapsMany(event.OperatorsResult.DynamicValues, dynamicValues, gotDynamicValues)
+					gotDynamicValues = common.MergeMapsMany(event.OperatorsResult.DynamicValues, gotDynamicValues)
 				}
 				callback(event)
-			})
+			}, generator.currentIndex)
 
 			// If a variable is unresolved, skip all further requests
 			if err == errStopExecution {
@@ -371,18 +397,45 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 	return requestErr
 }
 
-func (r *Request) executeRequest(request *generatedRequest, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
+func (r *Request) executeRequest(input *protocols.ScanContext, request *generatedRequest, previousEvent map[string]interface{}, callback protocols.OutputEventCallback, reqcount int) error {
 	resp, err := r.httpClient.Do(request.request)
-	common.NeutronLog.Debugf("request %v %v", request.request.URL, dynamicValues)
+	common.NeutronLog.Debugf("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
 	if err != nil {
 		common.NeutronLog.Debugf("%s nuclei request failed, %s", request.request.URL, err.Error())
 		return err
 	}
-	data := respToMap(resp, request.request)
-	event := &protocols.InternalWrappedEvent{InternalEvent: dynamicValues}
+
+	matchedURL := input.Input
+	if request.request != nil {
+		matchedURL = request.request.URL.String()
+	}
+	// Give precedence to the final URL from response
+	if resp.Request != nil {
+		if responseURL := resp.Request.URL.String(); responseURL != "" {
+			matchedURL = responseURL
+		}
+	}
+	finalEvent := make(map[string]interface{})
+	outputEvent := r.responseToDSLMap(request.request, resp, input.Input, matchedURL, request.dynamicValues)
+	for k, v := range previousEvent {
+		finalEvent[k] = v
+	}
+	for k, v := range outputEvent {
+		finalEvent[k] = v
+	}
+
+	// Add to history the current request number metadata if asked by the user.
+	if r.NeedsRequestCondition() {
+		for k, v := range outputEvent {
+			key := fmt.Sprintf("%s_%d", k, reqcount)
+			previousEvent[key] = v
+			finalEvent[key] = v
+		}
+	}
+	event := &protocols.InternalWrappedEvent{InternalEvent: outputEvent}
 	if r.CompiledOperators != nil {
 		var ok bool
-		event.OperatorsResult, ok = r.CompiledOperators.Execute(data, r.Match, r.Extract)
+		event.OperatorsResult, ok = r.CompiledOperators.Execute(finalEvent, r.Match, r.Extract)
 		if ok && event.OperatorsResult != nil {
 			event.OperatorsResult.PayloadValues = request.dynamicValues
 			event.Results = r.MakeResultEvent(event)
@@ -393,31 +446,85 @@ func (r *Request) executeRequest(request *generatedRequest, dynamicValues map[st
 	return err
 }
 
-func respToMap(resp *http.Response, req *http.Request) map[string]interface{} {
-	data := make(map[string]interface{})
-	data["host"] = req.Host
-	data["request"] = req
-	data["response"] = resp
-	data["content_length"] = resp.ContentLength
-	data["status_code"] = resp.StatusCode
-	bodybytes, _ := ioutil.ReadAll(resp.Body)
-	data["body"] = string(bodybytes)
-	data["url"] = req.URL
+//func (r *Request) respToMap(resp *http.Response, req *http.Request) map[string]interface{} {
+//	data := make(map[string]interface{})
+//	data["host"] = req.Host
+//	data["request"] = req
+//	data["response"] = resp
+//	data["content_length"] = resp.ContentLength
+//	data["status_code"] = resp.StatusCode
+//	bodybytes, _ := ioutil.ReadAll(resp.Body)
+//	data["body"] = string(bodybytes)
+//	data["url"] = req.URL
+//
+//	for k, v := range resp.Header {
+//		for _, i := range v {
+//			data["all_headers"] = common.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", k, i)
+//		}
+//	}
+//
+//	for _, cookie := range resp.Cookies() {
+//		data[strings.ToLower(cookie.Name)] = cookie.Value
+//	}
+//	for k, v := range resp.Header {
+//		k = strings.ToLower(strings.Replace(strings.TrimSpace(k), "-", "_", -1))
+//		data[k] = strings.Join(v, " ")
+//	}
+//	resp.Body.Close()
+//	if r.StopAtFirstMatch {
+//		data["stop-at-first-match"] = true
+//	}
+//	return data
+//}
 
-	for k, v := range resp.Header {
-		for _, i := range v {
-			data["all_headers"] = common.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", k, i)
-		}
+// responseToDSLMap converts an HTTP response to a map for use in DSL matching
+func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host, matched string, extra map[string]interface{}) protocols.InternalEvent {
+	data := make(protocols.InternalEvent, 12+len(extra)+len(resp.Header)+len(resp.Cookies()))
+	for k, v := range extra {
+		data[k] = v
 	}
-
 	for _, cookie := range resp.Cookies() {
 		data[strings.ToLower(cookie.Name)] = cookie.Value
 	}
+	data["header"] = resp.Header
+	data["host"] = host
+	data["type"] = r.Type().String()
+	data["matched"] = matched
+	data["status_code"] = resp.StatusCode
+
+	var respRaw bytes.Buffer
+	respRaw.WriteString(fmt.Sprintf("%s %s\r\n", resp.Proto, resp.Status))
 	for k, v := range resp.Header {
-		k = strings.ToLower(strings.Replace(strings.TrimSpace(k), "-", "_", -1))
+		k = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(k), "-", "_"))
 		data[k] = strings.Join(v, " ")
+		data["all_headers"] = common.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", k, v)
 	}
-	resp.Body.Close()
+	respRaw.WriteString("\r\n")
+	body, _ := io.ReadAll(resp.Body)
+	respRaw.Write(body)
+	_ = resp.Body.Close()
+	data["body"] = string(body)
+	if resp.ContentLength > -1 {
+		data["content_length"] = resp.ContentLength
+	} else {
+		data["content_length"] = len(body)
+	}
+	data["request"] = respRaw
+	data["response"] = respRaw.String()
+
+	var reqRaw bytes.Buffer
+	reqRaw.WriteString(fmt.Sprintf("%s %s\r\n", req.Method, req.URL.String()))
+	for k, v := range req.Header {
+		reqRaw.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+	}
+	reqRaw.WriteString("\r\n")
+	body, _ = io.ReadAll(req.Body)
+	reqRaw.Write(body)
+	data["request"] = reqRaw.String()
+
+	if r.StopAtFirstMatch {
+		data["stop-at-first-match"] = true
+	}
 	return data
 }
 
@@ -428,6 +535,17 @@ func (r *Request) GetID() string {
 var (
 	urlWithPortRegex = regexp.MustCompile(`{{BaseURL}}:(\d+)`)
 )
+
+var reRequestCondition = regexp.MustCompile(`(?m)_\d+`)
+
+func checkRequestConditionExpressions(expressions ...string) bool {
+	for _, expression := range expressions {
+		if reRequestCondition.MatchString(expression) {
+			return true
+		}
+	}
+	return false
+}
 
 // generatedRequest is a single wrapped generated request for a template request
 type generatedRequest struct {

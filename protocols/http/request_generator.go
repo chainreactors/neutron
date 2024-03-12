@@ -13,10 +13,12 @@ import (
 )
 
 type requestGenerator struct {
-	currentIndex    int
-	request         *Request
-	payloadIterator *protocols.Iterator
-	rawRequest      *rawRequest
+	currentIndex     int
+	currentPayloads  map[string]interface{}
+	okCurrentPayload bool
+	request          *Request
+	payloadIterator  *protocols.Iterator
+	rawRequest       *rawRequest
 }
 
 // newGenerator creates a NewGenerator request generator instance
@@ -37,62 +39,73 @@ func (r *Request) newGenerator(payloads map[string]interface{}) *requestGenerato
 // nextValue returns the next path or the next raw request depending on user input
 // It returns false if all the inputs have been exhausted by the generator instance.
 func (r *requestGenerator) nextValue() (value string, payloads map[string]interface{}, result bool) {
-	// If we have paths, return the next path.
-	if len(r.request.Path) > 0 && r.currentIndex < len(r.request.Path) {
-		if value := r.request.Path[r.currentIndex]; value != "" {
-			r.currentIndex++
-
-			if r.payloadIterator != nil {
-				payload, ok := r.payloadIterator.Value()
-				if !ok {
-					r.payloadIterator.Reset()
-					// No more payloads request for us now.
-					if len(r.request.Path) == r.currentIndex {
-						return "", nil, false
-					}
-					if value != "" {
-						newPayload, ok := r.payloadIterator.Value()
-						return value, newPayload, ok
-					}
-					return "", nil, false
-				}
-				return value, payload, true
-			}
-			return value, nil, true
-		}
-	}
-
-	// If we have raw requests, start with the request at current index.
-	// If we are not at the start, then check if the iterator for payloads
-	// has finished if there are any.
+	// Iterate each payload sequentially for each request path/raw
 	//
-	// If the iterator has finished for the current raw request
-	// then reset it and move on to the next value, otherwise use the last request.
-	if len(r.request.Raw) > 0 && r.currentIndex < len(r.request.Raw) {
-		if r.payloadIterator != nil {
-			payload, ok := r.payloadIterator.Value()
-			if !ok {
-				r.currentIndex++
-				r.payloadIterator.Reset()
+	// If the sequence has finished for the current payload values
+	// then restart the sequence from the beginning and move on to the next payloads values
+	// otherwise use the last request.
+	var sequence []string
+	switch {
+	case len(r.request.Path) > 0:
+		sequence = r.request.Path
+	case len(r.request.Raw) > 0:
+		sequence = r.request.Raw
+	default:
+		return "", nil, false
+	}
 
-				// No more payloads request for us now.
-				if len(r.request.Raw) == r.currentIndex {
-					return "", nil, false
-				}
-				if item := r.request.Raw[r.currentIndex]; item != "" {
-					newPayload, ok := r.payloadIterator.Value()
-					return item, newPayload, ok
-				}
-				return "", nil, false
-			}
-			return r.request.Raw[r.currentIndex], payload, true
-		}
-		if item := r.request.Raw[r.currentIndex]; item != "" {
-			r.currentIndex++
-			return item, nil, true
+	hasPayloadIterator := r.payloadIterator != nil
+
+	if hasPayloadIterator && r.currentPayloads == nil {
+		r.currentPayloads, r.okCurrentPayload = r.payloadIterator.Value()
+	}
+
+	var request string
+	var shouldContinue bool
+	if nextRequest, nextIndex, found := r.findNextIteration(sequence, r.currentIndex); found {
+		r.currentIndex = nextIndex + 1
+		request = nextRequest
+		shouldContinue = true
+	} else {
+		// if found is false which happens at end of iteration of reqData(path or raw request)
+		// try again from start with index 0
+		if nextRequest, nextIndex, found := r.findNextIteration(sequence, 0); found && hasPayloadIterator {
+			r.currentIndex = nextIndex + 1
+			request = nextRequest
+			shouldContinue = true
 		}
 	}
-	return "", nil, false
+
+	if shouldContinue {
+		//if r.hasMarker(request, Once) {
+		//	r.applyMark(request, Once)
+		//}
+		if hasPayloadIterator {
+			return request, r.currentPayloads, r.okCurrentPayload
+		}
+		// next should return a copy of payloads and not pointer to payload to avoid data race
+		return request, r.currentPayloads, true
+	} else {
+		return "", nil, false
+	}
+}
+
+// findNextIteration iterates and returns next Request(path or raw request)
+// at end of each iteration payload is incremented
+func (r *requestGenerator) findNextIteration(sequence []string, index int) (string, int, bool) {
+	for i, request := range sequence[index:] {
+		//if r.wasMarked(request, Once) {
+		//	// if request contains flowmark i.e `@once` and is marked skip it
+		//	continue
+		//}
+		return request, index + i, true
+
+	}
+	// move on to next payload if current payload is applied/returned for all Requests(path or raw request)
+	if r.payloadIterator != nil {
+		r.currentPayloads, r.okCurrentPayload = r.payloadIterator.Value()
+	}
+	return "", 0, false
 }
 
 // Total returns the total number of requests for the generator

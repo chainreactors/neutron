@@ -35,7 +35,7 @@ type FileMatch struct {
 var emptyResultErr = errors.New("Empty result")
 
 // ExecuteWithResults executes the protocol requests and returns results instead of writing them.
-func (request *Request) ExecuteWithResults(input *protocols.ScanContext, previous map[string]interface{}, callback protocols.OutputEventCallback) error {
+func (request *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues, previous map[string]interface{}, callback protocols.OutputEventCallback) error {
 	//wg := sizedwaitgroup.NewGenerator(request.options.Options.BulkSize)
 	err := request.getInputPaths(input.Input, func(filePath string) {
 		//wg.Add()
