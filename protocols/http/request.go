@@ -58,7 +58,9 @@ type Request struct {
 	// Currently only works with sequential http requests.
 	ReqCondition bool `json:"req-condition" yaml:"req-condition"`
 	//   StopAtFirstMatch stops the execution of the requests and template as soon as a match is found.
-	StopAtFirstMatch  bool                 `json:"stop-at-first-match" yaml:"stop-at-first-match"`
+	StopAtFirstMatch bool `json:"stop-at-first-match" yaml:"stop-at-first-match"`
+
+	IterateAll        bool                 `yaml:"iterate-all,omitempty" json:"iterate-all,omitempty"`
 	generator         *protocols.Generator // optional, only enabled when using payloads
 	httpClient        *http.Client
 	httpresp          *http.Response
@@ -151,9 +153,11 @@ func (r *Request) GetCompiledOperators() []*operators.Operators {
 	return []*operators.Operators{r.CompiledOperators}
 }
 
-//var (
+// var (
+//
 //	urlWithPortRegex = regexp.MustCompile(`{{BaseURL}}:(\d+)`)
-//)
+//
+// )
 // MakeResultEvent creates a result event from internal wrapped event
 func (r *Request) MakeResultEvent(wrapped *protocols.InternalWrappedEvent) []*protocols.ResultEvent {
 	if len(wrapped.OperatorsResult.DynamicValues) > 0 && !wrapped.OperatorsResult.Matched {
@@ -348,7 +352,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 		var skip bool
 
 		if len(gotDynamicValues) > 0 {
-			operators.MakeDynamicValuesCallback(gotDynamicValues, true, func(data map[string]interface{}) bool {
+			operators.MakeDynamicValuesCallback(gotDynamicValues, r.IterateAll, func(data map[string]interface{}) bool {
 				if skip, gotErr = executeFunc(inputData, payloads, data); skip || gotErr != nil {
 					return true
 				}
@@ -369,6 +373,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 
 func (r *Request) executeRequest(request *generatedRequest, dynamicValues map[string]interface{}, callback protocols.OutputEventCallback) error {
 	resp, err := r.httpClient.Do(request.request)
+	common.NeutronLog.Debugf("request %v %v", request.request.URL, dynamicValues)
 	if err != nil {
 		common.NeutronLog.Debugf("%s nuclei request failed, %s", request.request.URL, err.Error())
 		return err
@@ -424,7 +429,7 @@ var (
 	urlWithPortRegex = regexp.MustCompile(`{{BaseURL}}:(\d+)`)
 )
 
-//generatedRequest is a single wrapped generated request for a template request
+// generatedRequest is a single wrapped generated request for a template request
 type generatedRequest struct {
 	original *Request
 	//rawRequest      *raw.Request
