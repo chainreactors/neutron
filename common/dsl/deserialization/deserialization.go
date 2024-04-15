@@ -71,7 +71,7 @@ func gadgetEncodingHelper(returnData []byte, encoding string) string {
 }
 
 func urlsafeBase64Encode(data []byte) string {
-	return strings.ReplaceAll(base64.StdEncoding.EncodeToString(data), "+", "%2B")
+	return strings.Replace(base64.StdEncoding.EncodeToString(data), "+", "%2B", -1)
 }
 
 // generateCommonsCollections40Payload generates org.apache.commons:commons-collections4:4.0

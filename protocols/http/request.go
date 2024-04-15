@@ -495,7 +495,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	var respRaw bytes.Buffer
 	respRaw.WriteString(fmt.Sprintf("%s %s\r\n", resp.Proto, resp.Status))
 	for k, v := range resp.Header {
-		k = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(k), "-", "_"))
+		k = strings.ToLower(strings.Replace(strings.TrimSpace(k), "-", "_", -1))
 		data[k] = strings.Join(v, " ")
 		data["all_headers"] = common.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", k, v)
 	}

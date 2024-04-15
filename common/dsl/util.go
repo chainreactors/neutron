@@ -110,7 +110,7 @@ func insertInto(s string, interval int, sep rune) string {
 
 func TrimAll(s, cutset string) string {
 	for _, c := range cutset {
-		s = strings.ReplaceAll(s, string(c), "")
+		s = strings.Replace(s, string(c), "", -1)
 	}
 	return s
 }
@@ -174,7 +174,7 @@ func parseTimeOrNow(arguments []interface{}) (time.Time, error) {
 }
 
 func formatDateTime(inputFormat string, matchValue string, timeFragment int) string {
-	return strings.ReplaceAll(inputFormat, matchValue, appendSingleDigitZero(strconv.Itoa(timeFragment)))
+	return strings.Replace(inputFormat, matchValue, appendSingleDigitZero(strconv.Itoa(timeFragment)), -1)
 }
 
 // appendSingleDigitZero appends zero at front if not exists already doing two digit padding

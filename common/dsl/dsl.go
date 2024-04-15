@@ -186,7 +186,7 @@ func init() {
 		return strings.Repeat(toString(args[0]), count), nil
 	}))
 	MustAddFunction(NewWithPositionalArgs("replace", 3, false, func(args ...interface{}) (interface{}, error) {
-		return strings.ReplaceAll(toString(args[0]), toString(args[1]), toString(args[2])), nil
+		return strings.Replace(toString(args[0]), toString(args[1]), toString(args[2]), -1), nil
 	}))
 	MustAddFunction(NewWithPositionalArgs("replace_regex", 3, false, func(args ...interface{}) (interface{}, error) {
 		compiled, err := regexp.Compile(toString(args[1]))
@@ -1231,7 +1231,7 @@ func HelperFunctions() map[string]govaluate.ExpressionFunction {
 	for _, function := range functions {
 		helperFunctions[function.Name] = function.Exec
 		// for backwards compatibility
-		helperFunctions[strings.ReplaceAll(function.Name, "_", "")] = function.Exec
+		helperFunctions[strings.Replace(function.Name, "_", "", -1)] = function.Exec
 	}
 
 	return helperFunctions
