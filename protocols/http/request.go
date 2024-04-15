@@ -8,6 +8,7 @@ import (
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
