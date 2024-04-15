@@ -500,7 +500,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 		data["all_headers"] = common.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", k, v)
 	}
 	respRaw.WriteString("\r\n")
-	body, _ := io.ReadAll(resp.Body)
+	body, _ := ioutil.ReadAll(resp.Body)
 	respRaw.Write(body)
 	_ = resp.Body.Close()
 	data["body"] = string(body)
@@ -518,7 +518,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 		reqRaw.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
 	}
 	reqRaw.WriteString("\r\n")
-	body, _ = io.ReadAll(req.Body)
+	body, _ = ioutil.ReadAll(req.Body)
 	reqRaw.Write(body)
 	data["request"] = reqRaw.String()
 

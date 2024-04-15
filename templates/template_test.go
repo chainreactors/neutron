@@ -2,6 +2,8 @@ package templates
 
 import (
 	"fmt"
+	"github.com/chainreactors/logs"
+	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/protocols"
 	"gopkg.in/yaml.v3"
 	"os"
@@ -29,7 +31,8 @@ func TestTemplate_Compile(t1 *testing.T) {
 }
 
 func TestTemplate_Execute(t1 *testing.T) {
-	content, _ := os.ReadFile("tmp.yml")
+	common.NeutronLog.SetLevel(logs.Debug)
+	content, _ := os.ReadFile("tmp.yaml")
 	t := &Template{}
 	err := yaml.Unmarshal(content, t)
 	if err != nil {
@@ -46,7 +49,7 @@ func TestTemplate_Execute(t1 *testing.T) {
 
 	println("load success")
 
-	res, err := t.Execute("http://127.0.0.1:8089", nil)
+	res, err := t.Execute("http://192.168.88.128:8080", nil)
 	if err == nil {
 		fmt.Println("ok", res)
 	} else {

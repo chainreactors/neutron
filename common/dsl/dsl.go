@@ -21,7 +21,7 @@ import (
 	"github.com/hashicorp/go-version"
 	"hash"
 	"html"
-	"io"
+	"io/ioutil"
 	"math"
 	rand2 "math/rand"
 	"net/url"
@@ -235,7 +235,7 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		data, err := io.ReadAll(reader)
+		data, err := ioutil.ReadAll(reader)
 		if err != nil {
 			_ = reader.Close()
 			return "", err
@@ -259,7 +259,7 @@ func init() {
 		if err != nil {
 			return "", err
 		}
-		data, err := io.ReadAll(reader)
+		data, err := ioutil.ReadAll(reader)
 		if err != nil {
 			_ = reader.Close()
 			return "", err
@@ -284,7 +284,7 @@ func init() {
 	}))
 	MustAddFunction(NewWithPositionalArgs("inflate", 1, false, func(args ...interface{}) (interface{}, error) {
 		reader := flate.NewReader(strings.NewReader(args[0].(string)))
-		data, err := io.ReadAll(reader)
+		data, err := ioutil.ReadAll(reader)
 		if err != nil {
 			_ = reader.Close()
 			return "", err
