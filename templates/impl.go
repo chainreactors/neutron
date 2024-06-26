@@ -25,6 +25,11 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 			Options: &protocols.Options{},
 		}
 	}
+
+	if len(t.Variables) > 0 {
+		options.Variables = t.Variables
+	}
+
 	if len(t.RequestsHTTP) > 0 {
 		for _, req := range t.RequestsHTTP {
 			requests = append(requests, req)

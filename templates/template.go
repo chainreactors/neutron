@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/neutron/protocols/executer"
 	"github.com/chainreactors/neutron/protocols/http"
 	"github.com/chainreactors/neutron/protocols/network"
@@ -21,6 +22,9 @@ type Template struct {
 		Tags   string `json:"tags" yaml:"tags"`
 		Zombie string `json:"zombie" yaml:"zombie"`
 	} `json:"info" yaml:"info"`
+
+	Variables protocols.Variable `yaml:"variables,omitempty" json:"variables,omitempty"`
+
 	RequestsHTTP    []*http.Request    `json:"http" yaml:"http"`
 	RequestsNetwork []*network.Request `json:"network" yaml:"network"`
 

@@ -146,6 +146,8 @@ func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extr
 		return extractor.ExtractKval(data)
 	case operators.DSLExtractor:
 		return extractor.ExtractDSL(data)
+		//case operators.XPathExtractor:
+		//	return extractor.ExtractXPath(item)
 	}
 	return nil
 }
@@ -323,7 +325,9 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 	return nil
 }
 
-func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynamicValues, previousEvent map[string]interface{}, callback protocols.OutputEventCallback) error {
+func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynamicValues, previous map[string]interface{}, callback protocols.OutputEventCallback) error {
+	variablesMap := r.options.Variables.Evaluate(common.MergeMaps(dynamicValues, previous))
+	dynamicValues = common.MergeMaps(variablesMap, dynamicValues)
 	generator := r.newGenerator(input.Payloads)
 	requestCount := 1
 	var requestErr error
@@ -342,7 +346,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 				generatedHttpRequest.request.Header.Set("User-Agent", ua)
 			}
 			var gotMatches bool
-			err = r.executeRequest(input, generatedHttpRequest, previousEvent, func(event *protocols.InternalWrappedEvent) {
+			err = r.executeRequest(input, generatedHttpRequest, previous, func(event *protocols.InternalWrappedEvent) {
 				// Add the extracts to the dynamic values if any.
 				if event.OperatorsResult != nil {
 					gotMatches = event.OperatorsResult.Matched

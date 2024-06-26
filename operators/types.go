@@ -10,6 +10,7 @@ const (
 	// name:kval
 	KValExtractor
 	DSLExtractor
+	//XPathExtractor
 	limit
 )
 
@@ -18,6 +19,7 @@ var extractorMappings = map[string]ExtractorType{
 	"regex": RegexExtractor,
 	"kval":  KValExtractor,
 	"dsl":   DSLExtractor,
+	//"xpath": XPathExtractor,
 }
 
 // GetType returns the type of the matcher

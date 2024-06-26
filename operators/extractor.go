@@ -78,13 +78,13 @@ type Extractor struct {
 	// examples:
 	//   - value: >
 	//       []string{"/html/body/div/p[2]/a"}
-	//XPath []string `yaml:"xpath,omitempty" jsonschema:"title=html xpath expressions to extract data,description=XPath allows using xpath expressions to extract items from html response"`
+	XPath []string `json:"xpath,omitempty" yaml:"xpath,omitempty"`
 	// description: |
 	//   Attribute is an optional attribute to extract from response XPath.
 	//
 	// examples:
 	//   - value: "\"href\""
-	//Attribute string `json:"attribute,omitempty" jsonschema:"title=optional attribute to extract from xpath,description=Optional attribute to extract from response XPath"`
+	Attribute string `json:"attribute,omitempty" yaml:"attribute,omitempty" jsonschema:"title=optional attribute to extract from xpath,description=Optional attribute to extract from response XPath"`
 
 	// jsonCompiled is the compiled variant
 	//jsonCompiled []*gojq.Code
@@ -214,7 +214,15 @@ func (e *Extractor) ExtractKval(data map[string]interface{}) map[string]struct{}
 	return results
 }
 
-// ExtractHTML extracts items from text using XPath selectors
+//// ExtractXPath extracts items from text using XPath selectors
+//func (e *Extractor) ExtractXPath(corpus string) map[string]struct{} {
+//	if strings.HasPrefix(corpus, "<?xml") {
+//		return e.ExtractXML(corpus)
+//	}
+//	return e.ExtractHTML(corpus)
+//}
+//
+//// ExtractHTML extracts items from HTML using XPath selectors
 //func (e *Extractor) ExtractHTML(corpus string) map[string]struct{} {
 //	results := make(map[string]struct{})
 //
@@ -234,6 +242,36 @@ func (e *Extractor) ExtractKval(data map[string]interface{}) map[string]struct{}
 //				value = htmlquery.SelectAttr(node, e.Attribute)
 //			} else {
 //				value = htmlquery.InnerText(node)
+//			}
+//			if _, ok := results[value]; !ok {
+//				results[value] = struct{}{}
+//			}
+//		}
+//	}
+//	return results
+//}
+//
+//// ExtractXML extracts items from XML using XPath selectors
+//func (e *Extractor) ExtractXML(corpus string) map[string]struct{} {
+//	results := make(map[string]struct{})
+//
+//	doc, err := xmlquery.Parse(strings.NewReader(corpus))
+//	if err != nil {
+//		return results
+//	}
+//
+//	for _, k := range e.XPath {
+//		nodes, err := xmlquery.QueryAll(doc, k)
+//		if err != nil {
+//			continue
+//		}
+//		for _, node := range nodes {
+//			var value string
+//
+//			if e.Attribute != "" {
+//				value = node.SelectAttr(e.Attribute)
+//			} else {
+//				value = node.InnerText()
 //			}
 //			if _, ok := results[value]; !ok {
 //				results[value] = struct{}{}

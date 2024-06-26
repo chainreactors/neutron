@@ -10,8 +10,9 @@ type ExecuterOptions struct {
 	TemplateID string
 	// TemplateInfo contains information block of the template request
 	TemplateInfo map[string]interface{}
-
-	Options *Options
+	Variables    Variable
+	varsPayloads map[string]interface{}
+	Options      *Options
 }
 
 // Executer is an interface implemented any protocol based request executer.

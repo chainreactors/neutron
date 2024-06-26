@@ -13,7 +13,7 @@ import (
 var ExecuterOptions *protocols.ExecuterOptions
 
 func TestTemplate_Compile(t1 *testing.T) {
-	content, _ := os.ReadFile("tmp.yml")
+	content, _ := os.ReadFile("tmp.yaml")
 	t := &Template{}
 	err := yaml.Unmarshal(content, t)
 	if err != nil {
@@ -49,7 +49,7 @@ func TestTemplate_Execute(t1 *testing.T) {
 
 	println("load success")
 
-	res, err := t.Execute("http://192.168.88.128:8080", nil)
+	res, err := t.Execute("http://81.70.40.138:8000", nil)
 	if err == nil {
 		fmt.Println("ok", res)
 	} else {

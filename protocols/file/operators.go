@@ -37,6 +37,9 @@ func (request *Request) Extract(data map[string]interface{}, extractor *operator
 		return extractor.ExtractKval(data)
 	case operators.DSLExtractor:
 		return extractor.ExtractDSL(data)
+	//case operators.XPathExtractor: // 影响兼容性和文件体积
+	//	return extractor.ExtractXPath(itemStr)
+	default:
 	}
 	return nil
 }
