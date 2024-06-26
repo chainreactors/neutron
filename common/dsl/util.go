@@ -124,6 +124,10 @@ func RandSeq(base string, n int) string {
 	return string(b)
 }
 
+func RandStr(n int) string {
+	return RandSeq(letters+numbers, n)
+}
+
 func doSimpleTimeFormat(dateTimeFormatFragment [][]string, currentTime time.Time, dateTimeFormat string) (interface{}, error) {
 	for _, currentFragment := range dateTimeFormatFragment {
 		if len(currentFragment) < 2 {

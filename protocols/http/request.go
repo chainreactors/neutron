@@ -403,13 +403,14 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 }
 
 func (r *Request) executeRequest(input *protocols.ScanContext, request *generatedRequest, previousEvent map[string]interface{}, callback protocols.OutputEventCallback, reqcount int) error {
+	timeStart := time.Now()
 	resp, err := r.httpClient.Do(request.request)
 	common.NeutronLog.Debugf("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
 	if err != nil {
 		common.NeutronLog.Debugf("%s nuclei request failed, %s", request.request.URL, err.Error())
 		return err
 	}
-
+	duration := time.Since(timeStart)
 	matchedURL := input.Input
 	if request.request != nil {
 		matchedURL = request.request.URL.String()
@@ -421,7 +422,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 		}
 	}
 	finalEvent := make(map[string]interface{})
-	outputEvent := r.responseToDSLMap(request.request, resp, input.Input, matchedURL, request.dynamicValues)
+	outputEvent := r.responseToDSLMap(request.request, resp, input.Input, matchedURL, duration, request.dynamicValues)
 	for k, v := range previousEvent {
 		finalEvent[k] = v
 	}
@@ -451,39 +452,8 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 	return err
 }
 
-//func (r *Request) respToMap(resp *http.Response, req *http.Request) map[string]interface{} {
-//	data := make(map[string]interface{})
-//	data["host"] = req.Host
-//	data["request"] = req
-//	data["response"] = resp
-//	data["content_length"] = resp.ContentLength
-//	data["status_code"] = resp.StatusCode
-//	bodybytes, _ := ioutil.ReadAll(resp.Body)
-//	data["body"] = string(bodybytes)
-//	data["url"] = req.URL
-//
-//	for k, v := range resp.Header {
-//		for _, i := range v {
-//			data["all_headers"] = common.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", k, i)
-//		}
-//	}
-//
-//	for _, cookie := range resp.Cookies() {
-//		data[strings.ToLower(cookie.Name)] = cookie.Value
-//	}
-//	for k, v := range resp.Header {
-//		k = strings.ToLower(strings.Replace(strings.TrimSpace(k), "-", "_", -1))
-//		data[k] = strings.Join(v, " ")
-//	}
-//	resp.Body.Close()
-//	if r.StopAtFirstMatch {
-//		data["stop-at-first-match"] = true
-//	}
-//	return data
-//}
-
 // responseToDSLMap converts an HTTP response to a map for use in DSL matching
-func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host, matched string, extra map[string]interface{}) protocols.InternalEvent {
+func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host, matched string, duration time.Duration, extra map[string]interface{}) protocols.InternalEvent {
 	data := make(protocols.InternalEvent, 12+len(extra)+len(resp.Header)+len(resp.Cookies()))
 	for k, v := range extra {
 		data[k] = v
@@ -496,7 +466,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	data["type"] = r.Type().String()
 	data["matched"] = matched
 	data["status_code"] = resp.StatusCode
-
+	data["duration"] = duration.Seconds()
 	var respRaw bytes.Buffer
 	respRaw.WriteString(fmt.Sprintf("%s %s\r\n", resp.Proto, resp.Status))
 	for k, v := range resp.Header {
