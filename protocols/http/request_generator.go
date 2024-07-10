@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/protocols"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -234,17 +234,10 @@ func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values, 
 // fillRequest fills various headers in the request with values
 func (r *requestGenerator) fillRequest(req *http.Request, values map[string]interface{}) (*http.Request, error) {
 	// Set the header values requested
-	var err error
-	for i, value := range r.request.Path {
-		r.request.Path[i], err = common.Evaluate(value, values)
-		if err != nil {
-			return nil, common.EvalError
-		}
-	}
 	for header, value := range r.request.Headers {
 		value, err := common.Evaluate(value, values)
 		if err != nil {
-			return nil, common.EvalError
+			return nil, err
 		}
 		req.Header[header] = []string{value}
 		if header == "Host" {
@@ -253,24 +246,29 @@ func (r *requestGenerator) fillRequest(req *http.Request, values map[string]inte
 	}
 
 	// In case of multiple threads the underlying connection should remain open to allow reuse
-	//if r.request.Threads <= 0 && req.header.Get("Connection") == "" {
-	//	req.Close = true
-	//}
+	if r.request.Threads <= 0 && req.Header.Get("Connection") == "" {
+		req.Close = true
+	}
 
 	// Check if the user requested a request body
 	if r.request.Body != "" {
-		body, err := common.Evaluate(r.request.Body, values)
+		body := r.request.Body
+		body, err := common.Evaluate(body, values)
 		if err != nil {
-			return nil, common.EvalError
+			return nil, err
 		}
-		req.Body = ioutil.NopCloser(strings.NewReader(body))
+		req.Body = io.NopCloser(strings.NewReader(body))
 	}
+	//if !r.request.Unsafe {
+	//	setHeader(req, "User-Agent", common.GetRandom())
+	//}
 
-	// Only set these headers on non raw requests
-	if len(r.request.Raw) == 0 {
+	// Only set these headers on non-raw requests
+	if len(r.request.Raw) == 0 && !r.request.Unsafe {
 		setHeader(req, "Accept", "*/*")
 		setHeader(req, "Accept-Language", "en")
 	}
+
 	return req, nil
 }
 
