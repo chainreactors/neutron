@@ -192,3 +192,26 @@ func (insertionOrderedStringMap *InsertionOrderedStringMap) Set(key string, valu
 		insertionOrderedStringMap.keys = append(insertionOrderedStringMap.keys, key)
 	}
 }
+
+// HasPrefixI is case insensitive HasPrefix
+func HasPrefixI(s, prefix string) bool {
+	return strings.HasPrefix(strings.ToLower(s), strings.ToLower(prefix))
+}
+
+// TrimPrefixAny trims all prefixes from string in order
+func TrimPrefixAny(s string, prefixes ...string) string {
+	for _, prefix := range prefixes {
+		s = strings.TrimPrefix(s, prefix)
+	}
+	return s
+}
+
+// HasPrefixAny checks if the string starts with any specified prefix
+func HasPrefixAny(s string, prefixes ...string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(s, prefix) {
+			return true
+		}
+	}
+	return false
+}

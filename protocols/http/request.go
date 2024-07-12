@@ -42,7 +42,7 @@ type Request struct {
 	// MaxRedirects is the maximum number of redirects that should be followed.
 	MaxRedirects int `json:"max-redirects" yaml:"max-redirects"`
 	// PipelineConcurrentConnections is number of connections in pipelining
-	Threads int `json:"threads" yaml:"threads"`
+	//Threads int `json:"threads" yaml:"threads"`
 
 	// MaxSize is the maximum size of http response body to read in bytes.
 	MaxSize int `json:"max-size" yaml:"max-size"`

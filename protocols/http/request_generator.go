@@ -3,6 +3,7 @@ package http
 import (
 	"fmt"
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/common/dsl"
 	"github.com/chainreactors/neutron/protocols"
 	"io"
 	"net"
@@ -120,7 +121,7 @@ func (r *requestGenerator) Total() int {
 
 // Make creates a http request for the provided input.
 // It returns io.EOF as error when all the requests have been exhausted.
-func (r *requestGenerator) Make(baseURL, data string, payloads, dynamicValues map[string]interface{}) (*generatedRequest, error) {
+func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues map[string]interface{}) (*generatedRequest, error) {
 	// We get the next payload for the request.
 	var err error
 	allVars := common.MergeMaps(payloads, dynamicValues)
@@ -136,24 +137,25 @@ func (r *requestGenerator) Make(baseURL, data string, payloads, dynamicValues ma
 		return nil, err
 	}
 
-	data, parsed = baseURLWithTemplatePrefs(data, parsed)
+	reqdata, parsed = baseURLWithTemplatePrefs(reqdata, parsed)
 	isRawRequest := len(r.request.Raw) > 0
 
 	trailingSlash := false
-	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(data, "{{BaseURL}}/") {
+	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(reqdata, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
 	values := common.MergeMaps(allVars, generateVariables(parsed, trailingSlash))
 
-	data, err = common.Evaluate(data, values)
+	reqdata, err = common.Evaluate(reqdata, values)
 	if err != nil {
 		return nil, err
 	}
 
 	if isRawRequest {
-		return r.makeHTTPRequestFromRaw(parsed.String(), data, values, allVars)
+		return r.makeHTTPRequestFromRaw(parsed.String(), reqdata, values, allVars)
 	}
-	return r.makeHTTPRequestFromModel(data, values, allVars)
+
+	return r.makeHTTPRequestFromModel(reqdata, values, allVars)
 }
 
 // baseURLWithTemplatePrefs returns the url for BaseURL keeping
@@ -228,7 +230,19 @@ func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values, 
 	if err != nil {
 		return nil, err
 	}
-	return &generatedRequest{request: request, meta: values, dynamicValues: dynamicValues, original: r.request}, nil
+
+	generatedRequest := &generatedRequest{
+		request:       request,
+		meta:          values,
+		original:      r.request,
+		dynamicValues: dynamicValues,
+	}
+
+	if reqWithAnnotations, hasAnnotations := r.request.parseAnnotations(baseURL, req); hasAnnotations {
+		generatedRequest.request = reqWithAnnotations
+	}
+
+	return generatedRequest, nil
 }
 
 // fillRequest fills various headers in the request with values
@@ -246,9 +260,9 @@ func (r *requestGenerator) fillRequest(req *http.Request, values map[string]inte
 	}
 
 	// In case of multiple threads the underlying connection should remain open to allow reuse
-	if r.request.Threads <= 0 && req.Header.Get("Connection") == "" {
-		req.Close = true
-	}
+	//if r.request.Threads <= 0 && req.Header.Get("Connection") == "" {
+	//	req.Close = true
+	//}
 
 	// Check if the user requested a request body
 	if r.request.Body != "" {
@@ -264,10 +278,10 @@ func (r *requestGenerator) fillRequest(req *http.Request, values map[string]inte
 	//}
 
 	// Only set these headers on non-raw requests
-	if len(r.request.Raw) == 0 && !r.request.Unsafe {
-		setHeader(req, "Accept", "*/*")
-		setHeader(req, "Accept-Language", "en")
-	}
+	//if len(r.request.Raw) == 0 && !r.request.Unsafe {
+	//	setHeader(req, "Accept", "*/*")
+	//	setHeader(req, "Accept-Language", "en")
+	//}
 
 	return req, nil
 }
@@ -326,5 +340,7 @@ func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface
 		"Path":     directory,
 		"File":     base,
 		"Scheme":   parsed.Scheme,
+		"randstr":  dsl.RandStr(10),
+		"num":      dsl.RandNum(4),
 	}
 }

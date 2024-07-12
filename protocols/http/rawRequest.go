@@ -3,6 +3,7 @@ package http
 import (
 	"bufio"
 	"fmt"
+	"github.com/chainreactors/neutron/common"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -33,11 +34,15 @@ func parseRaw(request, baseURL string, unsafe bool) (*rawRequest, error) {
 		rawRequest.UnsafeRawBytes = []byte(request)
 	}
 	reader := bufio.NewReader(strings.NewReader(request))
+read_line:
 	s, err := reader.ReadString('\n')
 	if err != nil {
-		return nil, fmt.Errorf("could not read request: %s", err)
+		return nil, fmt.Errorf("could not read request: %w", err)
 	}
-
+	// ignore all annotations
+	if common.HasPrefixAny(s, "@") {
+		goto read_line
+	}
 	parts := strings.Split(s, " ")
 	if len(parts) < 3 && !unsafe {
 		return nil, fmt.Errorf("malformed request supplied")

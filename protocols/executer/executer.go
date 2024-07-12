@@ -2,7 +2,6 @@ package executer
 
 import (
 	"github.com/chainreactors/neutron/common"
-	"github.com/chainreactors/neutron/common/dsl"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 )
@@ -55,7 +54,6 @@ func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, err
 
 	previous := make(map[string]interface{})
 	dynamicValues := common.MergeMaps(make(map[string]interface{}), input.Payloads)
-	previous["randstr"] = dsl.RandStr(10)
 	for _, req := range e.requests {
 		err := req.ExecuteWithResults(input, dynamicValues, previous, func(event *protocols.InternalWrappedEvent) {
 			if event.OperatorsResult != nil {
