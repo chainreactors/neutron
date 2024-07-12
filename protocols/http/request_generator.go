@@ -341,6 +341,6 @@ func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface
 		"File":     base,
 		"Scheme":   parsed.Scheme,
 		"randstr":  dsl.RandStr(10),
-		"num":      dsl.RandNum(4),
+		"randnum":  dsl.RandNum(4),
 	}
 }
