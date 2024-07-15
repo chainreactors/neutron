@@ -2,6 +2,7 @@ package http
 
 import (
 	"crypto/tls"
+	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -79,5 +80,19 @@ func makeCheckRedirectFunc(followRedirects bool, maxRedirects int) checkRedirect
 			return http.ErrUseLastResponse
 		}
 		return nil
+	}
+}
+
+type nopCloser struct{}
+
+func (nopCloser) Close() error { return nil }
+
+func NopCloser(r io.Reader) io.ReadCloser {
+	return struct {
+		io.Reader
+		io.Closer
+	}{
+		Reader: r,
+		Closer: nopCloser{},
 	}
 }

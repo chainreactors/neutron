@@ -2,7 +2,6 @@ package http
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -181,11 +180,11 @@ func baseURLWithTemplatePrefs(data string, parsed *url.URL) (string, *url.URL) {
 // MakeHTTPRequestFromModel creates a *http.Request from a request template
 func (r *requestGenerator) makeHTTPRequestFromModel(data string, values, dynamicValues map[string]interface{}) (*generatedRequest, error) {
 	// Build a request on the specified URL
-	req, err := http.NewRequestWithContext(r.request.Context(), r.request.Method, data, nil)
+	req, err := http.NewRequest(r.request.Method, data, nil)
 	if err != nil {
 		return nil, err
 	}
-
+	req = req.WithContext(r.request.Context())
 	request, err := r.fillRequest(req, values)
 	if err != nil {
 		return nil, err
@@ -273,7 +272,7 @@ func (r *requestGenerator) fillRequest(req *http.Request, values map[string]inte
 		if err != nil {
 			return nil, err
 		}
-		req.Body = io.NopCloser(strings.NewReader(body))
+		req.Body = NopCloser(strings.NewReader(body))
 	}
 	//if !r.request.Unsafe {
 	//	setHeader(req, "User-Agent", common.GetRandom())
