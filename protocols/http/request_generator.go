@@ -2,6 +2,7 @@ package http
 
 import (
 	"fmt"
+	"github.com/chainreactors/neutron/common/dsl"
 	"net"
 	"net/http"
 	"net/url"
@@ -342,6 +343,8 @@ func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface
 		"Path":     directory,
 		"File":     base,
 		"Scheme":   parsed.Scheme,
+		"randstr":  dsl.RandStr(8),
+		"randnum":  dsl.RandNum(4),
 	}
 
 	return common.MergeMaps(httpVariables, common.GenerateDNVariables(domain))
