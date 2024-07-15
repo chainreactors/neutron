@@ -2,15 +2,17 @@ package http
 
 import (
 	"fmt"
-	"github.com/chainreactors/neutron/common"
-	"github.com/chainreactors/neutron/common/dsl"
-	"github.com/chainreactors/neutron/protocols"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/common/dsl"
+	"github.com/chainreactors/neutron/protocols"
+	"golang.org/x/net/publicsuffix"
 )
 
 type requestGenerator struct {
@@ -302,6 +304,24 @@ func setHeader(req *http.Request, name, value string) {
 	}
 }
 
+func getDomainRDNandRDN(domain string) string {
+	if strings.HasPrefix(domain, ".") || strings.HasSuffix(domain, ".") || strings.Contains(domain, "..") {
+		return domain
+	}
+	suffix, _ := publicsuffix.PublicSuffix(domain)
+	if len(domain) <= len(suffix) {
+		return domain
+	}
+	i := len(domain) - len(suffix) - 1
+	if domain[i] != '.' {
+		return domain
+	}
+	if strings.Contains(domain, ":") {
+		domain = strings.Split(domain, ":")[0]
+	}
+	return domain[1+strings.LastIndex(domain[:i], "."):]
+}
+
 // generateVariables will create default variables after parsing a url
 func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface{} {
 	domain := parsed.Host
@@ -340,6 +360,7 @@ func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface
 		"Path":     directory,
 		"File":     base,
 		"Scheme":   parsed.Scheme,
+		"RDN":      getDomainRDNandRDN(parsed.Host),
 		"randstr":  dsl.RandStr(10),
 		"randnum":  dsl.RandNum(4),
 	}
