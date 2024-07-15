@@ -2,10 +2,12 @@ package dsl
 
 import (
 	"bytes"
+	rand2 "crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
+	"io"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -126,6 +128,14 @@ func RandSeq(base string, n int) string {
 
 func RandStr(n int) string {
 	return RandSeq(letters+numbers, n)
+}
+
+func RandBytes(n int) []byte {
+	b := make([]byte, n)
+	if _, err := io.ReadFull(rand2.Reader, b); err != nil {
+		panic(err) // 根据需要处理错误
+	}
+	return b
 }
 
 func RandNum(n int) string {

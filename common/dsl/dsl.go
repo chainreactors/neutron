@@ -32,12 +32,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-version"
-	uuid "github.com/satori/go.uuid"
-
 	"github.com/Knetic/govaluate"
 	"github.com/asaskevich/govalidator"
 	"github.com/chainreactors/neutron/common/dsl/deserialization"
+	"github.com/hashicorp/go-version"
 	"github.com/spaolacci/murmur3"
 )
 
@@ -994,7 +992,7 @@ func init() {
 		}
 		if mode == "cbc" {
 			java_gadget_shiro = pkcs5padding(java_gadget_shiro, block.BlockSize(), 0)
-			iv := uuid.NewV4().Bytes()                     //指定初始向量vi,长度和block的块尺寸一致
+			iv := RandBytes(16)                            //指定初始向量vi,长度和block的块尺寸一致
 			blockMode := cipher.NewCBCEncrypter(block, iv) //指定CBC分组模式，返回一个BlockMode接口对象
 			cipherText := make([]byte, len(java_gadget_shiro))
 			blockMode.CryptBlocks(cipherText, java_gadget_shiro) //加密数据
