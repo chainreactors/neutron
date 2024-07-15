@@ -241,7 +241,7 @@ func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values, 
 	if reqWithAnnotations, hasAnnotations := r.request.parseAnnotations(data, req); hasAnnotations {
 		generatedRequest.request = reqWithAnnotations
 	} else {
-		generatedRequest.request = request.Clone(r.request.Context())
+		generatedRequest.request = request.WithContext(r.request.Context())
 	}
 
 	return generatedRequest, nil
