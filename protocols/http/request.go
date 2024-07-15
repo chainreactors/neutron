@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/chainreactors/neutron/common"
@@ -503,6 +504,11 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 
 func (r *Request) GetID() string {
 	return r.ID
+}
+
+func (r *Request) Context() context.Context {
+	ctx, _ := context.WithTimeout(context.Background(), time.Duration(r.options.Options.Timeout)*time.Second)
+	return ctx
 }
 
 var (

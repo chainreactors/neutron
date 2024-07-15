@@ -22,7 +22,9 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 	var err error
 	if options == nil {
 		options = &protocols.ExecuterOptions{
-			Options: &protocols.Options{},
+			Options: &protocols.Options{
+				Timeout: 5,
+			},
 		}
 	}
 

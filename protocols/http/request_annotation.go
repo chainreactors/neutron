@@ -78,23 +78,6 @@ func (r *Request) parseAnnotations(rawRequest string, request *http.Request) (*h
 	//}
 
 	// @timeout:duration
-	//if r.connConfiguration.NoTimeout {
-	//	modified = true
-	//
-	//	if duration := reTimeoutAnnotation.FindStringSubmatch(rawRequest); len(duration) > 0 {
-	//		value := strings.TrimSpace(duration[1])
-	//		if parsed, err := time.ParseDuration(value); err == nil {
-	//			//nolint:govet // cancelled automatically by withTimeout
-	//			ctx, _ := context.WithTimeout(context.Background(), parsed)
-	//			request = request.Clone(ctx)
-	//		}
-	//	} else {
-	//		//nolint:govet // cancelled automatically by withTimeout
-	//		ctx, _ := context.WithTimeout(context.Background(), time.Duration(r.options.Options.Timeout)*time.Second)
-	//		request = request.Clone(ctx)
-	//	}
-	//}
-
 	if duration := reTimeoutAnnotation.FindStringSubmatch(rawRequest); len(duration) > 0 {
 		modified = true
 
@@ -103,9 +86,6 @@ func (r *Request) parseAnnotations(rawRequest string, request *http.Request) (*h
 			ctx, _ := context.WithTimeout(context.Background(), parsed)
 			request = request.Clone(ctx)
 		}
-	} else {
-		ctx, _ := context.WithTimeout(context.Background(), time.Duration(r.options.Options.Timeout)*time.Second)
-		request = request.Clone(ctx)
 	}
 	return request, modified
 }

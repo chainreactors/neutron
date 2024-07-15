@@ -183,7 +183,7 @@ func baseURLWithTemplatePrefs(data string, parsed *url.URL) (string, *url.URL) {
 // MakeHTTPRequestFromModel creates a *http.Request from a request template
 func (r *requestGenerator) makeHTTPRequestFromModel(data string, values, dynamicValues map[string]interface{}) (*generatedRequest, error) {
 	// Build a request on the specified URL
-	req, err := http.NewRequest(r.request.Method, data, nil)
+	req, err := http.NewRequestWithContext(r.request.Context(), r.request.Method, data, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +242,8 @@ func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values, 
 
 	if reqWithAnnotations, hasAnnotations := r.request.parseAnnotations(data, req); hasAnnotations {
 		generatedRequest.request = reqWithAnnotations
+	} else {
+		generatedRequest.request = request.Clone(r.request.Context())
 	}
 
 	return generatedRequest, nil

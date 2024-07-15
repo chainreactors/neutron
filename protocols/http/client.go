@@ -34,37 +34,16 @@ var DefaultTransport = &http.Transport{
 		InsecureSkipVerify: true,
 	},
 	DialContext: (&net.Dialer{
-		Timeout:   time.Duration(DefaultOption.Timeout) * time.Second,
-		KeepAlive: time.Duration(DefaultOption.Timeout) * time.Second,
+		KeepAlive: 3 * time.Second,
 	}).DialContext,
 	MaxIdleConnsPerHost: 1,
-	IdleConnTimeout:     time.Duration(DefaultOption.Timeout) * time.Second,
+	IdleConnTimeout:     3 * time.Second,
 	DisableKeepAlives:   false,
 	Proxy:               DefaultOption.Proxy,
 }
 
 func createClient(opt *Configuration) *http.Client {
-	var tr *http.Transport
-	if opt.Timeout == DefaultOption.Timeout {
-		tr = DefaultTransport
-	} else {
-		tr = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion:         tls.VersionTLS10,
-				Renegotiation:      tls.RenegotiateOnceAsClient,
-				InsecureSkipVerify: true,
-			},
-			DialContext: (&net.Dialer{
-				Timeout:   time.Duration(opt.Timeout) * time.Second,
-				KeepAlive: time.Duration(opt.Timeout) * time.Second,
-				//DualStack: true,
-			}).DialContext,
-			MaxIdleConnsPerHost: 1,
-			IdleConnTimeout:     time.Duration(opt.Timeout) * time.Second,
-			DisableKeepAlives:   false,
-			Proxy:               opt.Proxy,
-		}
-	}
+	var tr *http.Transport = DefaultTransport
 
 	var jar *cookiejar.Jar
 	if opt.CookieReuse {
@@ -72,8 +51,7 @@ func createClient(opt *Configuration) *http.Client {
 	}
 	client := &http.Client{
 		Transport:     tr,
-		Timeout:       time.Duration(opt.Timeout) * time.Second,
-		CheckRedirect: makeCheckRedirectFunc(opt.FollowRedirects, 3),
+		CheckRedirect: makeCheckRedirectFunc(opt.FollowRedirects, opt.MaxRedirects),
 	}
 	if jar != nil {
 		client.Jar = jar
