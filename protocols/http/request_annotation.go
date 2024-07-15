@@ -97,6 +97,7 @@ func (r *Request) parseAnnotations(rawRequest string, request *http.Request) (*h
 
 	if duration := reTimeoutAnnotation.FindStringSubmatch(rawRequest); len(duration) > 0 {
 		modified = true
+
 		value := strings.TrimSpace(duration[1])
 		if parsed, err := time.ParseDuration(value); err == nil {
 			ctx, _ := context.WithTimeout(context.Background(), parsed)

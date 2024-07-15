@@ -240,7 +240,7 @@ func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values, 
 		dynamicValues: dynamicValues,
 	}
 
-	if reqWithAnnotations, hasAnnotations := r.request.parseAnnotations(baseURL, req); hasAnnotations {
+	if reqWithAnnotations, hasAnnotations := r.request.parseAnnotations(data, req); hasAnnotations {
 		generatedRequest.request = reqWithAnnotations
 	}
 

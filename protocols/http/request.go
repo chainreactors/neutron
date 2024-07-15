@@ -249,7 +249,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 
 	connectionConfiguration := &Configuration{
 		//Threads:         r.Threads,
-		Timeout:         DefaultOption.Timeout,
+		Timeout:         options.Options.Timeout,
 		MaxRedirects:    r.MaxRedirects,
 		FollowRedirects: r.Redirects,
 		CookieReuse:     r.CookieReuse,
