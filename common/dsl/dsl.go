@@ -993,7 +993,7 @@ func init() {
 			return "", nil
 		}
 		if mode == "cbc" {
-			java_gadget_shiro = Padding(java_gadget_shiro, block.BlockSize())
+			java_gadget_shiro = pkcs5padding(java_gadget_shiro, block.BlockSize(), 0)
 			iv := uuid.NewV4().Bytes()                     //指定初始向量vi,长度和block的块尺寸一致
 			blockMode := cipher.NewCBCEncrypter(block, iv) //指定CBC分组模式，返回一个BlockMode接口对象
 			cipherText := make([]byte, len(java_gadget_shiro))

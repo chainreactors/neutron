@@ -290,12 +290,3 @@ func Reverse(s string) string {
 	}
 	return string(rune)
 }
-
-func Padding(plainText []byte, blockSize int) []byte {
-	//计算要填充的长度
-	n := (blockSize - len(plainText)%blockSize)
-	//对原来的明文填充n个n
-	temp := bytes.Repeat([]byte{byte(n)}, n)
-	plainText = append(plainText, temp...)
-	return plainText
-}
