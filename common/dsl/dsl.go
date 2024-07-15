@@ -18,9 +18,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/hashicorp/go-version"
 	"hash"
 	"html"
+	"io"
 	"io/ioutil"
 	"math"
 	rand2 "math/rand"
@@ -31,6 +31,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/go-version"
+	uuid "github.com/satori/go.uuid"
 
 	"github.com/Knetic/govaluate"
 	"github.com/asaskevich/govalidator"
@@ -53,6 +56,9 @@ var (
 
 	DefaultCacheSize = 250
 	//resultCache      gcache.Cache[string, interface{}] = gcache.New[string, interface{}](DefaultCacheSize).Build()
+
+	// For shiro check
+	java_gadget_shiro, _ = base64.StdEncoding.DecodeString("rO0ABXNyADJvcmcuYXBhY2hlLnNoaXJvLnN1YmplY3QuU2ltcGxlUHJpbmNpcGFsQ29sbGVjdGlvbqh/WCXGowhKAwABTAAPcmVhbG1QcmluY2lwYWxzdAAPTGphdmEvdXRpbC9NYXA7eHBwdwEAeA==")
 )
 
 var PrintDebugCallback func(args ...interface{}) error
@@ -974,6 +980,35 @@ func init() {
 		}
 		data := gcm.Seal(nonce, nonce, []byte(value), nil)
 		return data, nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("generate_shiro_gadget", 2, false, func(args ...interface{}) (interface{}, error) {
+		shiro_key := args[0].(string)
+		mode := args[1].(string)
+		key, err := base64.StdEncoding.DecodeString(shiro_key)
+		if err != nil {
+			return "", nil
+		}
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			return "", nil
+		}
+		if mode == "cbc" {
+			java_gadget_shiro = Padding(java_gadget_shiro, block.BlockSize())
+			iv := uuid.NewV4().Bytes()                     //指定初始向量vi,长度和block的块尺寸一致
+			blockMode := cipher.NewCBCEncrypter(block, iv) //指定CBC分组模式，返回一个BlockMode接口对象
+			cipherText := make([]byte, len(java_gadget_shiro))
+			blockMode.CryptBlocks(cipherText, java_gadget_shiro) //加密数据
+			return base64.StdEncoding.EncodeToString(append(iv[:], cipherText[:]...)), nil
+		} else {
+			nonce := make([]byte, 16)
+			_, err = io.ReadFull(rand.Reader, nonce)
+			if err != nil {
+				return "", nil
+			}
+			aesgcm, _ := cipher.NewGCMWithNonceSize(block, 16)
+			ciphertext := aesgcm.Seal(nil, nonce, java_gadget_shiro, nil)
+			return base64.StdEncoding.EncodeToString(append(nonce, ciphertext...)), nil
+		}
 	}))
 	//MustAddFunction(NewWithSingleSignature("generate_jwt",
 	//	"(jsonString, algorithm, optionalSignature string, optionalMaxAgeUnix interface{}) string",
