@@ -7,9 +7,9 @@ import (
 
 type ExecuterOptions struct {
 	// TemplateID is the ID of the template for the request
-	TemplateID string
+	//TemplateID string
 	// TemplateInfo contains information block of the template request
-	TemplateInfo map[string]interface{}
+	//TemplateInfo map[string]interface{}
 	Variables    Variable
 	varsPayloads map[string]interface{}
 	Options      *Options
