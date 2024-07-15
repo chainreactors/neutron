@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"github.com/chainreactors/logs"
+	"github.com/weppos/publicsuffix-go/publicsuffix"
 	"os"
 	"reflect"
 	"strconv"
@@ -214,4 +215,20 @@ func HasPrefixAny(s string, prefixes ...string) bool {
 		}
 	}
 	return false
+}
+
+func GenerateDNVariables(domain string) map[string]interface{} {
+	parsed, err := publicsuffix.Parse(strings.TrimSuffix(domain, "."))
+	if err != nil {
+		return map[string]interface{}{"FQDN": domain}
+	}
+
+	domainName := strings.Join([]string{parsed.SLD, parsed.TLD}, ".")
+	return map[string]interface{}{
+		"FQDN": domain,
+		"RDN":  domainName,
+		"DN":   parsed.SLD,
+		"TLD":  parsed.TLD,
+		"SD":   parsed.TRD,
+	}
 }
