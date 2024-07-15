@@ -1,3 +1,6 @@
+//go:build json
+// +build json
+
 package protocols
 
 import (
@@ -5,6 +8,10 @@ import (
 )
 
 type Variable map[string]interface{}
+
+func (variables Variable) Len() int {
+	return len(variables)
+}
 
 // Evaluate returns a finished map of variables based on set values
 func (variables *Variable) Evaluate(values map[string]interface{}) map[string]interface{} {

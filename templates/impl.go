@@ -26,7 +26,7 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 		}
 	}
 
-	if len(t.Variables) > 0 {
+	if t.Variables.Len() > 0 {
 		options.Variables = t.Variables
 	}
 

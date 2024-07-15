@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
-	github.com/chainreactors/logs v0.0.0-20231027080134-7a11bb413460
+	github.com/chainreactors/logs v0.0.0-20240207121836-c946f072f81f
 	github.com/h2non/filetype v1.1.3
 	github.com/hashicorp/go-version v1.6.0
 	github.com/mholt/archiver v3.1.1+incompatible
