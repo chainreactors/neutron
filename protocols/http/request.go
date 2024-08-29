@@ -79,28 +79,6 @@ func (r *Request) Type() protocols.ProtocolType {
 	return protocols.HTTPProtocol
 }
 
-// NeedsRequestCondition determines if request condition should be enabled
-func (request *Request) NeedsRequestCondition() bool {
-	for _, matcher := range request.Matchers {
-		if checkRequestConditionExpressions(matcher.DSL...) {
-			return true
-		}
-		if checkRequestConditionExpressions(matcher.Part) {
-			return true
-		}
-	}
-	for _, extractor := range request.Extractors {
-		if checkRequestConditionExpressions(extractor.DSL...) {
-			return true
-		}
-		if checkRequestConditionExpressions(extractor.Part) {
-			return true
-		}
-	}
-
-	return false
-}
-
 // Match matches a generic data response again a given matcher
 func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []string) {
 	item, ok := r.getMatchPart(matcher.Part, data)
@@ -432,7 +410,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 	}
 
 	// Add to history the current request number metadata if asked by the user.
-	if r.NeedsRequestCondition() {
+	if r.ReqCondition {
 		for k, v := range outputEvent {
 			key := fmt.Sprintf("%s_%d", k, reqcount)
 			previousEvent[key] = v
