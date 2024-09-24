@@ -7,3 +7,24 @@ Differences from the original Nuclei 2.7: https://chainreactors.github.io/wiki/l
 Neutron POC repo: https://github.com/chainreactors/templates/tree/master/neutron
 
 update log: https://chainreactors.github.io/wiki/libs/neutron/update/
+
+
+### CMD
+
+neutron 提供了两个简单的测试工具, 帮助用户测试poc
+
+### validate
+
+指定poc路径, 加载并预编译指定路径下的所有poc
+
+```bash
+go run ./cmd/validate <path_or_file>
+```
+
+### shot
+
+指定poc路径和url, 对单个url
+
+```bash
+go run ./cmd/shot [-proxy <proxy_address>] <path_or_file> <target_url> 
+```
