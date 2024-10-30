@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"github.com/chainreactors/logs"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/weppos/publicsuffix-go/publicsuffix"
 	"os"
 	"reflect"
@@ -11,6 +12,18 @@ import (
 )
 
 var NeutronLog = logs.Log
+
+func Debug(format string, s ...interface{}) {
+	if logs.Log.Level >= logs.Debug {
+		NeutronLog.Debugf(format, s...)
+	}
+}
+
+func Dump(data interface{}) {
+	if logs.Log.Level >= logs.Debug {
+		NeutronLog.Debug(spew.Sdump(data))
+	}
+}
 
 func IsExist(filename string) bool {
 	var exist = true

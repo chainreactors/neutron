@@ -356,7 +356,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 			break
 		}
 		if len(payloads) > 0 {
-			common.NeutronLog.Debugf("payloads: %s", common.MapToString(payloads))
+			common.Debug("payloads: %s", common.MapToString(payloads))
 		}
 		var gotErr error
 		var skip bool
@@ -384,9 +384,10 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 func (r *Request) executeRequest(input *protocols.ScanContext, request *generatedRequest, previousEvent map[string]interface{}, callback protocols.OutputEventCallback, reqcount int) error {
 	timeStart := time.Now()
 	resp, err := r.httpClient.Do(request.request)
-	common.NeutronLog.Debugf("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
+	common.Debug("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
+	common.Dump(request.request)
 	if err != nil {
-		common.NeutronLog.Debugf("%s nuclei request failed, %s", request.request.URL, err.Error())
+		common.Debug("%s nuclei request failed, %s", request.request.URL, err.Error())
 		return err
 	}
 	duration := time.Since(timeStart)
@@ -410,14 +411,16 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 	}
 
 	// Add to history the current request number metadata if asked by the user.
-	if r.ReqCondition {
+	if r.NeedsRequestCondition() {
 		for k, v := range outputEvent {
 			key := fmt.Sprintf("%s_%d", k, reqcount)
 			previousEvent[key] = v
 			finalEvent[key] = v
 		}
 	}
-	event := &protocols.InternalWrappedEvent{InternalEvent: outputEvent}
+	common.Dump(finalEvent)
+
+	event := &protocols.InternalWrappedEvent{InternalEvent: finalEvent}
 	if r.CompiledOperators != nil {
 		var ok bool
 		event.OperatorsResult, ok = r.CompiledOperators.Execute(finalEvent, r.Match, r.Extract)
@@ -493,7 +496,32 @@ var (
 	urlWithPortRegex = regexp.MustCompile(`{{BaseURL}}:(\d+)`)
 )
 
-var reRequestCondition = regexp.MustCompile(`(?m)_\d+`)
+var (
+	// Determines if request condition are needed by detecting the pattern _xxx
+	reRequestCondition = regexp.MustCompile(`(?m)_\d+`)
+)
+
+// NeedsRequestCondition determines if request condition should be enabled
+func (request *Request) NeedsRequestCondition() bool {
+	for _, matcher := range request.Matchers {
+		if checkRequestConditionExpressions(matcher.DSL...) {
+			return true
+		}
+		if checkRequestConditionExpressions(matcher.Part) {
+			return true
+		}
+	}
+	for _, extractor := range request.Extractors {
+		if checkRequestConditionExpressions(extractor.DSL...) {
+			return true
+		}
+		if checkRequestConditionExpressions(extractor.Part) {
+			return true
+		}
+	}
+
+	return false
+}
 
 func checkRequestConditionExpressions(expressions ...string) bool {
 	for _, expression := range expressions {

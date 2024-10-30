@@ -59,7 +59,7 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 
 func (t *Template) Execute(input string, payload map[string]interface{}) (*operators.Result, error) {
 	if t.Executor.Options().Options.Opsec && t.Opsec {
-		common.NeutronLog.Debugf("(opsec!!!) skip template %s", t.Id)
+		common.Debug("(opsec!!!) skip template %s", t.Id)
 		return nil, protocols.OpsecError
 	}
 	return t.Executor.Execute(protocols.NewScanContext(input, payload))
