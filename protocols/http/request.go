@@ -319,6 +319,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 				if err == io.EOF {
 					return true, nil
 				}
+
 				return true, err
 			}
 			if generatedHttpRequest.request.Header.Get("User-Agent") == "" {

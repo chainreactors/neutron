@@ -92,7 +92,7 @@ func main() {
 		if err == nil {
 			fmt.Println("execute finish:", res)
 		} else {
-			fmt.Println("Error:", res)
+			fmt.Println("Error: ", err.Error())
 		}
 		fmt.Println("Execution time:", time.Since(start))
 	}

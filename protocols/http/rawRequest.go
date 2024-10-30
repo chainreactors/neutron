@@ -135,14 +135,14 @@ read_line:
 	return rawRequest, nil
 }
 
-func (raw rawRequest) makeRequest() *http.Request {
+func (raw rawRequest) makeRequest() (*http.Request, error) {
 	//var body io.ReadCloser
 	//
 	//body = ioutil.NopCloser(strings.NewReader(raw.Data))
 
 	req, err := http.NewRequest(raw.Method, raw.FullURL, strings.NewReader(raw.Data))
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	for key, value := range raw.Headers {
 		if key == "" {
@@ -153,7 +153,7 @@ func (raw rawRequest) makeRequest() *http.Request {
 			req.Host = value
 		}
 	}
-	return req
+	return req, nil
 
 }
 

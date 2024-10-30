@@ -2,6 +2,7 @@ package templates
 
 import (
 	"errors"
+	"fmt"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
@@ -34,6 +35,9 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 
 	if len(t.RequestsHTTP) > 0 {
 		for _, req := range t.RequestsHTTP {
+			if req.Unsafe {
+				return fmt.Errorf("not impl unsafe request %s", req.Name)
+			}
 			requests = append(requests, req)
 		}
 		t.Executor = executer.NewExecuter(requests, options)

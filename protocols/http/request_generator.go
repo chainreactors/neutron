@@ -204,7 +204,10 @@ func (r *requestGenerator) makeHTTPRequestFromRaw(baseURL, data string, values, 
 
 	// Unsafe option uses rawhttp library
 	if r.request.Unsafe {
-		request = rawRequestData.makeRequest()
+		request, err = rawRequestData.makeRequest()
+		if err != nil {
+			return nil, err
+		}
 		unsafeReq := &generatedRequest{request: request, meta: values, dynamicValues: dynamicValues, original: r.request}
 		return unsafeReq, nil
 	}
