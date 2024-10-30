@@ -979,6 +979,7 @@ func init() {
 		data := gcm.Seal(nonce, nonce, []byte(value), nil)
 		return data, nil
 	}))
+
 	MustAddFunction(NewWithPositionalArgs("generate_shiro_gadget", 2, false, func(args ...interface{}) (interface{}, error) {
 		shiro_key := args[0].(string)
 		mode := args[1].(string)
@@ -1008,6 +1009,39 @@ func init() {
 			return base64.StdEncoding.EncodeToString(append(nonce, ciphertext...)), nil
 		}
 	}))
+
+	MustAddFunction(NewWithSingleSignature("random_str",
+		"(length int) string",
+		false,
+		func(args ...interface{}) (interface{}, error) {
+			if len(args) != 1 {
+				return nil, ErrInvalidDslFunction
+			}
+			length, ok := args[0].(float64)
+			if !ok {
+				return nil, ErrInvalidDslFunction
+			}
+
+			result := RandStr(int(length))
+			return result, nil
+		}))
+
+	MustAddFunction(NewWithSingleSignature("random_int",
+		"(length int) string",
+		false,
+		func(args ...interface{}) (interface{}, error) {
+			if len(args) != 1 {
+				return nil, ErrInvalidDslFunction
+			}
+			length, ok := args[0].(int)
+			if !ok {
+				return nil, ErrInvalidDslFunction
+			}
+
+			result := RandNum(length)
+			return result, nil
+		}))
+
 	//MustAddFunction(NewWithSingleSignature("generate_jwt",
 	//	"(jsonString, algorithm, optionalSignature string, optionalMaxAgeUnix interface{}) string",
 	//	false,
