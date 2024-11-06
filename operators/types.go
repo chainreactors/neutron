@@ -9,8 +9,10 @@ const (
 	RegexExtractor ExtractorType = iota + 1
 	// name:kval
 	KValExtractor
-	DSLExtractor
 	//XPathExtractor
+	JSONExtractor
+	DSLExtractor
+
 	limit
 )
 
@@ -20,6 +22,7 @@ var extractorMappings = map[string]ExtractorType{
 	"kval":  KValExtractor,
 	"dsl":   DSLExtractor,
 	//"xpath": XPathExtractor,
+	//"json": JSONExtractor,
 }
 
 // GetType returns the type of the matcher

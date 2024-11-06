@@ -104,6 +104,21 @@ func IndexAt(s, sep string, n int) int {
 	return idx
 }
 
+func JSONScalarToString(input interface{}) (string, error) {
+	switch tt := input.(type) {
+	case string:
+		return ToString(tt), nil
+	case float64:
+		return ToString(tt), nil
+	case nil:
+		return ToString(tt), nil
+	case bool:
+		return ToString(tt), nil
+	default:
+		return "", fmt.Errorf("cannot convert type to string: %v", tt)
+	}
+}
+
 func ToString(data interface{}) string {
 	switch s := data.(type) {
 	case nil:

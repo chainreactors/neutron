@@ -127,6 +127,9 @@ func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extr
 		return extractor.ExtractDSL(data)
 		//case operators.XPathExtractor:
 		//	return extractor.ExtractXPath(item)
+		//case operators.JSONExtractor:
+		//	return extractor.ExtractJSON(item)
+
 	}
 	return nil
 }

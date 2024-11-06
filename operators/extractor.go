@@ -71,7 +71,10 @@ type Extractor struct {
 	//       []string{".[] | .id"}
 	//   - value: >
 	//       []string{".batters | .batter | .[] | .id"}
-	//JSON []string `yaml:"json,omitempty" jsonschema:"title=json jq expressions to extract data,description=JSON JQ expressions to evaluate from response part"`
+	JSON []string `yaml:"json,omitempty" jsonschema:"title=json jq expressions to extract data,description=JSON JQ expressions to evaluate from response part"`
+	// jsonCompiled is the compiled variant
+	//jsonCompiled []*gojq.Code
+
 	// description: |
 	//   XPath allows using xpath expressions to extract items from html response
 	//
@@ -86,8 +89,6 @@ type Extractor struct {
 	//   - value: "\"href\""
 	Attribute string `json:"attribute,omitempty" yaml:"attribute,omitempty" jsonschema:"title=optional attribute to extract from xpath,description=Optional attribute to extract from response XPath"`
 
-	// jsonCompiled is the compiled variant
-	//jsonCompiled []*gojq.Code
 	DSL         []string `yaml:"dsl,omitempty" json:"dsl,omitempty" `
 	dslCompiled []*govaluate.EvaluableExpression
 	// description: |
@@ -302,12 +303,12 @@ func (e *Extractor) ExtractKval(data map[string]interface{}) map[string]struct{}
 //				break
 //			}
 //			var result string
-//			if res, err := types.JSONScalarToString(v); err == nil {
+//			if res, err := common.JSONScalarToString(v); err == nil {
 //				result = res
 //			} else if res, err := json.Marshal(v); err == nil {
 //				result = string(res)
 //			} else {
-//				result = types.ToString(v)
+//				result = common.ToString(v)
 //			}
 //			if _, ok := results[result]; !ok {
 //				results[result] = struct{}{}
