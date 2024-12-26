@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/Knetic/govaluate"
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/logs"
 	"regexp"
 	"strings"
 )
@@ -195,7 +196,7 @@ func (matcher *Matcher) MatchWords(corpus string, data map[string]interface{}) (
 		var err error
 		word, err = common.Evaluate(word, data)
 		if err != nil {
-			common.NeutronLog.Warnf("Error while evaluating word matcher: %q", word)
+			logs.Warnf("Error while evaluating word matcher: %q", word)
 			if matcher.condition == ANDCondition {
 				return false, []string{}
 			}
@@ -303,12 +304,12 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 	for i, expression := range m.dslCompiled {
 		resolvedExpression, err := common.Evaluate(expression.String(), data)
 		if err != nil {
-			common.NeutronLog.Errorf(m.Name, err)
+			logs.Errorf(m.Name, err)
 			return false
 		}
 		expression, err = govaluate.NewEvaluableExpressionWithFunctions(resolvedExpression, common.HelperFunctions)
 		if err != nil {
-			common.NeutronLog.Errorf(m.Name, err)
+			logs.Errorf(m.Name, err)
 			return false
 		}
 
@@ -321,7 +322,7 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 		}
 
 		if boolResult, ok := result.(bool); !ok {
-			common.NeutronLog.Warnf("[%s] The return value of a DSL statement must return a boolean value.", data["template-id"])
+			logs.Warnf("[%s] The return value of a DSL statement must return a boolean value.", data["template-id"])
 			continue
 		} else if !boolResult {
 			// If we are in an AND request and a match failed,

@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/logs"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
+	"github.com/davecgh/go-spew/spew"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -360,7 +362,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 			break
 		}
 		if len(payloads) > 0 {
-			common.Debug("payloads: %s", common.MapToString(payloads))
+			logs.Debug("payloads: %s", common.MapToString(payloads))
 		}
 		var gotErr error
 		var skip bool
@@ -388,10 +390,10 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 func (r *Request) executeRequest(input *protocols.ScanContext, request *generatedRequest, previousEvent map[string]interface{}, callback protocols.OutputEventCallback, reqcount int) error {
 	timeStart := time.Now()
 	resp, err := r.httpClient.Do(request.request)
-	common.Debug("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
-	common.Dump(request.request)
+	logs.Debug("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
+	logs.Debug(spew.Sdump(request.request))
 	if err != nil {
-		common.Debug("%s nuclei request failed, %s", request.request.URL, err.Error())
+		logs.Debug("%s nuclei request failed, %s", request.request.URL, err.Error())
 		return err
 	}
 	duration := time.Since(timeStart)
@@ -422,7 +424,8 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 			finalEvent[key] = v
 		}
 	}
-	common.Dump(finalEvent)
+
+	logs.Debug(spew.Sdump(finalEvent))
 
 	event := &protocols.InternalWrappedEvent{InternalEvent: finalEvent}
 	if r.CompiledOperators != nil {

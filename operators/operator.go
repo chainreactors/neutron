@@ -3,6 +3,7 @@ package operators
 import (
 	"fmt"
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/logs"
 	"strconv"
 )
 
@@ -135,19 +136,19 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 
 	for _, matcher := range operators.Matchers {
 		if isMatch, matched := match(data, matcher); isMatch {
-			common.Debug("Matched: %+v", matcher)
+			logs.Debug("Matched: %+v", matcher)
 			if matcherCondition == ORCondition && matcher.Name != "" {
 				result.Matches[matcher.Name] = matched
 			}
 			matches = true
 		} else if matcherCondition == ANDCondition {
-			common.Debug("Not Matched: %+v", matcher)
+			logs.Debug("Not Matched: %+v", matcher)
 			if len(result.DynamicValues) > 0 {
 				return result, true
 			}
 			return nil, false
 		} else {
-			common.Debug("Not Matched: %+v", matcher)
+			logs.Debug("Not Matched: %+v", matcher)
 		}
 	}
 
