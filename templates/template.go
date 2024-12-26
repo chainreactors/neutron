@@ -25,11 +25,23 @@ type Template struct {
 
 	Variables protocols.Variable `yaml:"variables,omitempty" json:"variables,omitempty"`
 
-	RequestsHTTP    []*http.Request    `json:"http" yaml:"http"`
+	RequestsHTTP []*http.Request `json:"http" yaml:"http"`
+	// 适配部分较为老的PoC
+	Requests        []*http.Request    `json:"requests" yaml:"requests"`
 	RequestsNetwork []*network.Request `json:"network" yaml:"network"`
 
 	// TotalRequests is the total number of requests for the template.
 	TotalRequests int `yaml:"-" json:"-"`
 	// Executor is the actual template executor for running template requests
 	Executor *executer.Executer `yaml:"-" json:"-"`
+}
+
+func (t *Template) GetRequests() []*http.Request {
+	if len(t.RequestsHTTP) > 0 {
+		return t.RequestsHTTP
+	}
+	if len(t.Requests) > 0 {
+		return t.Requests
+	}
+	return nil
 }
