@@ -33,8 +33,8 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 		options.Variables = t.Variables
 	}
 
-	if len(t.RequestsHTTP) > 0 {
-		for _, req := range t.RequestsHTTP {
+	if requestHTTP := t.GetRequests(); len(requestHTTP) > 0 {
+		for _, req := range requestHTTP {
 			if req.Unsafe {
 				return fmt.Errorf("not impl unsafe request %s", req.Name)
 			}
