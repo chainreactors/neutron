@@ -20,7 +20,7 @@ func Debug(format string, s ...interface{}) {
 }
 
 func Dump(data interface{}) {
-	if logs.Log.Level >= logs.Debug {
+	if NeutronLog.Level >= logs.Debug {
 		NeutronLog.Debug(spew.Sdump(data))
 	}
 }
