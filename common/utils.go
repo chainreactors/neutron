@@ -14,7 +14,7 @@ import (
 var NeutronLog = logs.Log
 
 func Debug(format string, s ...interface{}) {
-	if logs.Log.Level >= logs.Debug {
+	if NeutronLog.Level >= logs.Debug {
 		NeutronLog.Debugf(format, s...)
 	}
 }
