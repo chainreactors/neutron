@@ -53,6 +53,8 @@ type Request struct {
 	CookieReuse bool `json:"cookie-reuse" yaml:"cookie-reuse"`
 	// Redirects specifies whether redirects should be followed.
 	Redirects bool `json:"redirects" yaml:"redirects"`
+	//   This can be used in conjunction with `max-redirects` to control the HTTP request redirects.
+	HostRedirects bool `yaml:"host-redirects,omitempty" json:"host-redirects,omitempty"`
 	// Pipeline defines if the attack should be performed with HTTP 1.1 Pipelining (race conditions/billions requests)
 	// All requests must be indempotent (GET/POST)
 	Unsafe bool `json:"unsafe" yaml:"unsafe"`
@@ -234,7 +236,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		//Threads:         r.Threads,
 		Timeout:         options.Options.Timeout,
 		MaxRedirects:    r.MaxRedirects,
-		FollowRedirects: r.Redirects,
+		FollowRedirects: r.Redirects || r.HostRedirects,
 		CookieReuse:     r.CookieReuse,
 	}
 	r.httpClient = createClient(connectionConfiguration)
