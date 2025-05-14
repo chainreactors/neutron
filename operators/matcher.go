@@ -45,15 +45,13 @@ type Matcher struct {
 	// values:
 	//   - false
 	//   - true
-	MatchAll          bool   `yaml:"match-all,omitempty" json:"match-all,omitempty" `
-	CaseInsensitive   bool   `yaml:"case-insensitive,omitempty" json:"case-insensitive,omitempty" `
-	MatchersCondition string `json:"matchers-condition" yaml:"matchers-condition"`
-	Matchers          []Matcher
-	condition         ConditionType
-	matcherType       MatcherType
-	regexCompiled     []*regexp.Regexp
-	dslCompiled       []*govaluate.EvaluableExpression
-	binaryDecoded     []string
+	MatchAll        bool `yaml:"match-all,omitempty" json:"match-all,omitempty" `
+	CaseInsensitive bool `yaml:"case-insensitive,omitempty" json:"case-insensitive,omitempty" `
+	condition       ConditionType
+	matcherType     MatcherType
+	regexCompiled   []*regexp.Regexp
+	dslCompiled     []*govaluate.EvaluableExpression
+	binaryDecoded   []string
 }
 
 // Result reverts the results of the match if the matcher is of type negative.

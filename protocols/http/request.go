@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/common/dsl"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"io"
@@ -70,7 +71,8 @@ type Request struct {
 	attackType        protocols.Type
 	totalRequests     int
 
-	options *protocols.ExecuterOptions
+	globalVars map[string]interface{}
+	options    *protocols.ExecuterOptions
 	//Result            *protocols.Result
 }
 
@@ -227,7 +229,6 @@ func (r *Request) Requests() int {
 
 func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 	r.options = options
-	var err error
 
 	connectionConfiguration := &Configuration{
 		//Threads:         r.Threads,
@@ -247,6 +248,11 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 				r.Raw[i] = strings.Replace(raw, "\n", "\r\n", -1)
 			}
 		}
+	}
+
+	r.globalVars = map[string]interface{}{
+		"randstr": dsl.RandStr(8),
+		"randnum": dsl.RandNum(4),
 	}
 
 	// 修改: 只编译一次Matcher
@@ -286,8 +292,9 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 				}
 				r.Payloads[k] = tmp
 			}
-
 		}
+
+		var err error
 		r.generator, err = protocols.NewGenerator(r.Payloads, r.attackType)
 		if err != nil {
 			return err
@@ -317,7 +324,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 	for {
 		// returns two values, error and skip, which skips the execution for the request instance.
 		executeFunc := func(data string, payloads, dynamicValue map[string]interface{}) (bool, error) {
-			generatedHttpRequest, err := generator.Make(input.Input, data, payloads, dynamicValue)
+			generatedHttpRequest, err := generator.Make(input.Input, data, payloads, dynamicValue, r.globalVars)
 			if err != nil {
 				if err == io.EOF {
 					return true, nil
@@ -422,6 +429,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 			finalEvent[key] = v
 		}
 	}
+	finalEvent = common.MergeMaps(finalEvent, request.Vars())
 	common.Dump(finalEvent)
 
 	event := &protocols.InternalWrappedEvent{InternalEvent: finalEvent}
@@ -544,4 +552,8 @@ type generatedRequest struct {
 	//pipelinedClient *rawhttp.PipelineClient
 	request       *http.Request
 	dynamicValues map[string]interface{}
+}
+
+func (gr *generatedRequest) Vars() map[string]interface{} {
+	return common.MergeMaps(gr.meta, gr.dynamicValues)
 }

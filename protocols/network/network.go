@@ -36,7 +36,8 @@ type Request struct {
 	attackType        protocols.Type
 	// cache any variables that may be needed for operation.
 	//dialer  *fastdialer.Dialer
-	options *protocols.ExecuterOptions
+	options    *protocols.ExecuterOptions
+	globalVars map[string]interface{}
 }
 
 type addressKV struct {

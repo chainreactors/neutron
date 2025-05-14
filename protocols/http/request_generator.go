@@ -2,7 +2,6 @@ package http
 
 import (
 	"fmt"
-	"github.com/chainreactors/neutron/common/dsl"
 	"net"
 	"net/http"
 	"net/url"
@@ -121,7 +120,7 @@ func (r *requestGenerator) Total() int {
 
 // Make creates a http request for the provided input.
 // It returns io.EOF as error when all the requests have been exhausted.
-func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues map[string]interface{}) (*generatedRequest, error) {
+func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues, globalValues map[string]interface{}) (*generatedRequest, error) {
 	// We get the next payload for the request.
 	var err error
 	allVars := common.MergeMaps(payloads, dynamicValues)
@@ -145,7 +144,7 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 		trailingSlash = true
 	}
 	values := common.MergeMaps(allVars, generateVariables(parsed, trailingSlash))
-
+	values = common.MergeMaps(values, globalValues)
 	reqdata, err = common.Evaluate(reqdata, values)
 	if err != nil {
 		return nil, err
@@ -346,8 +345,6 @@ func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface
 		"Path":     directory,
 		"File":     base,
 		"Scheme":   parsed.Scheme,
-		"randstr":  dsl.RandStr(8),
-		"randnum":  dsl.RandNum(4),
 	}
 
 	return common.MergeMaps(httpVariables, common.GenerateDNVariables(domain))
