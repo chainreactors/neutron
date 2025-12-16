@@ -20,12 +20,16 @@ func loadPayloads(payloads map[string]interface{}) (map[string][]string, error) 
 			loadedPayloads[name] = elements
 		case []string:
 			loadedPayloads[name] = pt
-		case interface{}:
-			s := make([]string, len(payload.([]interface{})))
-			for i, v := range pt.([]interface{}) {
+		case []interface{}:
+			s := make([]string, len(pt))
+			for i, v := range pt {
 				s[i] = common.ToString(v)
 			}
 			loadedPayloads[name] = s
+		default:
+			// Skip unsupported payload types (e.g., nested maps)
+			// Return error to make it explicit
+			return nil, errors.New("unsupported payload type for key '" + name + "': expected string, []string, or []interface{}")
 		}
 	}
 	return loadedPayloads, nil
