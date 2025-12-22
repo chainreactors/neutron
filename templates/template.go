@@ -81,6 +81,12 @@ type Template struct {
 	// Network contains the network request to make in the template
 	RequestsNetwork []*network.Request `json:"network,omitempty" yaml:"network,omitempty" jsonschema:"title=network requests to make,description=Network requests to make for the template"`
 
+	// TCP contains the TCP network request to make in the template (alias for network)
+	RequestsTCP []*network.Request `json:"tcp,omitempty" yaml:"tcp,omitempty" jsonschema:"title=tcp requests to make,description=TCP requests to make for the template (alias for network)"`
+
+	// UDP contains the UDP network request to make in the template (alias for network)
+	RequestsUDP []*network.Request `json:"udp,omitempty" yaml:"udp,omitempty" jsonschema:"title=udp requests to make,description=UDP requests to make for the template (alias for network)"`
+
 	// TotalRequests is the total number of requests for the template.
 	TotalRequests int `yaml:"-" json:"-"`
 	// Executor is the actual template executor for running template requests

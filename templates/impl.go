@@ -33,6 +33,15 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 		options.Variables = t.Variables
 	}
 
+	// Merge tcp and udp fields into RequestsNetwork (aliases support)
+	// FingerprintHub and other tools may use 'tcp' or 'udp' instead of 'network'
+	if len(t.RequestsTCP) > 0 {
+		t.RequestsNetwork = append(t.RequestsNetwork, t.RequestsTCP...)
+	}
+	if len(t.RequestsUDP) > 0 {
+		t.RequestsNetwork = append(t.RequestsNetwork, t.RequestsUDP...)
+	}
+
 	if requestHTTP := t.GetRequests(); len(requestHTTP) > 0 {
 		for _, req := range requestHTTP {
 			if req.Unsafe {
