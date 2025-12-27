@@ -133,11 +133,24 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 		data = common.MergeMaps(data, dataDynamicValues)
 	}
 
-	for _, matcher := range operators.Matchers {
+	// 用于 AND 条件临时存储匹配结果
+	var andMatches map[string][]string
+	if matcherCondition == ANDCondition {
+		andMatches = make(map[string][]string)
+	}
+
+	for matcherIndex, matcher := range operators.Matchers {
 		if isMatch, matched := match(data, matcher); isMatch {
 			common.Debug("Matched: %+v", matcher)
-			if matcherCondition == ORCondition && matcher.Name != "" {
-				result.Matches[matcher.Name] = matched
+			if matcherCondition == ORCondition {
+				// OR 条件：立即记录
+				if matcher.Name != "" {
+					result.Matches[matcher.Name] = matched
+				}
+			} else {
+				// AND 条件：暂存到临时 map，等所有都通过后再记录
+				matcherName := getMatcherName(matcher, matcherIndex)
+				andMatches[matcherName] = matched
 			}
 			matches = true
 		} else if matcherCondition == ANDCondition {
@@ -149,6 +162,11 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 		} else {
 			common.Debug("Not Matched: %+v", matcher)
 		}
+	}
+
+	// AND 条件且所有 matcher 都匹配成功，统一写入到 result.Matches
+	if matcherCondition == ANDCondition && matches {
+		result.Matches = andMatches
 	}
 
 	result.Matched = matches
