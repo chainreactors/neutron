@@ -9,35 +9,35 @@ import (
 
 // Request contains a Network protocol request to be made from a template
 type Request struct {
-	ID string `json:"id" yaml:"id"`
+	ID string `json:"id,omitempty" yaml:"id,omitempty"`
 
 	// Address is the address to send requests to (host:port:tls combos generally)
-	Address   []string `json:"host" yaml:"host"`
-	addresses []addressKV
+	Address   []string `json:"host,omitempty" yaml:"host,omitempty"`
+	addresses []addressKV `json:"-" yaml:"-" jsonschema:"-"`
 
 	// AttackType is the attack type
 	// Sniper, PitchFork and ClusterBomb. Default is Sniper
-	AttackType string `json:"attack" yaml:"attack"`
+	AttackType string `json:"attack,omitempty" yaml:"attack,omitempty"`
 	// Path contains the path/s for the request variables
-	Payloads map[string]interface{} `json:"payloads" yaml:"payloads"`
+	Payloads map[string]interface{} `json:"payloads,omitempty" yaml:"payloads,omitempty"`
 
 	// Payload is the payload to send for the network request
-	Inputs []*Input `json:"inputs" yaml:"inputs"`
+	Inputs []*Input `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	// ReadSize is the size of response to read (1024 if not provided by default)
-	ReadSize int `json:"read-size" yaml:"read-size"`
+	ReadSize int `json:"read-size,omitempty" yaml:"read-size,omitempty"`
 
-	ReadAll bool `json:"read-all" yaml:"read-all"`
+	ReadAll bool `json:"read-all,omitempty" yaml:"read-all,omitempty"`
 
 	operators.Operators `json:",inline,omitempty" yaml:",inline,omitempty"`
 	// Operators for the current request go here.
-	CompiledOperators *operators.Operators
-	dialer            *net.Dialer
-	generator         *protocols.Generator
-	attackType        protocols.Type
+	CompiledOperators *operators.Operators `json:"-" yaml:"-" jsonschema:"-"`
+	dialer            *net.Dialer          `json:"-" yaml:"-" jsonschema:"-"`
+	generator         *protocols.Generator `json:"-" yaml:"-" jsonschema:"-"`
+	attackType        protocols.Type       `json:"-" yaml:"-" jsonschema:"-"`
 	// cache any variables that may be needed for operation.
 	//dialer  *fastdialer.Dialer
-	options    *protocols.ExecuterOptions
-	globalVars map[string]interface{}
+	options    *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
+	globalVars map[string]interface{}     `json:"-" yaml:"-" jsonschema:"-"`
 }
 
 type addressKV struct {
@@ -48,13 +48,13 @@ type addressKV struct {
 // Input is the input to send on the network
 type Input struct {
 	// Data is the data to send as the input
-	Data string `json:"data"`
+	Data string `json:"data,omitempty"`
 	// Type is the type of input - hex, text.
-	Type string `json:"type"`
+	Type string `json:"type,omitempty"`
 	// Read is the number of bytes to read from socket
-	Read int `json:"read"`
+	Read int `json:"read,omitempty"`
 	// Name is the optional name of the input to provide matching on
-	Name string `json:"name"`
+	Name string `json:"name,omitempty"`
 }
 
 // GetID returns the unique ID of the request if any.

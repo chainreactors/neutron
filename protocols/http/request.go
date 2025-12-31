@@ -24,57 +24,57 @@ type Request struct {
 	// operators for the current request go here.
 	operators.Operators `json:",inline" yaml:",inline"`
 	// Path contains the path/s for the request
-	Path []string `json:"path" yaml:"path"`
+	Path []string `json:"path,omitempty" yaml:"path,omitempty"`
 	// Raw contains raw requests
-	Raw []string `json:"raw" yaml:"raw"`
-	ID  string   `json:"id" yaml:"id"`
+	Raw []string `json:"raw,omitempty" yaml:"raw,omitempty"`
+	ID  string   `json:"id,omitempty" yaml:"id,omitempty"`
 	// Name is the name of the request
-	Name string `json:"name" yaml:"name"`
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 	// AttackType is the attack type
 	// Sniper, PitchFork and ClusterBomb. Default is Sniper
-	AttackType string `json:"attack" yaml:"attack"`
+	AttackType string `json:"attack,omitempty" yaml:"attack,omitempty"`
 	// Method is the request method, whether GET, POST, PUT, etc
-	Method string `json:"method" yaml:"method"`
+	Method string `json:"method,omitempty" yaml:"method,omitempty"`
 	// Body is an optional parameter which contains the request body for POST methods, etc
-	Body string `json:"body" yaml:"body"`
+	Body string `json:"body,omitempty" yaml:"body,omitempty"`
 	// Path contains the path/s for the request variables
-	Payloads map[string]interface{} `json:"payloads" yaml:"payloads"`
+	Payloads map[string]interface{} `json:"payloads,omitempty" yaml:"payloads,omitempty"`
 	// Headers contains headers to send with the request
-	Headers map[string]string `json:"headers" yaml:"headers"`
+	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 	// MaxRedirects is the maximum number of redirects that should be followed.
-	MaxRedirects int `json:"max-redirects" yaml:"max-redirects"`
+	MaxRedirects int `json:"max-redirects,omitempty" yaml:"max-redirects,omitempty"`
 	// PipelineConcurrentConnections is number of connections in pipelining
 	//Threads int `json:"threads" yaml:"threads"`
 
 	// MaxSize is the maximum size of http response body to read in bytes.
-	MaxSize int `json:"max-size" yaml:"max-size"`
+	MaxSize int `json:"max-size,omitempty" yaml:"max-size,omitempty"`
 
 	// CookieReuse is an optional setting that makes cookies shared within requests
-	CookieReuse bool `json:"cookie-reuse" yaml:"cookie-reuse"`
+	CookieReuse bool `json:"cookie-reuse,omitempty" yaml:"cookie-reuse,omitempty"`
 	// Redirects specifies whether redirects should be followed.
-	Redirects bool `json:"redirects" yaml:"redirects"`
+	Redirects bool `json:"redirects,omitempty" yaml:"redirects,omitempty"`
 	//   This can be used in conjunction with `max-redirects` to control the HTTP request redirects.
 	HostRedirects bool `yaml:"host-redirects,omitempty" json:"host-redirects,omitempty"`
 	// Pipeline defines if the attack should be performed with HTTP 1.1 Pipelining (race conditions/billions requests)
 	// All requests must be indempotent (GET/POST)
-	Unsafe bool `json:"unsafe" yaml:"unsafe"`
+	Unsafe bool `json:"unsafe,omitempty" yaml:"unsafe,omitempty"`
 	// ReqCondition automatically assigns numbers to requests and preserves
 	// their history for being matched at the end.
 	// Currently only works with sequential http requests.
-	ReqCondition bool `json:"req-condition" yaml:"req-condition"`
+	ReqCondition bool `json:"req-condition,omitempty" yaml:"req-condition,omitempty"`
 	//   StopAtFirstMatch stops the execution of the requests and template as soon as a match is found.
-	StopAtFirstMatch bool `json:"stop-at-first-match" yaml:"stop-at-first-match"`
+	StopAtFirstMatch bool `json:"stop-at-first-match,omitempty" yaml:"stop-at-first-match,omitempty"`
 
 	IterateAll        bool                 `yaml:"iterate-all,omitempty" json:"iterate-all,omitempty"`
-	generator         *protocols.Generator // optional, only enabled when using payloads
-	httpClient        *http.Client
-	httpresp          *http.Response
-	CompiledOperators *operators.Operators
-	attackType        protocols.Type
-	totalRequests     int
+	generator         *protocols.Generator `json:"-" yaml:"-" jsonschema:"-"`
+	httpClient        *http.Client         `json:"-" yaml:"-" jsonschema:"-"`
+	httpresp          *http.Response       `json:"-" yaml:"-" jsonschema:"-"`
+	CompiledOperators *operators.Operators `json:"-" yaml:"-" jsonschema:"-"`
+	attackType        protocols.Type       `json:"-" yaml:"-" jsonschema:"-"`
+	totalRequests     int                  `json:"-" yaml:"-" jsonschema:"-"`
 
-	globalVars map[string]interface{}
-	options    *protocols.ExecuterOptions
+	globalVars map[string]interface{} `json:"-" yaml:"-" jsonschema:"-"`
+	options    *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
 	//Result            *protocols.Result
 }
 
