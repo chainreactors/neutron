@@ -446,6 +446,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 	common.Dump(finalEvent)
 
 	event := &protocols.InternalWrappedEvent{InternalEvent: finalEvent}
+	defer input.LogEvent(event)
 	if r.CompiledOperators != nil {
 		var ok bool
 		event.OperatorsResult, ok = r.CompiledOperators.Execute(finalEvent, r.Match, r.Extract)
@@ -527,8 +528,8 @@ var (
 )
 
 // NeedsRequestCondition determines if request condition should be enabled
-func (request *Request) NeedsRequestCondition() bool {
-	for _, matcher := range request.Matchers {
+func (r *Request) NeedsRequestCondition() bool {
+	for _, matcher := range r.Matchers {
 		if checkRequestConditionExpressions(matcher.DSL...) {
 			return true
 		}
@@ -536,7 +537,7 @@ func (request *Request) NeedsRequestCondition() bool {
 			return true
 		}
 	}
-	for _, extractor := range request.Extractors {
+	for _, extractor := range r.Extractors {
 		if checkRequestConditionExpressions(extractor.DSL...) {
 			return true
 		}
