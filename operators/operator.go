@@ -21,7 +21,7 @@ type Operators struct {
 	matchersCondition ConditionType
 
 	// TemplateID is the ID of the template for matcher
-	TemplateID string
+	TemplateID string `json:"templateID,omitempty" yaml:"templateID,omitempty"`
 }
 
 // Result is a result structure created from operators running on data.
