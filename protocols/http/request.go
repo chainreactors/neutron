@@ -73,7 +73,7 @@ type Request struct {
 	attackType        protocols.Type       `json:"-" yaml:"-" jsonschema:"-"`
 	totalRequests     int                  `json:"-" yaml:"-" jsonschema:"-"`
 
-	globalVars map[string]interface{} `json:"-" yaml:"-" jsonschema:"-"`
+	globalVars map[string]interface{}     `json:"-" yaml:"-" jsonschema:"-"`
 	options    *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
 	//Result            *protocols.Result
 }
@@ -515,6 +515,17 @@ func (r *Request) GetID() string {
 func (r *Request) Context() context.Context {
 	ctx, _ := context.WithTimeout(context.Background(), time.Duration(r.options.Options.Timeout)*time.Second)
 	return ctx
+}
+
+// SetHTTPClient sets a custom HTTP client for this request
+// This allows external callers to provide their own http.Client or http.RoundTripper
+func (r *Request) SetHTTPClient(client *http.Client) {
+	r.httpClient = client
+}
+
+// GetHTTPClient returns the current HTTP client
+func (r *Request) GetHTTPClient() *http.Client {
+	return r.httpClient
 }
 
 var (
