@@ -468,7 +468,6 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	for _, cookie := range resp.Cookies() {
 		data[strings.ToLower(cookie.Name)] = cookie.Value
 	}
-	data["header"] = resp.Header
 	data["host"] = host
 	data["type"] = r.Type().String()
 	data["matched"] = matched
@@ -476,11 +475,15 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	data["duration"] = duration.Seconds()
 	var respRaw bytes.Buffer
 	respRaw.WriteString(fmt.Sprintf("%s %s\r\n", resp.Proto, resp.Status))
+	var headerBuilder strings.Builder
 	for k, v := range resp.Header {
-		k = strings.ToLower(strings.Replace(strings.TrimSpace(k), "-", "_", -1))
-		data[k] = strings.Join(v, " ")
-		data["all_headers"] = common.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", k, v)
+		joinedValue := strings.Join(v, ", ")
+		headerBuilder.WriteString(fmt.Sprintf("%s: %s\r\n", k, joinedValue))
+		normalizedKey := strings.ToLower(strings.Replace(strings.TrimSpace(k), "-", "_", -1))
+		data[normalizedKey] = strings.Join(v, " ")
+		data["all_headers"] = common.ToString(data["all_headers"]) + fmt.Sprintf("%s: %s\r\n", normalizedKey, joinedValue)
 	}
+	data["header"] = headerBuilder.String()
 
 	body, _ := ioutil.ReadAll(resp.Body)
 	_ = resp.Body.Close()
