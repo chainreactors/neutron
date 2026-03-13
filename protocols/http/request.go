@@ -387,7 +387,10 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 
 		if len(gotDynamicValues) > 0 {
 			operators.MakeDynamicValuesCallback(gotDynamicValues, r.IterateAll, func(data map[string]interface{}) bool {
-				if skip, gotErr = executeFunc(inputData, payloads, data); skip || gotErr != nil {
+				// Merge extracted dynamic values with original template variables
+				// to preserve user-defined variables (e.g. rand_str) across requests
+				mergedValues := common.MergeMaps(dynamicValues, data)
+				if skip, gotErr = executeFunc(inputData, payloads, mergedValues); skip || gotErr != nil {
 					return true
 				}
 				return false
