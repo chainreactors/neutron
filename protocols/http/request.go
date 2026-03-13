@@ -10,7 +10,6 @@ import (
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
@@ -488,10 +487,11 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	}
 	data["header"] = headerBuilder.String()
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	_ = resp.Body.Close()
+	body, _ := readResponseBody(resp)
 	data["body"] = string(body)
-	if resp.ContentLength > -1 {
+	if strings.TrimSpace(resp.Header.Get("Content-Encoding")) != "" {
+		data["content_length"] = len(body)
+	} else if resp.ContentLength > -1 {
 		data["content_length"] = resp.ContentLength
 	} else {
 		data["content_length"] = len(body)
