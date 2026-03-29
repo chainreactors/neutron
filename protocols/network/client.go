@@ -10,7 +10,6 @@ func Get() (*net.Dialer, error) {
 	dialer := &net.Dialer{
 		Timeout:   5 * time.Second,
 		KeepAlive: 3 * time.Second,
-		DualStack: true,
 	}
 	return dialer, nil
 }

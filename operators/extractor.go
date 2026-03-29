@@ -147,7 +147,7 @@ func (e *Extractor) CompileExtractors() error {
 	//}
 
 	for _, dslExp := range e.DSL {
-		compiled, err := govaluate.NewEvaluableExpressionWithFunctions(dslExp, common.HelperFunctions)
+		compiled, err := govaluate.NewEvaluableExpressionWithFunctions(dslExp, common.GetHelperFunctions())
 		if err != nil {
 			return fmt.Errorf("could not compile dsl expression: %s", dslExp)
 		}

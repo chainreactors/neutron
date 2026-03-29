@@ -120,7 +120,7 @@ func (m *Matcher) CompileMatchers() error {
 
 	// Compile the dsl expressions
 	for _, dslExpression := range m.DSL {
-		compiledExpression, err := govaluate.NewEvaluableExpressionWithFunctions(dslExpression, common.HelperFunctions)
+		compiledExpression, err := govaluate.NewEvaluableExpressionWithFunctions(dslExpression, common.GetHelperFunctions())
 		if err != nil {
 			return fmt.Errorf("could not compile dsl expression: %s", dslExpression)
 		}
@@ -195,7 +195,7 @@ func (matcher *Matcher) MatchWords(corpus string, data map[string]interface{}) (
 		var err error
 		word, err = common.Evaluate(word, data)
 		if err != nil {
-			common.NeutronLog.Warnf("Error while evaluating word matcher: %q", word)
+			common.Logger().Warnf("Error while evaluating word matcher: %q", word)
 			if matcher.condition == ANDCondition {
 				return false, []string{}
 			}
@@ -303,12 +303,12 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 	for i, expression := range m.dslCompiled {
 		resolvedExpression, err := common.Evaluate(expression.String(), data)
 		if err != nil {
-			common.NeutronLog.Errorf(m.Name, err)
+			common.Logger().Errorf(m.Name, err)
 			return false
 		}
-		expression, err = govaluate.NewEvaluableExpressionWithFunctions(resolvedExpression, common.HelperFunctions)
+		expression, err = govaluate.NewEvaluableExpressionWithFunctions(resolvedExpression, common.GetHelperFunctions())
 		if err != nil {
-			common.NeutronLog.Errorf(m.Name, err)
+			common.Logger().Errorf(m.Name, err)
 			return false
 		}
 
@@ -321,7 +321,7 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 		}
 
 		if boolResult, ok := result.(bool); !ok {
-			common.NeutronLog.Warnf("[%s] The return value of a DSL statement must return a boolean value.", data["template-id"])
+			common.Logger().Warnf("[%s] The return value of a DSL statement must return a boolean value.", data["template-id"])
 			continue
 		} else if !boolResult {
 			// If we are in an AND request and a match failed,

@@ -30,10 +30,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Knetic/govaluate"
-	"github.com/asaskevich/govalidator"
 	"github.com/chainreactors/neutron/common/dsl/deserialization"
 	"github.com/hashicorp/go-version"
 	"github.com/spaolacci/murmur3"
@@ -45,6 +45,8 @@ var (
 
 	// DefaultHelperFunctions is a pre-compiled list of govaluate DSL functions
 	DefaultHelperFunctions map[string]govaluate.ExpressionFunction
+	defaultsOnce           sync.Once
+	initializingDefaults   bool
 
 	funcSignatureRegex = regexp.MustCompile(`(\w+)\s*\((?:([\w\d,\s]+)\s+([.\w\d{}&*]+))?\)([\s.\w\d{}&*]+)?`)
 
@@ -63,7 +65,24 @@ var PrintDebugCallback func(args ...interface{}) error
 
 var functions []dslFunction
 
-func AddFunction(function dslFunction) error {
+func ensureDefaultFunctions() {
+	defaultsOnce.Do(func() {
+		initializingDefaults = true
+		defer func() {
+			initializingDefaults = false
+		}()
+
+		registerDefaultFunctions()
+		refreshDefaultFunctions()
+	})
+}
+
+func refreshDefaultFunctions() {
+	DefaultHelperFunctions = buildHelperFunctions(functions)
+	FunctionNames = GetFunctionNames(DefaultHelperFunctions)
+}
+
+func addFunction(function dslFunction) error {
 	for _, f := range functions {
 		if function.Name == f.Name {
 			return errors.New("duplicate helper function key defined")
@@ -73,13 +92,28 @@ func AddFunction(function dslFunction) error {
 	return nil
 }
 
+func AddFunction(function dslFunction) error {
+	if !initializingDefaults {
+		ensureDefaultFunctions()
+	}
+
+	if err := addFunction(function); err != nil {
+		return err
+	}
+
+	if !initializingDefaults {
+		refreshDefaultFunctions()
+	}
+	return nil
+}
+
 func MustAddFunction(function dslFunction) {
 	if err := AddFunction(function); err != nil {
 		panic(err)
 	}
 }
 
-func init() {
+func registerDefaultFunctions() {
 	// note: index helper is zero based
 	MustAddFunction(NewWithPositionalArgs("index", 2, false, func(args ...interface{}) (interface{}, error) {
 		index, err := strconv.ParseInt(toString(args[1]), 10, 64)
@@ -883,12 +917,10 @@ func init() {
 		}))
 	MustAddFunction(NewWithPositionalArgs("to_number", 1, false, func(args ...interface{}) (interface{}, error) {
 		argStr := toString(args[0])
-		if govalidator.IsInt(argStr) {
-			sint, err := strconv.Atoi(argStr)
-			return float64(sint), err
-		} else if govalidator.IsFloat(argStr) {
-			sint, err := strconv.ParseFloat(argStr, 64)
-			return float64(sint), err
+		if sint, err := strconv.Atoi(argStr); err == nil {
+			return float64(sint), nil
+		} else if sint, err := strconv.ParseFloat(argStr, 64); err == nil {
+			return float64(sint), nil
 		}
 		return nil, fmt.Errorf("%v could not be converted to int", argStr)
 	}))
@@ -1262,8 +1294,6 @@ func init() {
 	//	return jarm.HashWithDialer(nil, hostname, port, 10)
 	//}))
 
-	DefaultHelperFunctions = HelperFunctions()
-	FunctionNames = GetFunctionNames(DefaultHelperFunctions)
 }
 
 func NewWithSingleSignature(name, signature string, cacheable bool, logic govaluate.ExpressionFunction) dslFunction {
@@ -1293,15 +1323,28 @@ func NewWithPositionalArgs(name string, numberOfArgs int, cacheable bool, expr g
 
 // HelperFunctions returns the dsl helper functions
 func HelperFunctions() map[string]govaluate.ExpressionFunction {
+	ensureDefaultFunctions()
+	return buildHelperFunctions(functions)
+}
+
+func buildHelperFunctions(registered []dslFunction) map[string]govaluate.ExpressionFunction {
 	helperFunctions := make(map[string]govaluate.ExpressionFunction)
 
-	for _, function := range functions {
+	for _, function := range registered {
 		helperFunctions[function.Name] = function.Exec
 		// for backwards compatibility
 		helperFunctions[strings.Replace(function.Name, "_", "", -1)] = function.Exec
 	}
 
 	return helperFunctions
+}
+
+func DefaultFunctionNames() []string {
+	ensureDefaultFunctions()
+
+	names := make([]string, len(FunctionNames))
+	copy(names, FunctionNames)
+	return names
 }
 
 // AddMultiSignatureHelperFunction allows creation of additional helper functions to be supported with templates

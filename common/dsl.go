@@ -22,14 +22,19 @@ var (
 	EvalError       = errors.New("failed to evaluate while adding headers to request")
 )
 
-func init() {
+func GetHelperFunctions() map[string]govaluate.ExpressionFunction {
 	HelperFunctions = dsl.HelperFunctions()
-	FunctionNames = dsl.GetFunctionNames(HelperFunctions)
+	return HelperFunctions
+}
+
+func GetFunctionNames() []string {
+	FunctionNames = dsl.DefaultFunctionNames()
+	return FunctionNames
 }
 
 // Eval compiles the given expression and evaluate it with the given values preserving the return type
 func Eval(expression string, values map[string]interface{}) (interface{}, error) {
-	compiled, err := govaluate.NewEvaluableExpressionWithFunctions(expression, HelperFunctions)
+	compiled, err := govaluate.NewEvaluableExpressionWithFunctions(expression, GetHelperFunctions())
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +75,7 @@ func evaluate(data string, base map[string]interface{}) (string, error) {
 		// replace variable placeholders with base values
 		expression = Replace(expression, base)
 		// turns expressions (either helper functions+base values or base values)
-		compiled, err := govaluate.NewEvaluableExpressionWithFunctions(expression, HelperFunctions)
+		compiled, err := govaluate.NewEvaluableExpressionWithFunctions(expression, GetHelperFunctions())
 		if err != nil {
 			continue
 		}
@@ -148,12 +153,12 @@ func isExpression(data string, base map[string]interface{}) bool {
 	if _, err := govaluate.NewEvaluableExpression(data); err == nil {
 		if StringsContains(getFunctionsNames(base), data) {
 			return true
-		} else if StringsContains(dsl.FunctionNames, data) {
+		} else if StringsContains(GetFunctionNames(), data) {
 			return true
 		}
 		return false
 	}
-	_, err := govaluate.NewEvaluableExpressionWithFunctions(data, HelperFunctions)
+	_, err := govaluate.NewEvaluableExpressionWithFunctions(data, GetHelperFunctions())
 	return err == nil
 }
 

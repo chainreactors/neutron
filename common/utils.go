@@ -2,26 +2,34 @@ package common
 
 import (
 	"fmt"
-	"github.com/chainreactors/logs"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/weppos/publicsuffix-go/publicsuffix"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/chainreactors/logs"
 )
 
-var NeutronLog = logs.Log
+var NeutronLog *logs.Logger
+
+func Logger() *logs.Logger {
+	if NeutronLog == nil {
+		NeutronLog = logs.Log
+	}
+	return NeutronLog
+}
 
 func Debug(format string, s ...interface{}) {
-	if NeutronLog.Level >= logs.Debug {
-		NeutronLog.Debugf(format, s...)
+	logger := Logger()
+	if logger != nil && logger.Level >= logs.DebugLevel {
+		logger.Debugf(format, s...)
 	}
 }
 
 func Dump(data interface{}) {
-	if NeutronLog.Level >= logs.Debug {
-		NeutronLog.Debug(spew.Sdump(data))
+	logger := Logger()
+	if logger != nil && logger.Level >= logs.DebugLevel {
+		logger.Debugf("%#v", data)
 	}
 }
 
@@ -246,17 +254,25 @@ func HasPrefixAny(s string, prefixes ...string) bool {
 }
 
 func GenerateDNVariables(domain string) map[string]interface{} {
-	parsed, err := publicsuffix.Parse(strings.TrimSuffix(domain, "."))
-	if err != nil {
+	domain = strings.TrimSuffix(domain, ".")
+	labels := strings.Split(domain, ".")
+	if len(labels) < 2 {
 		return map[string]interface{}{"FQDN": domain}
 	}
 
-	domainName := strings.Join([]string{parsed.SLD, parsed.TLD}, ".")
+	tld := labels[len(labels)-1]
+	sld := labels[len(labels)-2]
+	trd := ""
+	if len(labels) > 2 {
+		trd = strings.Join(labels[:len(labels)-2], ".")
+	}
+
+	domainName := sld + "." + tld
 	return map[string]interface{}{
 		"FQDN": domain,
 		"RDN":  domainName,
-		"DN":   parsed.SLD,
-		"TLD":  parsed.TLD,
-		"SD":   parsed.TRD,
+		"DN":   sld,
+		"TLD":  tld,
+		"SD":   trd,
 	}
 }

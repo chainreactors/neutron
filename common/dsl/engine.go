@@ -20,7 +20,7 @@ type Engine struct {
 
 func NewEngine() (*Engine, error) {
 	engine := &Engine{
-		HelperFunctions: DefaultHelperFunctions,
+		HelperFunctions: HelperFunctions(),
 		ExpressionStore: make(map[string]*govaluate.EvaluableExpression),
 	}
 	return engine, nil
