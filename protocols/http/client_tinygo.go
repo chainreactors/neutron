@@ -40,14 +40,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 var DefaultTransport = &Transport{}
 
 func createClient(opt *Configuration) *http.Client {
-	client := &http.Client{
-		Transport: DefaultTransport,
-	}
-	if opt != nil && opt.Timeout > 0 {
-		// TinyGo's net/http client still supports the high-level timeout field.
-		// Keep the transport intentionally minimal and ignore cookie jar reuse.
-	}
-	return client
+	return &http.Client{Transport: DefaultTransport}
 }
 
 type nopCloser struct{}

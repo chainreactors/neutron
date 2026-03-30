@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/chainreactors/logs"
+	"github.com/chainreactors/neutron/common/publicsuffix"
 )
 
 var NeutronLog *logs.Logger
@@ -255,22 +256,25 @@ func HasPrefixAny(s string, prefixes ...string) bool {
 
 func GenerateDNVariables(domain string) map[string]interface{} {
 	domain = strings.TrimSuffix(domain, ".")
-	labels := strings.Split(domain, ".")
-	if len(labels) < 2 {
+	etld1, err := publicsuffix.EffectiveTLDPlusOne(domain)
+	if err != nil {
 		return map[string]interface{}{"FQDN": domain}
 	}
 
-	tld := labels[len(labels)-1]
-	sld := labels[len(labels)-2]
-	trd := ""
-	if len(labels) > 2 {
-		trd = strings.Join(labels[:len(labels)-2], ".")
+	tld, _ := publicsuffix.PublicSuffix(domain)
+	sld := etld1
+	if suffix := "." + tld; strings.HasSuffix(etld1, suffix) {
+		sld = strings.TrimSuffix(etld1, suffix)
 	}
 
-	domainName := sld + "." + tld
+	trd := ""
+	if suffix := "." + etld1; strings.HasSuffix(domain, suffix) {
+		trd = strings.TrimSuffix(domain, suffix)
+	}
+
 	return map[string]interface{}{
 		"FQDN": domain,
-		"RDN":  domainName,
+		"RDN":  etld1,
 		"DN":   sld,
 		"TLD":  tld,
 		"SD":   trd,

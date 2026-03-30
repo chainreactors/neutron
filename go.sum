@@ -10,6 +10,8 @@ github.com/chainreactors/files v0.0.0-20231102192550-a652458cee26 h1:p+RrnAjk2Es
 github.com/chainreactors/files v0.0.0-20231102192550-a652458cee26/go.mod h1:/Xa9YXhjBlaC33JTD6ZTJFig6pcplak2IDcovf42/6A=
 github.com/chainreactors/logs v0.0.0-20241030063019-8ca66a3ee307 h1:gZuBqpqwbn9WR8f/vfn8lf6tjeWcM+ajLXAL3SkOtQs=
 github.com/chainreactors/logs v0.0.0-20241030063019-8ca66a3ee307/go.mod h1:6Mv6W70JrtL6VClulZhmMRZnoYpcTahcDTKLMNEjK0o=
+github.com/chainreactors/logs v0.0.0-20250312104344-9f30fa69d3c9 h1:u3qAuV4/IY5lvE0utSl5w0p6MdTNpXYA2FJee93c21A=
+github.com/chainreactors/logs v0.0.0-20250312104344-9f30fa69d3c9/go.mod h1:6Mv6W70JrtL6VClulZhmMRZnoYpcTahcDTKLMNEjK0o=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
