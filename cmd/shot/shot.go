@@ -30,7 +30,7 @@ func main() {
 		return
 	}
 	if *debug {
-		logs.Log.SetLevel(logs.Debug)
+		logs.Log.SetLevel(logs.DebugLevel)
 		common.NeutronLog = logs.Log
 		spew.Config.Indent = "\t"                  // 使用 tab 缩进
 		spew.Config.DisablePointerAddresses = true // 不显示指针地址
