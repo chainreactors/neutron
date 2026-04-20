@@ -99,6 +99,9 @@ func (m *Matcher) CompileMatchers() error {
 	if m.Part == "" {
 		m.Part = "body"
 	}
+	if strings.HasPrefix(m.Part, "interactsh") {
+		return fmt.Errorf("interactsh is not supported as matcher part")
+	}
 
 	// Compile the regexes
 	for _, regex := range m.Regex {
