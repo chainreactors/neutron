@@ -14,13 +14,13 @@ import (
 var NeutronLog = logs.Log
 
 func Debug(format string, s ...interface{}) {
-	if NeutronLog.Level >= logs.Debug {
+	if NeutronLog.Level >= logs.DebugLevel {
 		NeutronLog.Debugf(format, s...)
 	}
 }
 
 func Dump(data interface{}) {
-	if NeutronLog.Level >= logs.Debug {
+	if NeutronLog.Level >= logs.DebugLevel {
 		NeutronLog.Debug(spew.Sdump(data))
 	}
 }

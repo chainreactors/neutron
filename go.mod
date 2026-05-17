@@ -5,7 +5,7 @@ go 1.11
 require (
 	github.com/Knetic/govaluate v3.0.0+incompatible
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
-	github.com/chainreactors/logs v0.0.0-20241030063019-8ca66a3ee307
+	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
 	github.com/hashicorp/go-version v1.6.0
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.8.4
