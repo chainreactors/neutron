@@ -65,6 +65,10 @@ var PrintDebugCallback func(args ...interface{}) error
 
 var functions []dslFunction
 
+func init() {
+	ensureDefaultFunctions()
+}
+
 func ensureDefaultFunctions() {
 	defaultsOnce.Do(func() {
 		initializingDefaults = true

@@ -77,3 +77,18 @@ func (t *Template) Execute(input string, payload map[string]interface{}) (*opera
 	}
 	return t.Executor.Execute(protocols.NewScanContext(input, payload))
 }
+
+// ExecuteWithEvents executes the template and returns both the final result
+// and all per-step ResultEvents (each carrying its own Request/Response).
+func (t *Template) ExecuteWithEvents(input string, payload map[string]interface{}) (*operators.Result, []*protocols.ResultEvent, error) {
+	if t.Executor.Options().Options.Opsec && t.Opsec {
+		common.Debug("(opsec!!!) skip template %s", t.Id)
+		return nil, nil, protocols.OpsecError
+	}
+	ctx := protocols.NewScanContext(input, payload)
+	result, err := t.Executor.Execute(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return result, ctx.GenerateResult(), nil
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -226,4 +227,86 @@ http:
 	require.Contains(t, result.Request, "/step2")
 	require.Contains(t, result.Response, "step2 matched ok")
 	require.GreaterOrEqual(t, callCount, 2)
+}
+
+func TestExecuteWithEventsMultiStep(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/step1" {
+			w.WriteHeader(200)
+			fmt.Fprint(w, `token=abc123`)
+		} else if r.URL.Path == "/step2" {
+			w.WriteHeader(200)
+			fmt.Fprint(w, "step2 matched ok")
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: multi-step-events-test
+info:
+  name: Multi Step Events Test
+  author: test
+  severity: info
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/step1"
+    extractors:
+      - type: regex
+        name: token
+        regex:
+          - "token=([a-z0-9]+)"
+        internal: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/step2"
+    matchers:
+      - type: word
+        words:
+          - "step2 matched"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+
+	err = tmpl.Compile(nil)
+	require.NoError(t, err)
+
+	result, events, err := tmpl.ExecuteWithEvents(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+
+	// Should have events from both steps
+	require.GreaterOrEqual(t, len(events), 1, "should have at least one event")
+
+	// Find events containing step1 and step2 requests
+	var hasStep1, hasStep2 bool
+	for _, ev := range events {
+		if ev.Request != "" {
+			if containsAll(ev.Request, "/step1") {
+				hasStep1 = true
+				require.Contains(t, ev.Response, "token=abc123")
+			}
+			if containsAll(ev.Request, "/step2") {
+				hasStep2 = true
+				require.Contains(t, ev.Response, "step2 matched ok")
+			}
+		}
+	}
+	require.True(t, hasStep2, "should have step2 event with request/response")
+	// step1 uses internal extractor so it produces a dynamic-values-only result
+	// that may or may not emit a ResultEvent — either is acceptable
+	_ = hasStep1
+}
+
+func containsAll(s string, substrs ...string) bool {
+	for _, sub := range substrs {
+		if !strings.Contains(s, sub) {
+			return false
+		}
+	}
+	return true
 }

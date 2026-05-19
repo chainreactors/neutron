@@ -58,7 +58,11 @@ func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, err
 		err := req.ExecuteWithResults(input, dynamicValues, previous, func(event *protocols.InternalWrappedEvent) {
 			if event.OperatorsResult != nil {
 				result = event.OperatorsResult
+				if len(event.Results) == 0 {
+					event.Results = []*protocols.ResultEvent{req.MakeResultEventItem(event)}
+				}
 			}
+			input.LogEvent(event)
 		})
 		if err != nil {
 			return nil, err
