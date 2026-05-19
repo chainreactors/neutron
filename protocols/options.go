@@ -5,4 +5,5 @@ type Options struct {
 	AttackType  string
 	Opsec       bool
 	Timeout     int
+	TextOnly    bool
 }
