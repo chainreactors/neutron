@@ -27,7 +27,7 @@ func TestResponseToDSLMapDecodesGzipBody(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(gzipBody(t, "vulnexists"))),
 	}
 
-	data := (&Request{}).responseToDSLMap(req, resp, "https://example.com", "https://example.com", time.Second, nil)
+	data := (&Request{}).responseToDSLMap(req, resp, "https://example.com", "https://example.com", time.Second, nil, nil)
 	require.Equal(t, "vulnexists", data["body"])
 	require.Equal(t, len("vulnexists"), data["content_length"])
 }
@@ -47,7 +47,7 @@ func TestResponseToDSLMapDecodesDeflateBody(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(deflateBody(t, "vulnexists"))),
 	}
 
-	data := (&Request{}).responseToDSLMap(req, resp, "https://example.com", "https://example.com", time.Second, nil)
+	data := (&Request{}).responseToDSLMap(req, resp, "https://example.com", "https://example.com", time.Second, nil, nil)
 	require.Equal(t, "vulnexists", data["body"])
 	require.Equal(t, len("vulnexists"), data["content_length"])
 }
@@ -67,7 +67,7 @@ func TestResponseToDSLMapFallsBackWhenGzipHeaderIsInvalid(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader([]byte("plain-body"))),
 	}
 
-	data := (&Request{}).responseToDSLMap(req, resp, "https://example.com", "https://example.com", time.Second, nil)
+	data := (&Request{}).responseToDSLMap(req, resp, "https://example.com", "https://example.com", time.Second, nil, nil)
 	require.Equal(t, "plain-body", data["body"])
 	require.Equal(t, len("plain-body"), data["content_length"])
 }

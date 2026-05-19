@@ -83,7 +83,8 @@ func (r *Request) parseAnnotations(rawRequest string, request *http.Request) (*h
 
 		value := strings.TrimSpace(duration[1])
 		if parsed, err := time.ParseDuration(value); err == nil {
-			ctx, _ := context.WithTimeout(context.Background(), parsed)
+			ctx, cancel := context.WithTimeout(context.Background(), parsed)
+			go func() { <-ctx.Done(); cancel() }()
 			request = request.WithContext(ctx)
 		} else {
 			request = request.WithContext(request.Context())

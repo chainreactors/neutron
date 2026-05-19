@@ -222,6 +222,8 @@ func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *
 		ExtractedResults: wrapped.OperatorsResult.OutputExtracts,
 		Timestamp:        time.Now(),
 		IP:               common.ToString(wrapped.InternalEvent["ip"]),
+		Request:          common.ToString(wrapped.InternalEvent["request"]),
+		Response:         common.ToString(wrapped.InternalEvent["response"]),
 	}
 	return data
 }
@@ -408,6 +410,12 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 }
 
 func (r *Request) executeRequest(input *protocols.ScanContext, request *generatedRequest, previousEvent map[string]interface{}, callback protocols.OutputEventCallback, reqcount int) error {
+	var reqBody []byte
+	if request.request.Body != nil {
+		reqBody, _ = io.ReadAll(request.request.Body)
+		request.request.Body = NopCloser(bytes.NewReader(reqBody))
+	}
+
 	timeStart := time.Now()
 	resp, err := r.httpClient.Do(request.request)
 	common.Debug("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
@@ -428,7 +436,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 		}
 	}
 	finalEvent := make(map[string]interface{})
-	outputEvent := r.responseToDSLMap(request.request, resp, input.Input, matchedURL, duration, request.dynamicValues)
+	outputEvent := r.responseToDSLMap(request.request, resp, input.Input, matchedURL, duration, request.dynamicValues, reqBody)
 	for k, v := range previousEvent {
 		finalEvent[k] = v
 	}
@@ -453,6 +461,8 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 		event.OperatorsResult, ok = r.CompiledOperators.Execute(finalEvent, r.Match, r.Extract)
 		if ok && event.OperatorsResult != nil {
 			event.OperatorsResult.PayloadValues = request.dynamicValues
+			event.OperatorsResult.Request = common.ToString(finalEvent["request"])
+			event.OperatorsResult.Response = common.ToString(finalEvent["response"])
 			event.Results = r.MakeResultEvent(event)
 			callback(event)
 			return nil
@@ -462,7 +472,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 }
 
 // responseToDSLMap converts an HTTP response to a map for use in DSL matching
-func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host, matched string, duration time.Duration, extra map[string]interface{}) protocols.InternalEvent {
+func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host, matched string, duration time.Duration, extra map[string]interface{}, reqBody []byte) protocols.InternalEvent {
 	data := make(protocols.InternalEvent, 12+len(extra)+len(resp.Header)+len(resp.Cookies()))
 	for k, v := range extra {
 		data[k] = v
@@ -475,8 +485,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	data["matched"] = matched
 	data["status_code"] = resp.StatusCode
 	data["duration"] = duration.Seconds()
-	var respRaw bytes.Buffer
-	respRaw.WriteString(fmt.Sprintf("%s %s\r\n", resp.Proto, resp.Status))
+
 	var headerBuilder strings.Builder
 	for k, v := range resp.Header {
 		joinedValue := strings.Join(v, ", ")
@@ -496,16 +505,25 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	} else {
 		data["content_length"] = len(body)
 	}
-	data["request"] = respRaw
-	data["response"] = respRaw.String()
 
-	var reqRaw bytes.Buffer
-	reqRaw.WriteString(fmt.Sprintf("%s %s\r\n", req.Method, req.URL.String()))
-	for k, v := range req.Header {
-		reqRaw.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+	var respRaw bytes.Buffer
+	respRaw.WriteString(fmt.Sprintf("%s %s\r\n", resp.Proto, resp.Status))
+	for k, v := range resp.Header {
+		respRaw.WriteString(fmt.Sprintf("%s: %s\r\n", k, strings.Join(v, ", ")))
 	}
 	respRaw.WriteString("\r\n")
 	respRaw.Write(body)
+	data["response"] = respRaw.String()
+
+	var reqRaw bytes.Buffer
+	reqRaw.WriteString(fmt.Sprintf("%s %s HTTP/1.1\r\n", req.Method, req.URL.String()))
+	for k, v := range req.Header {
+		reqRaw.WriteString(fmt.Sprintf("%s: %s\r\n", k, strings.Join(v, ", ")))
+	}
+	reqRaw.WriteString("\r\n")
+	if len(reqBody) > 0 {
+		reqRaw.Write(reqBody)
+	}
 	data["request"] = reqRaw.String()
 
 	if r.StopAtFirstMatch {
@@ -519,7 +537,8 @@ func (r *Request) GetID() string {
 }
 
 func (r *Request) Context() context.Context {
-	ctx, _ := context.WithTimeout(context.Background(), time.Duration(r.options.Options.Timeout)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(r.options.Options.Timeout)*time.Second)
+	go func() { <-ctx.Done(); cancel() }()
 	return ctx
 }
 

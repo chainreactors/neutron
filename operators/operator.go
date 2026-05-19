@@ -41,6 +41,10 @@ type Result struct {
 	DynamicValues map[string][]string
 	// PayloadValues contains payload values provided by user. (Optional)
 	PayloadValues map[string]interface{}
+	// Request is the raw HTTP request for the match.
+	Request string
+	// Response is the raw HTTP response for the match.
+	Response string
 }
 
 func (r *Operators) Compile() error {
