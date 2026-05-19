@@ -46,14 +46,23 @@ func (n *Node) String() string {
 	return "?"
 }
 
-func literal(v interface{}) *Node   { return &Node{Type: NodeLiteral, Value: v} }
-func variable(name string) *Node    { return &Node{Type: NodeVariable, Value: name} }
-func binaryOp(op string, l, r *Node) *Node {
+func Literal(v interface{}) *Node { return &Node{Type: NodeLiteral, Value: v} }
+func Variable(name string) *Node { return &Node{Type: NodeVariable, Value: name} }
+func BinaryOp(op string, l, r *Node) *Node {
 	return &Node{Type: NodeBinaryOp, Op: op, Children: []*Node{l, r}}
 }
-func unaryOp(op string, operand *Node) *Node {
+func UnaryOp(op string, operand *Node) *Node {
 	return &Node{Type: NodeUnaryOp, Op: op, Children: []*Node{operand}}
 }
-func call(name string, args ...*Node) *Node {
+func Call(name string, args ...*Node) *Node {
 	return &Node{Type: NodeCall, FuncName: name, Children: args}
 }
+
+// internal aliases for parser
+var (
+	literal  = Literal
+	variable = Variable
+	binaryOp = BinaryOp
+	unaryOp  = UnaryOp
+	call     = Call
+)

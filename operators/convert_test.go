@@ -13,39 +13,36 @@ func newMatcher(typ string) *Matcher {
 }
 
 func TestMatcherWordToQuery(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
 	m := newMatcher("word")
 	m.Words = []string{"admin", "login"}
 	m.condition = ANDCondition
 
-	r := m.ToQuery(e)
-	expected := `(body="admin" && body="login")`
+	r := m.ToQuery().ToFOFA()
+	expected := `body="admin" && body="login"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
 	}
 }
 
 func TestMatcherWordOrCondition(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
 	m := newMatcher("word")
 	m.Words = []string{"login", "signin"}
 	m.condition = ORCondition
 
-	r := m.ToQuery(e)
-	expected := `(body="login" || body="signin")`
+	r := m.ToQuery().ToFOFA()
+	expected := `body="login" || body="signin"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
 	}
 }
 
 func TestMatcherWordHeaderPart(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
 	m := newMatcher("word")
 	m.Part = "header"
 	m.Words = []string{"Apache"}
 	m.condition = ORCondition
 
-	r := m.ToQuery(e)
+	r := m.ToQuery().ToFOFA()
 	expected := `header="Apache"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
@@ -53,23 +50,21 @@ func TestMatcherWordHeaderPart(t *testing.T) {
 }
 
 func TestMatcherStatus(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
 	m := newMatcher("status")
 	m.Status = []int{200, 301}
 
-	r := m.ToQuery(e)
-	expected := `(status_code="200" || status_code="301")`
+	r := m.ToQuery().ToFOFA()
+	expected := `status_code="200" || status_code="301"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
 	}
 }
 
 func TestMatcherFaviconFOFA(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
 	m := newMatcher("favicon")
 	m.Hash = []string{"12345"}
 
-	r := m.ToQuery(e)
+	r := m.ToQuery().ToFOFA()
 	expected := `icon_hash="12345"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
@@ -77,11 +72,10 @@ func TestMatcherFaviconFOFA(t *testing.T) {
 }
 
 func TestMatcherFaviconCensys(t *testing.T) {
-	e := &dsl.CensysEmitter{}
 	m := newMatcher("favicon")
 	m.Hash = []string{"12345"}
 
-	r := m.ToQuery(e)
+	r := m.ToQuery().ToCensys()
 	if r.Query != "" {
 		t.Errorf("expected empty query for censys favicon, got %q", r.Query)
 	}
@@ -91,12 +85,11 @@ func TestMatcherFaviconCensys(t *testing.T) {
 }
 
 func TestMatcherDSL(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
 	m := newMatcher("dsl")
 	m.DSL = []string{`contains(body, "wp-content") && status_code == 200`}
 	m.condition = ORCondition
 
-	r := m.ToQuery(e)
+	r := m.ToQuery().ToFOFA()
 	expected := `body="wp-content" && status_code="200"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
@@ -104,13 +97,12 @@ func TestMatcherDSL(t *testing.T) {
 }
 
 func TestMatcherNegative(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
 	m := newMatcher("word")
 	m.Words = []string{"error"}
 	m.Negative = true
 	m.condition = ORCondition
 
-	r := m.ToQuery(e)
+	r := m.ToQuery().ToFOFA()
 	expected := `!(body="error")`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
@@ -118,19 +110,16 @@ func TestMatcherNegative(t *testing.T) {
 }
 
 func TestMatcherRegexError(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
 	m := newMatcher("regex")
 	m.Regex = []string{"pattern"}
 
-	r := m.ToQuery(e)
-	if !r.HasErrors() {
+	q := m.ToQuery()
+	if len(q.Errors) == 0 {
 		t.Error("expected error for regex matcher")
 	}
 }
 
 func TestOperatorsToQuery(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
-
 	wordMatcher := newMatcher("word")
 	wordMatcher.Words = []string{"admin"}
 	wordMatcher.condition = ORCondition
@@ -144,7 +133,7 @@ func TestOperatorsToQuery(t *testing.T) {
 	}
 	ops.matchersCondition = ANDCondition
 
-	r := ops.ToQuery(e)
+	r := ops.ToQuery().ToFOFA()
 	expected := `body="admin" && status_code="200"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
@@ -152,8 +141,6 @@ func TestOperatorsToQuery(t *testing.T) {
 }
 
 func TestOperatorsOrCondition(t *testing.T) {
-	e := &dsl.CensysEmitter{}
-
 	m1 := newMatcher("word")
 	m1.Words = []string{"login"}
 	m1.condition = ORCondition
@@ -168,7 +155,7 @@ func TestOperatorsOrCondition(t *testing.T) {
 	}
 	ops.matchersCondition = ORCondition
 
-	r := ops.ToQuery(e)
+	r := ops.ToQuery().ToCensys()
 	expected := `services.http.response.body: "login" OR services.http.response.headers: "nginx"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
@@ -176,8 +163,6 @@ func TestOperatorsOrCondition(t *testing.T) {
 }
 
 func TestOperatorsPartialResult(t *testing.T) {
-	e := &dsl.FOFAEmitter{}
-
 	wordMatcher := newMatcher("word")
 	wordMatcher.Words = []string{"test"}
 	wordMatcher.condition = ORCondition
@@ -191,11 +176,37 @@ func TestOperatorsPartialResult(t *testing.T) {
 	}
 	ops.matchersCondition = ANDCondition
 
-	r := ops.ToQuery(e)
+	r := ops.ToQuery().ToFOFA()
 	if r.Query != `body="test"` {
 		t.Errorf("got %q, want partial query", r.Query)
 	}
 	if !r.HasErrors() {
 		t.Error("expected errors for regex matcher")
+	}
+}
+
+func TestQueryAllPlatforms(t *testing.T) {
+	m := newMatcher("word")
+	m.Words = []string{"admin"}
+	m.condition = ORCondition
+
+	q := m.ToQuery()
+
+	tests := []struct {
+		name string
+		r    *dsl.Result
+		want string
+	}{
+		{"fofa", q.ToFOFA(), `body="admin"`},
+		{"hunter", q.ToHunter(), `body="admin"`},
+		{"censys", q.ToCensys(), `services.http.response.body: "admin"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.r.Query != tt.want {
+				t.Errorf("got %q, want %q", tt.r.Query, tt.want)
+			}
+		})
 	}
 }

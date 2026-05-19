@@ -6,143 +6,115 @@ import (
 	"github.com/chainreactors/neutron/common/dsl"
 )
 
-func (m *Matcher) ToQuery(e dsl.Emitter) *dsl.Result {
-	r := &dsl.Result{}
+func (m *Matcher) ToQuery() *dsl.Query {
+	q := dsl.NewQuery()
 	part := dsl.NormalizePart(m.Part)
 
+	var node *dsl.Node
 	switch m.matcherType {
 	case WordsMatcher:
-		r.Query = matcherWordsToQuery(m, e, part, r)
+		node = matcherWordsToNode(m, part, q)
 	case StatusMatcher:
-		r.Query = matcherStatusToQuery(m, e, r)
+		node = matcherStatusToNode(m, q)
 	case FaviconMatcher:
-		r.Query = matcherFaviconToQuery(m, e, r)
+		node = matcherFaviconToNode(m, q)
 	case DSLMatcher:
-		r.Query = matcherDSLToQuery(m, e, r)
+		node = matcherDSLToNode(m, q)
 	case RegexMatcher:
-		r.Errors = append(r.Errors, "regex matcher cannot be converted to search query")
+		q.Errors = append(q.Errors, "regex matcher cannot be converted to search query")
 	case BinaryMatcher:
-		r.Errors = append(r.Errors, "binary matcher cannot be converted to search query")
+		q.Errors = append(q.Errors, "binary matcher cannot be converted to search query")
 	case SizeMatcher:
-		r.Errors = append(r.Errors, "size matcher cannot be converted to search query")
+		q.Errors = append(q.Errors, "size matcher cannot be converted to search query")
 	default:
-		r.Errors = append(r.Errors, fmt.Sprintf("unknown matcher type: %d", m.matcherType))
+		q.Errors = append(q.Errors, fmt.Sprintf("unknown matcher type: %d", m.matcherType))
 	}
 
-	if m.Negative && r.Query != "" {
-		r.Query = e.Not(r.Query)
+	if node != nil && m.Negative {
+		node = dsl.UnaryOp("!", node)
 	}
-	return r
+	q.Node = node
+	return q
 }
 
-func (o *Operators) ToQuery(e dsl.Emitter) *dsl.Result {
-	r := &dsl.Result{}
-	var clauses []string
+func (o *Operators) ToQuery() *dsl.Query {
+	q := dsl.NewQuery()
+	var nodes []*dsl.Node
 
 	for _, m := range o.Matchers {
-		mr := m.ToQuery(e)
-		r.Warnings = append(r.Warnings, mr.Warnings...)
-		r.Errors = append(r.Errors, mr.Errors...)
-		if mr.Query != "" {
-			clauses = append(clauses, mr.Query)
+		mq := m.ToQuery()
+		q.Warnings = append(q.Warnings, mq.Warnings...)
+		q.Errors = append(q.Errors, mq.Errors...)
+		if mq.Node != nil {
+			nodes = append(nodes, mq.Node)
 		}
 	}
 
-	if len(clauses) == 0 {
-		return r
-	}
-
-	if o.matchersCondition == ANDCondition {
-		r.Query = e.And(clauses...)
-	} else {
-		r.Query = e.Or(clauses...)
-	}
-	return r
+	q.Node = joinNodes(nodes, o.matchersCondition == ANDCondition)
+	return q
 }
 
-func matcherWordsToQuery(m *Matcher, e dsl.Emitter, part string, r *dsl.Result) string {
-	field := e.Field(part)
-	clauses := make([]string, 0, len(m.Words))
+func joinNodes(nodes []*dsl.Node, isAnd bool) *dsl.Node {
+	if len(nodes) == 0 {
+		return nil
+	}
+	if len(nodes) == 1 {
+		return nodes[0]
+	}
+	op := "||"
+	if isAnd {
+		op = "&&"
+	}
+	result := nodes[0]
+	for _, n := range nodes[1:] {
+		result = dsl.BinaryOp(op, result, n)
+	}
+	return result
+}
+
+func matcherWordsToNode(m *Matcher, part string, q *dsl.Query) *dsl.Node {
+	var nodes []*dsl.Node
 
 	if part == "all" {
 		for _, word := range m.Words {
-			bodyQ := e.Contains(e.Field("body"), word)
-			headerQ := e.Contains(e.Field("all_headers"), word)
-			clauses = append(clauses, e.Group(e.Or(bodyQ, headerQ)))
+			bodyCall := dsl.Call("contains", dsl.Variable("body"), dsl.Literal(word))
+			headerCall := dsl.Call("contains", dsl.Variable("all_headers"), dsl.Literal(word))
+			nodes = append(nodes, dsl.BinaryOp("||", bodyCall, headerCall))
 		}
 	} else {
 		for _, word := range m.Words {
-			clauses = append(clauses, e.Contains(field, word))
+			nodes = append(nodes, dsl.Call("contains", dsl.Variable(part), dsl.Literal(word)))
 		}
 	}
 
-	if len(clauses) == 0 {
-		return ""
-	}
-	if len(clauses) == 1 {
-		return clauses[0]
-	}
-	if m.condition == ANDCondition {
-		return e.Group(e.And(clauses...))
-	}
-	return e.Group(e.Or(clauses...))
+	return joinNodes(nodes, m.condition == ANDCondition)
 }
 
-func matcherStatusToQuery(m *Matcher, e dsl.Emitter, r *dsl.Result) string {
-	clauses := make([]string, 0, len(m.Status))
+func matcherStatusToNode(m *Matcher, q *dsl.Query) *dsl.Node {
+	var nodes []*dsl.Node
 	for _, code := range m.Status {
-		clauses = append(clauses, e.StatusCode(code))
+		nodes = append(nodes, dsl.BinaryOp("==", dsl.Variable("status_code"), dsl.Literal(fmt.Sprintf("%d", code))))
 	}
-	if len(clauses) <= 1 {
-		return joinOr(clauses)
-	}
-	return e.Group(e.Or(clauses...))
+	return joinNodes(nodes, false)
 }
 
-func joinOr(clauses []string) string {
-	if len(clauses) == 0 {
-		return ""
-	}
-	return clauses[0]
-}
-
-func matcherFaviconToQuery(m *Matcher, e dsl.Emitter, r *dsl.Result) string {
-	clauses := make([]string, 0, len(m.Hash))
+func matcherFaviconToNode(m *Matcher, q *dsl.Query) *dsl.Node {
+	var nodes []*dsl.Node
 	for _, hash := range m.Hash {
-		q, err := e.FaviconHash(hash)
-		if err != nil {
-			r.Errors = append(r.Errors, err.Error())
-			continue
-		}
-		clauses = append(clauses, q)
+		nodes = append(nodes, dsl.Call("favicon_hash", dsl.Literal(hash)))
 	}
-	if len(clauses) == 0 {
-		return ""
-	}
-	return e.Or(clauses...)
+	return joinNodes(nodes, false)
 }
 
-func matcherDSLToQuery(m *Matcher, e dsl.Emitter, r *dsl.Result) string {
-	clauses := make([]string, 0, len(m.DSL))
+func matcherDSLToNode(m *Matcher, q *dsl.Query) *dsl.Node {
+	var nodes []*dsl.Node
 	for _, expr := range m.DSL {
 		node, err := dsl.Parse(expr)
 		if err != nil {
-			r.Errors = append(r.Errors, fmt.Sprintf("failed to parse DSL %q: %v", expr, err))
+			q.Errors = append(q.Errors, fmt.Sprintf("failed to parse DSL %q: %v", expr, err))
 			continue
 		}
-		dr := dsl.Generate(node, e)
-		r.Warnings = append(r.Warnings, dr.Warnings...)
-		r.Errors = append(r.Errors, dr.Errors...)
-		if dr.Query != "" {
-			clauses = append(clauses, dr.Query)
-		}
+		nodes = append(nodes, node)
 	}
-
-	if len(clauses) == 0 {
-		return ""
-	}
-	if m.condition == ANDCondition {
-		return e.And(clauses...)
-	}
-	return e.Or(clauses...)
+	return joinNodes(nodes, m.condition == ANDCondition)
 }

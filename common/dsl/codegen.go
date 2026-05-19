@@ -32,6 +32,62 @@ func Generate(node *Node, emitter Emitter) *Result {
 	return r
 }
 
+// Query is the platform-agnostic intermediate representation.
+// Build it from matchers/templates, then call ToFOFA()/ToHunter()/ToCensys().
+type Query struct {
+	Node     *Node
+	Metadata map[string][]string // platform -> pre-written queries
+	Warnings []string
+	Errors   []string
+}
+
+func NewQuery() *Query {
+	return &Query{Metadata: make(map[string][]string)}
+}
+
+func (q *Query) ToFOFA() *Result   { return q.emit("fofa", &FOFAEmitter{}) }
+func (q *Query) ToHunter() *Result { return q.emit("hunter", &HunterEmitter{}) }
+func (q *Query) ToCensys() *Result { return q.emit("censys", &CensysEmitter{}) }
+
+func (q *Query) Emit(platform string) *Result {
+	e, ok := GetEmitter(platform)
+	if !ok {
+		return &Result{Errors: []string{fmt.Sprintf("unknown platform: %s", platform)}}
+	}
+	return q.emit(platform, e)
+}
+
+func (q *Query) emit(platform string, e Emitter) *Result {
+	r := &Result{
+		Warnings: q.Warnings,
+		Errors:   q.Errors,
+	}
+
+	var clauses []string
+
+	if metas, ok := q.Metadata[platform]; ok {
+		clauses = append(clauses, metas...)
+	}
+
+	if q.Node != nil {
+		gr := Generate(q.Node, e)
+		r.Warnings = append(r.Warnings, gr.Warnings...)
+		r.Errors = append(r.Errors, gr.Errors...)
+		if gr.Query != "" {
+			clauses = append(clauses, gr.Query)
+		}
+	}
+
+	switch len(clauses) {
+	case 0:
+	case 1:
+		r.Query = clauses[0]
+	default:
+		r.Query = e.Or(clauses...)
+	}
+	return r
+}
+
 func generate(node *Node, e Emitter, r *Result) string {
 	switch node.Type {
 	case NodeLiteral:
@@ -116,6 +172,8 @@ func genCall(node *Node, e Emitter, r *Result) string {
 	case "ends_with":
 		r.Warnings = append(r.Warnings, "ends_with approximated as contains")
 		return genContains(node, e, r)
+	case "favicon_hash":
+		return genFaviconHash(node, e, r)
 	default:
 		r.Errors = append(r.Errors, fmt.Sprintf("unsupported function: %s", node.FuncName))
 		return ""
@@ -146,6 +204,20 @@ func genContainsMulti(node *Node, e Emitter, r *Result, isAll bool) string {
 		return e.Group(e.And(clauses...))
 	}
 	return e.Group(e.Or(clauses...))
+}
+
+func genFaviconHash(node *Node, e Emitter, r *Result) string {
+	if len(node.Children) < 1 {
+		r.Errors = append(r.Errors, "favicon_hash requires 1 arg")
+		return ""
+	}
+	hash := resolveValue(node.Children[0])
+	q, err := e.FaviconHash(hash)
+	if err != nil {
+		r.Errors = append(r.Errors, err.Error())
+		return ""
+	}
+	return q
 }
 
 func resolveField(node *Node, e Emitter) string {

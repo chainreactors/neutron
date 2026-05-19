@@ -1,129 +1,81 @@
 package templates
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/chainreactors/neutron/common/dsl"
 )
 
-type QueryResult struct {
-	Query    string
-	Source   string // "metadata", "matcher", or "combined"
-	Warnings []string
-	Errors   []string
-}
+func (t *Template) ToQuery() *dsl.Query {
+	q := dsl.NewQuery()
 
-func (r *QueryResult) HasErrors() bool { return len(r.Errors) > 0 }
-
-func (t *Template) ToQuery(platform string) *QueryResult {
-	metaQ := t.metadataQuery(platform)
-	matcherR := t.matcherQuery(platform)
-
-	var clauses []string
-	if metaQ != "" {
-		clauses = append(clauses, metaQ)
-	}
-	if matcherR.Query != "" {
-		clauses = append(clauses, matcherR.Query)
-	}
-
-	result := &QueryResult{
-		Warnings: matcherR.Warnings,
-		Errors:   matcherR.Errors,
-	}
-
-	switch {
-	case len(clauses) == 0:
-		result.Source = matcherR.Source
-	case metaQ != "" && matcherR.Query != "":
-		emitter, ok := dsl.GetEmitter(platform)
-		if ok {
-			result.Query = emitter.Or(clauses...)
-		} else {
-			result.Query = strings.Join(clauses, " || ")
+	// metadata queries (fofa-query, hunter-query, shodan-query, censys-query)
+	if t.Info.Metadata != nil {
+		for _, platform := range []string{"fofa", "hunter", "shodan", "censys"} {
+			if metas := extractMetadataQueries(t.Info.Metadata, platform); len(metas) > 0 {
+				q.Metadata[platform] = metas
+			}
 		}
-		result.Source = "combined"
-	case metaQ != "":
-		result.Query = metaQ
-		result.Source = "metadata"
-	default:
-		result.Query = matcherR.Query
-		result.Source = "matcher"
 	}
-	return result
+
+	// matcher-derived AST
+	requests := t.GetRequests()
+	if len(requests) == 0 {
+		return q
+	}
+
+	var nodes []*dsl.Node
+	for _, req := range requests {
+		rq := req.Operators.ToQuery()
+		q.Warnings = append(q.Warnings, rq.Warnings...)
+		q.Errors = append(q.Errors, rq.Errors...)
+		if rq.Node != nil {
+			nodes = append(nodes, rq.Node)
+		}
+	}
+
+	if len(nodes) == 1 {
+		q.Node = nodes[0]
+	} else if len(nodes) > 1 {
+		result := nodes[0]
+		for _, n := range nodes[1:] {
+			result = dsl.BinaryOp("||", result, n)
+		}
+		q.Node = result
+	}
+
+	return q
 }
 
-func (t *Template) metadataQuery(platform string) string {
-	if t.Info.Metadata == nil {
-		return ""
-	}
-
-	key := platform + "-query"
-	val, ok := t.Info.Metadata[key]
+func extractMetadataQueries(metadata map[string]interface{}, platform string) []string {
+	val, ok := metadata[platform+"-query"]
 	if !ok {
-		return ""
+		return nil
 	}
 
 	switch v := val.(type) {
 	case string:
-		return strings.TrimSpace(v)
+		if s := strings.TrimSpace(v); s != "" {
+			return []string{s}
+		}
 	case []interface{}:
-		parts := make([]string, 0, len(v))
+		var result []string
 		for _, item := range v {
-			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-				parts = append(parts, strings.TrimSpace(s))
+			if s, ok := item.(string); ok {
+				if s = strings.TrimSpace(s); s != "" {
+					result = append(result, s)
+				}
 			}
 		}
-		if len(parts) == 0 {
-			return ""
-		}
-		return strings.Join(parts, " || ")
+		return result
 	case []string:
-		parts := make([]string, 0, len(v))
+		var result []string
 		for _, s := range v {
-			if strings.TrimSpace(s) != "" {
-				parts = append(parts, strings.TrimSpace(s))
+			if s = strings.TrimSpace(s); s != "" {
+				result = append(result, s)
 			}
 		}
-		if len(parts) == 0 {
-			return ""
-		}
-		return strings.Join(parts, " || ")
+		return result
 	}
-	return ""
-}
-
-func (t *Template) matcherQuery(platform string) *QueryResult {
-	emitter, ok := dsl.GetEmitter(platform)
-	if !ok {
-		return &QueryResult{
-			Errors: []string{fmt.Sprintf("unknown platform: %s", platform)},
-		}
-	}
-
-	requests := t.GetRequests()
-	if len(requests) == 0 {
-		return &QueryResult{Errors: []string{"no HTTP requests in template"}}
-	}
-
-	var allClauses []string
-	result := &QueryResult{Source: "matcher"}
-
-	for _, req := range requests {
-		r := req.Operators.ToQuery(emitter)
-		result.Warnings = append(result.Warnings, r.Warnings...)
-		result.Errors = append(result.Errors, r.Errors...)
-		if r.Query != "" {
-			allClauses = append(allClauses, r.Query)
-		}
-	}
-
-	if len(allClauses) == 1 {
-		result.Query = allClauses[0]
-	} else if len(allClauses) > 1 {
-		result.Query = emitter.Or(allClauses...)
-	}
-
-	return result
+	return nil
 }

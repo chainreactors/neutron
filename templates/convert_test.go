@@ -16,28 +16,22 @@ func makeTemplate(id string, matchers []*operators.Matcher, matchersCond string,
 	}
 	req.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{}})
 
-	t := &Template{
+	return &Template{
 		Id:           id,
 		Info:         Info{Name: id, Metadata: metadata},
 		RequestsHTTP: []*http.Request{req},
 	}
-	return t
 }
 
 func TestTemplateToQuery_MetadataOnly(t *testing.T) {
-	// Template with fofa-query but no matchers — metadata only
 	tmpl := makeTemplate("test-app", nil, "", map[string]interface{}{
 		"fofa-query": []interface{}{`title="appspace"`},
 	})
 
-	r := tmpl.ToQuery("fofa")
-	if r.Source != "metadata" {
-		t.Errorf("expected source=metadata, got %s", r.Source)
-	}
+	r := tmpl.ToQuery().ToFOFA()
 	if r.Query != `title="appspace"` {
 		t.Errorf("got %q, want %q", r.Query, `title="appspace"`)
 	}
-	t.Logf("[fofa] source=%s query=%s", r.Source, r.Query)
 }
 
 func TestTemplateToQuery_MetadataMultipleQueries(t *testing.T) {
@@ -45,46 +39,26 @@ func TestTemplateToQuery_MetadataMultipleQueries(t *testing.T) {
 		"fofa-query": []interface{}{`body="admin"`, `title="login"`},
 	})
 
-	r := tmpl.ToQuery("fofa")
+	r := tmpl.ToQuery().ToFOFA()
 	expected := `body="admin" || title="login"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
 	}
 }
 
-func TestTemplateToQuery_MetadataString(t *testing.T) {
-	tmpl := makeTemplate("test-str", nil, "", map[string]interface{}{
-		"fofa-query": `server="nginx"`,
-	})
-
-	r := tmpl.ToQuery("fofa")
-	if r.Query != `server="nginx"` {
-		t.Errorf("got %q", r.Query)
-	}
-	if r.Source != "metadata" {
-		t.Errorf("expected source=metadata")
-	}
-}
-
 func TestTemplateToQuery_FallbackToMatcher(t *testing.T) {
-	// No metadata query — should fall back to matcher conversion
 	tmpl := makeTemplate("test-fallback",
 		[]*operators.Matcher{
 			{Type: "word", Part: "body", Words: []string{"wp-content"}},
 		}, "or", nil)
 
-	r := tmpl.ToQuery("fofa")
-	if r.Source != "matcher" {
-		t.Errorf("expected source=matcher, got %s", r.Source)
-	}
+	r := tmpl.ToQuery().ToFOFA()
 	if r.Query != `body="wp-content"` {
 		t.Errorf("got %q", r.Query)
 	}
-	t.Logf("[fofa] source=%s query=%s", r.Source, r.Query)
 }
 
 func TestTemplateToQuery_CombinedMetadataAndMatcher(t *testing.T) {
-	// Has both metadata query AND matchers — combined with OR
 	tmpl := makeTemplate("test-combined",
 		[]*operators.Matcher{
 			{Type: "word", Part: "body", Words: []string{"some-word"}},
@@ -93,10 +67,7 @@ func TestTemplateToQuery_CombinedMetadataAndMatcher(t *testing.T) {
 			"fofa-query": `app="special-app"`,
 		})
 
-	r := tmpl.ToQuery("fofa")
-	if r.Source != "combined" {
-		t.Errorf("expected source=combined, got %s", r.Source)
-	}
+	r := tmpl.ToQuery().ToFOFA()
 	expected := `app="special-app" || body="some-word"`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
@@ -108,21 +79,9 @@ func TestTemplateToQuery_HunterQuery(t *testing.T) {
 		"hunter-query": []interface{}{`app.name="connectwise screenconnect software"`},
 	})
 
-	r := tmpl.ToQuery("hunter")
+	r := tmpl.ToQuery().ToHunter()
 	if r.Query != `app.name="connectwise screenconnect software"` {
 		t.Errorf("got %q", r.Query)
-	}
-}
-
-func TestTemplateToQuery_ShodanQuery(t *testing.T) {
-	tmpl := makeTemplate("test-shodan", nil, "", map[string]interface{}{
-		"shodan-query": []interface{}{`http.title:"admin"`, `http.html:"login"`},
-	})
-
-	r := tmpl.ToQuery("shodan")
-	expected := `http.title:"admin" || http.html:"login"`
-	if r.Query != expected {
-		t.Errorf("got %q, want %q", r.Query, expected)
 	}
 }
 
@@ -133,33 +92,55 @@ func TestTemplateToQuery_CensysFallback(t *testing.T) {
 			{Type: "status", Status: []int{200}},
 		}, "and", nil)
 
-	r := tmpl.ToQuery("censys")
+	r := tmpl.ToQuery().ToCensys()
 	expected := `services.http.response.body: "admin" AND services.http.response.status_code: 200`
 	if r.Query != expected {
 		t.Errorf("got %q, want %q", r.Query, expected)
 	}
 }
 
-func TestTemplateToQuery_EmptyMetadata(t *testing.T) {
-	// Empty metadata query should fall back to matcher
-	tmpl := makeTemplate("test-empty-meta",
+func TestTemplateToQuery_AllPlatformsFromOneQuery(t *testing.T) {
+	tmpl := makeTemplate("test-all",
 		[]*operators.Matcher{
 			{Type: "word", Part: "body", Words: []string{"test"}},
-		}, "or",
-		map[string]interface{}{
-			"fofa-query": []interface{}{},
-		})
+		}, "or", nil)
 
-	r := tmpl.ToQuery("fofa")
-	if r.Source != "matcher" {
-		t.Errorf("expected fallback to matcher for empty metadata, got %s", r.Source)
+	q := tmpl.ToQuery()
+	fofa := q.ToFOFA()
+	hunter := q.ToHunter()
+	censys := q.ToCensys()
+
+	if fofa.Query != `body="test"` {
+		t.Errorf("fofa: got %q", fofa.Query)
+	}
+	if hunter.Query != `body="test"` {
+		t.Errorf("hunter: got %q", hunter.Query)
+	}
+	if censys.Query != `services.http.response.body: "test"` {
+		t.Errorf("censys: got %q", censys.Query)
 	}
 }
 
-func TestTemplateToQuery_UnknownPlatform(t *testing.T) {
-	tmpl := makeTemplate("test-unknown", nil, "", nil)
-	r := tmpl.ToQuery("nonexistent")
-	if !r.HasErrors() {
-		t.Error("expected error for unknown platform")
+func TestTemplateToQuery_MetadataPlatformIsolation(t *testing.T) {
+	tmpl := makeTemplate("test-isolation", nil, "", map[string]interface{}{
+		"fofa-query":   `app="WordPress"`,
+		"hunter-query": `app.name="WordPress"`,
+	})
+
+	q := tmpl.ToQuery()
+
+	fofa := q.ToFOFA()
+	if fofa.Query != `app="WordPress"` {
+		t.Errorf("fofa got %q", fofa.Query)
+	}
+
+	hunter := q.ToHunter()
+	if hunter.Query != `app.name="WordPress"` {
+		t.Errorf("hunter got %q", hunter.Query)
+	}
+
+	censys := q.ToCensys()
+	if censys.Query != "" {
+		t.Errorf("censys should be empty (no censys metadata, no matchers), got %q", censys.Query)
 	}
 }
