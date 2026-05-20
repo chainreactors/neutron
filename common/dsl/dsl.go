@@ -156,6 +156,9 @@ func registerDefaultFunctions() {
 		}
 		return float64(length), nil
 	}))
+	MustAddFunction(NewWithPositionalArgs("size", 1, false, func(args ...interface{}) (interface{}, error) {
+		return float64(len(toString(args[0]))), nil
+	}))
 
 	MustAddFunction(NewWithPositionalArgs("to_upper", 1, false, func(args ...interface{}) (interface{}, error) {
 		return strings.ToUpper(toString(args[0])), nil
@@ -426,6 +429,9 @@ func registerDefaultFunctions() {
 	}))
 	MustAddFunction(NewWithPositionalArgs("contains", 2, false, func(args ...interface{}) (interface{}, error) {
 		return strings.Contains(toString(args[0]), toString(args[1])), nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("icontains", 2, false, func(args ...interface{}) (interface{}, error) {
+		return strings.Contains(strings.ToLower(toString(args[0])), strings.ToLower(toString(args[1]))), nil
 	}))
 	MustAddFunction(NewWithSingleSignature("contains_all",
 		"(body interface{}, substrs ...string) bool",

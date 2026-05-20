@@ -58,6 +58,29 @@ func Call(name string, args ...*Node) *Node {
 	return &Node{Type: NodeCall, FuncName: name, Children: args}
 }
 
+// SuffixVariables deep-clones the AST and appends suffix to all Variable node names.
+func SuffixVariables(n *Node, suffix string) *Node {
+	if n == nil {
+		return nil
+	}
+	clone := &Node{
+		Type:     n.Type,
+		Value:    n.Value,
+		Op:       n.Op,
+		FuncName: n.FuncName,
+	}
+	if clone.Type == NodeVariable {
+		clone.Value = clone.Value.(string) + suffix
+	}
+	if len(n.Children) > 0 {
+		clone.Children = make([]*Node, len(n.Children))
+		for i, child := range n.Children {
+			clone.Children[i] = SuffixVariables(child, suffix)
+		}
+	}
+	return clone
+}
+
 // internal aliases for parser
 var (
 	literal  = Literal
