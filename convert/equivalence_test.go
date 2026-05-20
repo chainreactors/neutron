@@ -313,7 +313,10 @@ func stripParens(s string) string {
 	return s[1 : len(s)-1]
 }
 
+
+
 // neutronEval evaluates the converted neutron template against mock response data.
+// Handles req-condition templates by populating _N suffixed variables.
 func neutronEval(convertedYAML []byte, resp mockResponse) bool {
 	var tmpl templates.Template
 	if err := yaml.Unmarshal(convertedYAML, &tmpl); err != nil {
@@ -326,8 +329,28 @@ func neutronEval(convertedYAML []byte, resp mockResponse) bool {
 		}
 	}
 
+	reqs := tmpl.GetRequests()
+	hasReqCond := false
+	for _, req := range reqs {
+		if req.ReqCondition {
+			hasReqCond = true
+			break
+		}
+	}
+
 	data := buildNeutronData(resp)
-	for _, req := range tmpl.GetRequests() {
+
+	if hasReqCond {
+		// Populate _N variables for all requests (same mock data for test)
+		for i := range reqs {
+			suffix := fmt.Sprintf("_%d", i+1)
+			for k, v := range buildNeutronData(resp) {
+				data[k+suffix] = v
+			}
+		}
+	}
+
+	for _, req := range reqs {
 		if req.CompiledOperators == nil || len(req.CompiledOperators.Matchers) == 0 {
 			continue
 		}

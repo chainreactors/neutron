@@ -258,7 +258,7 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 		return p.maybeMethodCall(dsl.Variable("content_type"))
 
 	case "raw_header":
-		return p.maybeMethodCall(dsl.Variable("all_headers"))
+		return p.maybeRawHeaderCall()
 
 	case "title", "title_string":
 		return p.maybeMethodCall(dsl.Variable("title"))
@@ -339,6 +339,51 @@ func isMethodName(name string) bool {
 
 func isReverseRegexMethod(name string) bool {
 	return name == "matches" || name == "bmatches" || name == "submatch" || name == "bsubmatch"
+}
+
+// maybeRawHeaderCall handles response.raw_header method calls.
+// xray's raw_header contains original-case headers ("X-Jenkins: v"),
+// but neutron's all_headers uses normalized keys ("x_jenkins: v").
+// We normalize the search argument to match neutron's format.
+func (p *parser) maybeRawHeaderCall() (*dsl.Node, error) {
+	receiver := dsl.Variable("all_headers")
+	if p.peek().Type != xTDot {
+		return receiver, nil
+	}
+	if p.lookAhead(1).Type != xTIdent || !isMethodName(p.lookAhead(1).Val) {
+		return receiver, nil
+	}
+	if p.lookAhead(2).Type != xTLParen {
+		return receiver, nil
+	}
+
+	p.next() // .
+	method := p.next().Val
+	p.next() // (
+
+	arg, err := p.parseOr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(xTRParen); err != nil {
+		return nil, err
+	}
+
+	fn := methodMap[method]
+
+	// Normalize the search string: lowercase and replace hyphens with underscores
+	// to match neutron's all_headers format.
+	if arg.Type == dsl.NodeLiteral {
+		if s, ok := arg.Value.(string); ok {
+			normalized := strings.ToLower(strings.ReplaceAll(s, "-", "_"))
+			arg = dsl.Literal(normalized)
+		}
+	}
+
+	if fn == "regex" {
+		return dsl.Call("regex", arg, receiver), nil
+	}
+	return dsl.Call(fn, receiver, arg), nil
 }
 
 func (p *parser) maybeMethodCall(receiver *dsl.Node) (*dsl.Node, error) {

@@ -64,10 +64,7 @@ func SuffixVariables(n *Node, suffix string) *Node {
 		return nil
 	}
 	clone := &Node{
-		Type:     n.Type,
-		Value:    n.Value,
-		Op:       n.Op,
-		FuncName: n.FuncName,
+		Type: n.Type, Value: n.Value, Op: n.Op, FuncName: n.FuncName,
 	}
 	if clone.Type == NodeVariable {
 		clone.Value = clone.Value.(string) + suffix

@@ -183,48 +183,62 @@ func simplifyTopExpr(node *TopExprNode) *TopExprNode {
 	return node
 }
 
-// hasANDAcrossGroups checks whether the top-level expression ANDs rules
-// that belong to different request groups (i.e. require req-condition).
-func hasANDAcrossGroups(node *TopExprNode, ruleGroup map[string]string) bool {
+// hasANY returns true if the expression tree contains any AND node.
+func hasANY(node *TopExprNode) bool {
 	if node == nil {
 		return false
 	}
 	if node.Type == "and" {
-		groups := map[string]bool{}
-		for _, name := range collectRuleNames(node) {
-			if g, ok := ruleGroup[name]; ok {
-				groups[g] = true
-			}
-		}
-		if len(groups) > 1 {
-			return true
-		}
+		return true
 	}
 	for _, child := range node.Children {
-		if hasANDAcrossGroups(child, ruleGroup) {
+		if hasANY(child) {
 			return true
 		}
 	}
 	return false
 }
 
-func collectRuleNames(node *TopExprNode) []string {
+// topExprToString serializes a simplified TopExprNode back to a logic string.
+func topExprToString(node *TopExprNode) string {
 	if node == nil {
-		return nil
+		return ""
 	}
-	if node.Type == "call" {
-		return []string{node.Name}
+	switch node.Type {
+	case "call":
+		return node.Name
+	case "and":
+		parts := make([]string, len(node.Children))
+		for i, child := range node.Children {
+			s := topExprToString(child)
+			if child.Type == "or" {
+				s = "(" + s + ")"
+			}
+			parts[i] = s
+		}
+		return strings.Join(parts, " && ")
+	case "or":
+		parts := make([]string, len(node.Children))
+		for i, child := range node.Children {
+			parts[i] = topExprToString(child)
+		}
+		return strings.Join(parts, " || ")
+	case "not":
+		if len(node.Children) > 0 {
+			return "!" + topExprToString(node.Children[0])
+		}
+		return "true"
+	case "literal":
+		if node.Value {
+			return "true"
+		}
+		return "false"
 	}
-	var names []string
-	for _, child := range node.Children {
-		names = append(names, collectRuleNames(child)...)
-	}
-	return names
+	return "true"
 }
 
 // substituteRuleExprs walks the top-level expression tree and replaces
-// each rule call with the corresponding xray expression string,
-// preserving the AND/OR structure.
+// each rule call with the corresponding xray expression string.
 func substituteRuleExprs(node *TopExprNode, ruleExprs map[string]string) string {
 	if node == nil {
 		return "true"
@@ -261,8 +275,8 @@ func substituteRuleExprs(node *TopExprNode, ruleExprs map[string]string) string 
 	return "true"
 }
 
-// buildReqConditionDSL builds a single DSL expression for a req-condition
-// template by suffixing variables with request indices.
+// buildReqConditionDSL builds a single DSL expression for req-condition,
+// suffixing variables by request index.
 func buildReqConditionDSL(node *TopExprNode, ruleExprs map[string]string, ruleReqIndex map[string]int, lastIndex int) string {
 	if node == nil {
 		return "true"
@@ -307,8 +321,6 @@ func buildReqConditionDSL(node *TopExprNode, ruleExprs map[string]string, ruleRe
 	return "true"
 }
 
-// suffixExprVars parses an xray expression, converts it to a DSL AST,
-// adds _N suffix to all variables, and returns the DSL string.
 func suffixExprVars(expr string, reqIndex int) string {
 	ast, err := ParseToAST(expr)
 	if err != nil {
@@ -318,3 +330,18 @@ func suffixExprVars(expr string, reqIndex int) string {
 	suffixed := dsl.SuffixVariables(ast, suffix)
 	return suffixed.String()
 }
+
+func collectRuleNames(node *TopExprNode) []string {
+	if node == nil {
+		return nil
+	}
+	if node.Type == "call" {
+		return []string{node.Name}
+	}
+	var names []string
+	for _, child := range node.Children {
+		names = append(names, collectRuleNames(child)...)
+	}
+	return names
+}
+

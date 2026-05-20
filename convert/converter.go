@@ -128,15 +128,13 @@ type requestGroup struct {
 	headers   map[string]string
 	body      string
 	redirects bool
-	rules     []string // rule names in this group
-	exprs     []string // corresponding expressions
+	rules     []string
+	exprs     []string
 }
 
 func buildHTTPBlocks(poc *XrayPOC) []interface{} {
 	topExpr := parseTopExpression(poc.Expression)
 
-	// After simplification (e.g. removing `|| true` branches),
-	// only process rules still referenced in the expression.
 	keys := sortedKeys(poc.Rules)
 	if topExpr != nil {
 		referenced := map[string]bool{}
@@ -152,35 +150,29 @@ func buildHTTPBlocks(poc *XrayPOC) []interface{} {
 		keys = filtered
 	}
 
-	// Build per-rule request info and group by request signature
-	// (method + path + headers) to preserve request independence.
 	groups, ruleGroup, ruleExprs := groupRules(poc, keys)
-
 	if len(groups) == 0 {
 		return nil
 	}
 
-	// Determine whether we need req-condition (AND across different groups).
-	needReqCond := topExpr != nil && hasANDAcrossGroups(topExpr, ruleGroup)
-
-	if needReqCond && len(groups) > 1 {
+	// Use req-condition when the top-level has any AND and there are
+	// multiple groups. Handles both cross-group AND and within-group AND.
+	if topExpr != nil && len(groups) > 1 && hasANY(topExpr) {
 		return buildReqConditionBlocks(poc, groups, topExpr, ruleExprs, ruleGroup)
 	}
 
-	// Single group or pure OR: substitute expressions into top-level structure.
 	if len(groups) == 1 {
 		return buildSingleGroupBlocks(groups[0], topExpr, ruleExprs)
 	}
 
-	// Multiple groups, no cross-group AND: independent blocks.
-	return buildIndependentBlocks(groups, topExpr, ruleExprs)
+	return buildIndependentBlocks(groups)
 }
 
 func groupRules(poc *XrayPOC, keys []string) ([]*requestGroup, map[string]string, map[string]string) {
 	var groups []*requestGroup
 	groupIndex := map[string]int{}
-	ruleGroup := map[string]string{}  // ruleName → group key
-	ruleExprs := map[string]string{}  // ruleName → expression
+	ruleGroup := map[string]string{}
+	ruleExprs := map[string]string{}
 
 	for _, ruleName := range keys {
 		rule := poc.Rules[ruleName]
@@ -220,9 +212,6 @@ func groupRules(poc *XrayPOC, keys []string) ([]*requestGroup, map[string]string
 	return groups, ruleGroup, ruleExprs
 }
 
-// buildSingleGroupBlocks handles the case where all rules share the same
-// request parameters. The top-level expression structure is preserved
-// by substituting rule expressions into it.
 func buildSingleGroupBlocks(g *requestGroup, topExpr *TopExprNode, ruleExprs map[string]string) []interface{} {
 	var combined string
 	if topExpr != nil && len(g.rules) > 1 {
@@ -244,9 +233,7 @@ func buildSingleGroupBlocks(g *requestGroup, topExpr *TopExprNode, ruleExprs map
 	return []interface{}{req}
 }
 
-// buildIndependentBlocks handles pure OR between groups with different
-// request parameters. Each group becomes an independent HTTP block.
-func buildIndependentBlocks(groups []*requestGroup, topExpr *TopExprNode, ruleExprs map[string]string) []interface{} {
+func buildIndependentBlocks(groups []*requestGroup) []interface{} {
 	var httpReqs []interface{}
 	for _, g := range groups {
 		var combined string
@@ -267,10 +254,7 @@ func buildIndependentBlocks(groups []*requestGroup, topExpr *TopExprNode, ruleEx
 	return httpReqs
 }
 
-// buildReqConditionBlocks handles AND across different request groups
-// using neutron's req-condition mechanism.
 func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopExprNode, ruleExprs map[string]string, ruleGroup map[string]string) []interface{} {
-	// Map each rule to its request index (1-based for req-condition).
 	ruleReqIndex := map[string]int{}
 	for i, g := range groups {
 		for _, ruleName := range g.rules {
@@ -279,8 +263,6 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 	}
 	lastIndex := len(groups)
 
-	// Convert each rule's expression to its DSL string (via ParseToAST).
-	// Transform title variable to body regex since DSL has no title var.
 	ruleDSLExprs := map[string]string{}
 	for ruleName, expr := range ruleExprs {
 		ast, err := ParseToAST(expr)
@@ -292,8 +274,6 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 		ruleDSLExprs[ruleName] = ast.String()
 	}
 
-	// Build a single DSL expression mirroring the top-level logic,
-	// with variables suffixed by request index.
 	topDSL := buildReqConditionDSL(topExpr, ruleDSLExprs, ruleReqIndex, lastIndex)
 
 	var httpReqs []interface{}
@@ -311,7 +291,6 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 		if g.redirects {
 			req["redirects"] = true
 		}
-
 		if i == len(groups)-1 {
 			req["req-condition"] = true
 			req["matchers"] = []interface{}{

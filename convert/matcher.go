@@ -36,8 +36,10 @@ func astToMatchers(node *dsl.Node) *ConvertResult {
 	}
 
 	merged := mergeCompatibleNodes(children, topOp)
+
+	// First pass: collect all matchers
+	var allMatchers []*operators.Matcher
 	for _, child := range merged {
-		// Skip true stubs (from response.cert/url)
 		if child.Type == dsl.NodeLiteral {
 			if b, ok := child.Value.(bool); ok && b {
 				continue
@@ -46,21 +48,18 @@ func astToMatchers(node *dsl.Node) *ConvertResult {
 
 		m := nodeToMatcher(child)
 		if m != nil {
-			// Skip overly broad matchers in OR context:
-			// a bare status==200 with no other constraints is too permissive.
-			if topOp == "||" && isTooPermissive(m) {
-				continue
-			}
-			r.Matchers = append(r.Matchers, m)
+			allMatchers = append(allMatchers, m)
 		} else {
 			dslStr := child.String()
-			r.Matchers = append(r.Matchers, &operators.Matcher{
+			allMatchers = append(allMatchers, &operators.Matcher{
 				Type: "dsl",
 				DSL:  []string{dslStr},
 			})
 			r.Warnings = append(r.Warnings, "DSL fallback: "+dslStr)
 		}
 	}
+
+	r.Matchers = allMatchers
 	return r
 }
 
