@@ -108,8 +108,8 @@ func generate(node *Node, e Emitter, r *Result) string {
 func genBinaryOp(node *Node, e Emitter, r *Result) string {
 	switch node.Op {
 	case "&&":
-		left := generate(node.Children[0], e, r)
-		right := generate(node.Children[1], e, r)
+		left := generateGrouped(node.Children[0], "&&", e, r)
+		right := generateGrouped(node.Children[1], "&&", e, r)
 		if left == "" {
 			return right
 		}
@@ -118,8 +118,8 @@ func genBinaryOp(node *Node, e Emitter, r *Result) string {
 		}
 		return e.And(left, right)
 	case "||":
-		left := generate(node.Children[0], e, r)
-		right := generate(node.Children[1], e, r)
+		left := generateGrouped(node.Children[0], "||", e, r)
+		right := generateGrouped(node.Children[1], "||", e, r)
 		if left == "" {
 			return right
 		}
@@ -132,6 +132,16 @@ func genBinaryOp(node *Node, e Emitter, r *Result) string {
 	}
 	r.Errors = append(r.Errors, fmt.Sprintf("unsupported operator: %s", node.Op))
 	return ""
+}
+
+// generateGrouped wraps the child in parentheses when its operator has
+// lower precedence than the parent — e.g. (A || B) inside an && node.
+func generateGrouped(child *Node, parentOp string, e Emitter, r *Result) string {
+	s := generate(child, e, r)
+	if child.Type == NodeBinaryOp && parentOp == "&&" && child.Op == "||" {
+		return e.Group(s)
+	}
+	return s
 }
 
 func genComparison(node *Node, e Emitter, r *Result) string {

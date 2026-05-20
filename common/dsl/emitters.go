@@ -28,17 +28,23 @@ func (f *FOFAEmitter) Field(part string) string {
 	if v, ok := fofaPartMap[part]; ok {
 		return v
 	}
-	return "body"
+	// Unmapped variables (location, set_cookie, x_powered_by, etc.)
+	// are individual header fields from xray conversion
+	return "header"
 }
 
 func (f *FOFAEmitter) Contains(field, value string) string {
-	return fmt.Sprintf(`%s="%s"`, field, value)
+	return fmt.Sprintf(`%s="%s"`, field, fofaEscape(value))
 }
 func (f *FOFAEmitter) Equals(field, value string) string {
-	return fmt.Sprintf(`%s=="%s"`, field, value)
+	return fmt.Sprintf(`%s=="%s"`, field, fofaEscape(value))
 }
 func (f *FOFAEmitter) NotEquals(field, value string) string {
-	return fmt.Sprintf(`%s!="%s"`, field, value)
+	return fmt.Sprintf(`%s!="%s"`, field, fofaEscape(value))
+}
+
+func fofaEscape(s string) string {
+	return strings.ReplaceAll(s, `"`, `\"`)
 }
 func (f *FOFAEmitter) StatusCode(code int) string {
 	return fmt.Sprintf(`status_code="%d"`, code)
@@ -74,18 +80,19 @@ func (h *HunterEmitter) Field(part string) string {
 	if v, ok := hunterPartMap[part]; ok {
 		return v
 	}
-	return "body"
+	return "header"
 }
 
 func (h *HunterEmitter) Contains(field, value string) string {
-	return fmt.Sprintf(`%s="%s"`, field, value)
+	return fmt.Sprintf(`%s="%s"`, field, fofaEscape(value))
 }
 func (h *HunterEmitter) Equals(field, value string) string {
-	return fmt.Sprintf(`%s=="%s"`, field, value)
+	return fmt.Sprintf(`%s=="%s"`, field, fofaEscape(value))
 }
 func (h *HunterEmitter) NotEquals(field, value string) string {
-	return fmt.Sprintf(`%s!="%s"`, field, value)
+	return fmt.Sprintf(`%s!="%s"`, field, fofaEscape(value))
 }
+
 func (h *HunterEmitter) StatusCode(code int) string {
 	return fmt.Sprintf(`status_code="%d"`, code)
 }
@@ -120,7 +127,7 @@ func (c *CensysEmitter) Field(part string) string {
 	if v, ok := censysPartMap[part]; ok {
 		return v
 	}
-	return "services.http.response.body"
+	return "services.http.response.headers"
 }
 
 func (c *CensysEmitter) Contains(field, value string) string {
