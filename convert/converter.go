@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chainreactors/neutron/common/dsl"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/templates"
 	"gopkg.in/yaml.v3"
@@ -88,6 +89,10 @@ func Convert(xrayYAML []byte) ([]byte, error) {
 
 // ConvertPOC converts a parsed xray POC to neutron template YAML.
 func ConvertPOC(poc *XrayPOC) ([]byte, error) {
+	if hasUnsupportedReverse(poc) {
+		return nil, fmt.Errorf("unsupported xray reverse/oob callback semantics")
+	}
+
 	tmpl := map[string]interface{}{
 		"id": sanitizeID(poc.Name),
 		"info": map[string]interface{}{
@@ -196,7 +201,7 @@ func buildHTTPBlocks(poc *XrayPOC, ctx *conversionContext) []interface{} {
 	}
 
 	if len(groups) == 1 {
-		return buildSingleGroupBlocks(groups[0], topExpr, ruleExprs)
+		return buildSingleGroupBlocks(groups[0], poc.Expression, topExpr, ruleExprs)
 	}
 
 	return buildIndependentBlocks(groups)
@@ -214,6 +219,10 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext) ([]*request
 		if expr == "" {
 			continue
 		}
+		ruleExprs[ruleName] = expr
+		if !hasXrayRequest(rule, expr) {
+			continue
+		}
 		method := rule.Request.Method
 		if method == "" {
 			method = "GET"
@@ -226,7 +235,6 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext) ([]*request
 
 		key := method + ":" + path + ":" + headersKey(rule.Request.Headers)
 		ruleGroup[ruleName] = key
-		ruleExprs[ruleName] = expr
 		extractors := outputExtractors(rule.Output, ctx)
 		payloads := payloadsForRequest(path, rule.Request.Headers, rule.Request.Body, ctx.payloads)
 
@@ -256,10 +264,17 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext) ([]*request
 	return groups, ruleGroup, ruleExprs
 }
 
-func buildSingleGroupBlocks(g *requestGroup, topExpr *TopExprNode, ruleExprs map[string]string) []interface{} {
+func buildSingleGroupBlocks(g *requestGroup, topExprRaw string, topExpr *TopExprNode, ruleExprs map[string]string) []interface{} {
 	var combined string
-	if topExpr != nil && len(g.rules) > 1 {
-		combined = substituteRuleExprs(topExpr, ruleExprs)
+	if topExpr != nil {
+		if needsRawTopExpression(topExprRaw) {
+			if substituted, ok := substituteRuleCallsInExpression(topExprRaw, ruleExprs, nil); ok {
+				combined = substituted
+			}
+		}
+		if combined == "" && len(g.rules) > 1 {
+			combined = substituteRuleExprs(topExpr, ruleExprs)
+		}
 	} else if len(g.exprs) == 1 {
 		combined = g.exprs[0]
 	} else {
@@ -268,6 +283,17 @@ func buildSingleGroupBlocks(g *requestGroup, topExpr *TopExprNode, ruleExprs map
 			parts[i] = "(" + e + ")"
 		}
 		combined = strings.Join(parts, " || ")
+	}
+	if combined == "" {
+		if len(g.exprs) == 1 {
+			combined = g.exprs[0]
+		} else {
+			parts := make([]string, len(g.exprs))
+			for i, e := range g.exprs {
+				parts[i] = "(" + e + ")"
+			}
+			combined = strings.Join(parts, " || ")
+		}
 	}
 
 	req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, []string{combined})
@@ -320,7 +346,7 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 		ruleDSLExprs[ruleName] = ast.String()
 	}
 
-	topDSL := buildReqConditionDSL(topExpr, ruleDSLExprs, ruleReqIndex, lastIndex)
+	topDSL := buildReqConditionDSL(topExpr, poc.Expression, ruleDSLExprs, ruleReqIndex, lastIndex)
 
 	var httpReqs []interface{}
 	for i, g := range groups {
@@ -515,21 +541,17 @@ func translateXraySetExpression(expr string) string {
 	if strings.EqualFold(trimmed, "get404Path()") {
 		return "{{rand_text_alphanumeric(16)}}"
 	}
-	if converted, ok := translateFunctionCall(trimmed, "randomLowercase", func(args []string) string {
-		if len(args) != 1 {
-			return ""
-		}
-		return fmt.Sprintf(`{{rand_base(%s, "abcdefghijklmnopqrstuvwxyz")}}`, strings.TrimSpace(args[0]))
-	}); ok {
-		return converted
+	if strings.Contains(trimmed, "{{") {
+		return normalizeXrayScalar(trimmed)
 	}
-	if converted, ok := translateFunctionCall(trimmed, "randomInt", func(args []string) string {
-		if len(args) != 2 {
-			return ""
+	if ast, err := ParseToAST(trimmed); err == nil {
+		if ast.Type == dsl.NodeLiteral {
+			return normalizeXrayScalar(trimmed)
 		}
-		return fmt.Sprintf("{{rand_int(%s, %s)}}", strings.TrimSpace(args[0]), strings.TrimSpace(args[1]))
-	}); ok {
-		return converted
+		if ast.Type == dsl.NodeVariable && !strings.HasPrefix(trimmed, "request.") {
+			return normalizeXrayScalar(trimmed)
+		}
+		return "{{" + ast.String() + "}}"
 	}
 	replacer := strings.NewReplacer(
 		"base64Decode(", "base64_decode(",
@@ -540,20 +562,6 @@ func translateXraySetExpression(expr string) string {
 		return "{{" + translated + "}}"
 	}
 	return normalizeXrayScalar(trimmed)
-}
-
-func translateFunctionCall(expr, name string, build func([]string) string) (string, bool) {
-	prefix := name + "("
-	if !strings.HasPrefix(expr, prefix) || !strings.HasSuffix(expr, ")") {
-		return "", false
-	}
-	argsText := strings.TrimSuffix(strings.TrimPrefix(expr, prefix), ")")
-	var args []string
-	for _, part := range strings.Split(argsText, ",") {
-		args = append(args, strings.TrimSpace(part))
-	}
-	converted := build(args)
-	return converted, converted != ""
 }
 
 func normalizeXrayScalar(value string) string {
@@ -595,45 +603,74 @@ func outputExtractors(output map[string]interface{}, ctx *conversionContext) []i
 		}
 
 		spec, ok := resolveOutputSpec(expr, sources)
-		if !ok {
+		if ok {
+			if spec.GroupName == "" {
+				spec.GroupName = name
+			}
+			ctx.runtimeVars[name] = true
+			group := regexGroupIndex(spec.Pattern, spec.GroupName)
+			if group == 0 {
+				group = 1
+			}
+			key := name + "\x00" + spec.Part + "\x00" + spec.Pattern + "\x00" + strconv.Itoa(group)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			extractor := map[string]interface{}{
+				"type":     "regex",
+				"name":     name,
+				"regex":    []string{spec.Pattern},
+				"group":    group,
+				"internal": true,
+			}
+			if spec.Part != "" && spec.Part != "body" {
+				extractor["part"] = spec.Part
+			}
+			extractors = append(extractors, extractor)
+
+			if fallback, ok := outputFallbackLiteral(expr); ok {
+				if ctx.variables == nil {
+					ctx.variables = map[string]interface{}{}
+				}
+				if _, exists := ctx.variables[name]; !exists {
+					ctx.variables[name] = normalizeXrayScalar(fallback)
+				}
+			}
 			continue
 		}
-		if spec.GroupName == "" {
-			spec.GroupName = name
-		}
-		ctx.runtimeVars[name] = true
-		group := regexGroupIndex(spec.Pattern, spec.GroupName)
-		if group == 0 {
-			group = 1
-		}
-		key := name + "\x00" + spec.Part + "\x00" + spec.Pattern + "\x00" + strconv.Itoa(group)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
 
-		extractor := map[string]interface{}{
-			"type":     "regex",
-			"name":     name,
-			"regex":    []string{spec.Pattern},
-			"group":    group,
-			"internal": true,
-		}
-		if spec.Part != "" && spec.Part != "body" {
-			extractor["part"] = spec.Part
-		}
-		extractors = append(extractors, extractor)
-
-		if fallback, ok := outputFallbackLiteral(expr); ok {
-			if ctx.variables == nil {
-				ctx.variables = map[string]interface{}{}
+		if extractor := outputDSLExtractor(name, expr, ctx); extractor != nil {
+			key := name + "\x00dsl\x00" + strings.Join(extractor["dsl"].([]string), "\x00")
+			if seen[key] {
+				continue
 			}
-			if _, exists := ctx.variables[name]; !exists {
-				ctx.variables[name] = normalizeXrayScalar(fallback)
-			}
+			seen[key] = true
+			extractors = append(extractors, extractor)
 		}
 	}
 	return extractors
+}
+
+func outputDSLExtractor(name, expr string, ctx *conversionContext) map[string]interface{} {
+	if name == "" || expr == "" || strings.Contains(expr, "submatch") || strings.Contains(expr, "?") {
+		return nil
+	}
+	ast, err := ParseToAST(expr)
+	if err != nil {
+		return nil
+	}
+	if ast.Type == dsl.NodeLiteral {
+		return nil
+	}
+	ctx.runtimeVars[name] = true
+	return map[string]interface{}{
+		"type":     "dsl",
+		"name":     name,
+		"dsl":      []string{ast.String()},
+		"internal": true,
+	}
 }
 
 func resolveOutputSpec(expr string, sources map[string]submatchSpec) (submatchSpec, bool) {
@@ -1048,4 +1085,40 @@ func sortedKeys(rules map[string]XrayRule) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func hasXrayRequest(rule XrayRule, expr string) bool {
+	if rule.Request.Method != "" ||
+		rule.Request.Path != "" ||
+		rule.Request.Body != "" ||
+		len(rule.Request.Headers) > 0 ||
+		rule.Request.FollowRedirects ||
+		rule.Request.Cache {
+		return true
+	}
+	return strings.Contains(expr, "response.")
+}
+
+func hasUnsupportedReverse(poc *XrayPOC) bool {
+	for _, raw := range poc.Set {
+		value := strings.TrimSpace(fmt.Sprint(raw))
+		if strings.Contains(value, "newReverse()") || strings.Contains(value, "reverse.url") {
+			return true
+		}
+	}
+	for _, rule := range poc.Rules {
+		if strings.Contains(rule.Expression, ".wait(") && strings.Contains(rule.Expression, "reverse") {
+			return true
+		}
+		if strings.Contains(rule.Request.Path, "reverse") ||
+			strings.Contains(rule.Request.Body, "reverse") {
+			return true
+		}
+		for _, value := range rule.Request.Headers {
+			if strings.Contains(value, "reverse") {
+				return true
+			}
+		}
+	}
+	return false
 }

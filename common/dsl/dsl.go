@@ -422,6 +422,18 @@ func registerDefaultFunctions() {
 	MustAddFunction(NewWithPositionalArgs("sha1", 1, false, func(args ...interface{}) (interface{}, error) {
 		return toHexEncodedHash(sha1.New(), toString(args[0]))
 	}))
+	MustAddFunction(NewWithPositionalArgs("xray_sha", 2, false, func(args ...interface{}) (interface{}, error) {
+		switch strings.ToLower(strings.TrimSpace(toString(args[1]))) {
+		case "sha1", "sha-1":
+			return toHexEncodedHash(sha1.New(), toString(args[0]))
+		case "sha256", "sha-256":
+			return toHexEncodedHash(sha256.New(), toString(args[0]))
+		case "sha512", "sha-512":
+			return toHexEncodedHash(sha512.New(), toString(args[0]))
+		default:
+			return nil, ErrInvalidDslFunction
+		}
+	}))
 	MustAddFunction(NewWithPositionalArgs("mmh3", 1, false, func(args ...interface{}) (interface{}, error) {
 		hasher := murmur3.New32WithSeed(0)
 		hasher.Write([]byte(fmt.Sprint(args[0])))
@@ -874,6 +886,94 @@ func registerDefaultFunctions() {
 			result := constraint.Check(firstParsed)
 			return result, nil
 		}))
+	MustAddFunction(NewWithPositionalArgs("xray_add", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := xrayNumber(args[0])
+		right, okRight := xrayNumber(args[1])
+		if okLeft && okRight {
+			return left + right, nil
+		}
+		return toString(args[0]) + toString(args[1]), nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_sub", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := xrayNumber(args[0])
+		right, okRight := xrayNumber(args[1])
+		if !okLeft || !okRight {
+			return nil, ErrInvalidDslFunction
+		}
+		return left - right, nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_mul", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := xrayNumber(args[0])
+		right, okRight := xrayNumber(args[1])
+		if !okLeft || !okRight {
+			return nil, ErrInvalidDslFunction
+		}
+		return left * right, nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_div", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := xrayNumber(args[0])
+		right, okRight := xrayNumber(args[1])
+		if !okLeft || !okRight || right == 0 {
+			return nil, ErrInvalidDslFunction
+		}
+		return left / right, nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_mod", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := xrayNumber(args[0])
+		right, okRight := xrayNumber(args[1])
+		if !okLeft || !okRight || right == 0 {
+			return nil, ErrInvalidDslFunction
+		}
+		return math.Mod(left, right), nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_regex_group", 3, false, func(args ...interface{}) (interface{}, error) {
+		pattern := toString(args[0])
+		input := toString(args[1])
+		groupName := toString(args[2])
+		compiled, err := regexp.Compile(pattern)
+		if err != nil {
+			return "", nil
+		}
+		matches := compiled.FindStringSubmatch(input)
+		if len(matches) == 0 {
+			return "", nil
+		}
+		if idx, err := strconv.Atoi(groupName); err == nil {
+			if idx >= 0 && idx < len(matches) {
+				return matches[idx], nil
+			}
+			return "", nil
+		}
+		for i, name := range compiled.SubexpNames() {
+			if name == groupName && i < len(matches) {
+				return matches[i], nil
+			}
+		}
+		if len(matches) > 1 {
+			return matches[1], nil
+		}
+		return matches[0], nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_version_in", 2, false, func(args ...interface{}) (interface{}, error) {
+		return xrayVersionCheck(args[0], toString(args[1]))
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_version_less", 2, false, func(args ...interface{}) (interface{}, error) {
+		return xrayVersionCheck(args[0], "<"+toString(args[1]))
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_version_greater", 2, false, func(args ...interface{}) (interface{}, error) {
+		return xrayVersionCheck(args[0], ">"+toString(args[1]))
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_version_equal", 2, false, func(args ...interface{}) (interface{}, error) {
+		return xrayVersionCheck(args[0], "="+toString(args[1]))
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_valid_page", 2, false, func(args ...interface{}) (interface{}, error) {
+		status, ok := xrayNumber(args[0])
+		if !ok {
+			return false, nil
+		}
+		body := toString(args[1])
+		return status >= 200 && status < 400 && strings.TrimSpace(body) != "", nil
+	}))
 	MustAddFunction(NewWithPositionalArgs("padding", 3, false, func(args ...interface{}) (interface{}, error) {
 		// padding('Test String','A',50) // will pad "Test String" up to 50 characters with "A" as padding byte.
 		bLen := 0
@@ -1324,6 +1424,56 @@ func registerDefaultFunctions() {
 	//	return jarm.HashWithDialer(nil, hostname, port, 10)
 	//}))
 
+}
+
+func xrayNumber(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint64:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	default:
+		n, err := strconv.ParseFloat(strings.TrimSpace(toString(value)), 64)
+		return n, err == nil
+	}
+}
+
+func xrayVersionCheck(input interface{}, constraints string) (bool, error) {
+	versionText := strings.TrimSpace(toString(input))
+	if versionText == "" {
+		return false, nil
+	}
+	parsed, err := version.NewVersion(versionText)
+	if err != nil {
+		return false, nil
+	}
+	parts := strings.Split(constraints, ",")
+	normalized := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			normalized = append(normalized, trimmed)
+		}
+	}
+	if len(normalized) == 0 {
+		return false, nil
+	}
+	constraint, err := version.NewConstraint(strings.Join(normalized, ","))
+	if err != nil {
+		return false, nil
+	}
+	return constraint.Check(parsed), nil
 }
 
 func NewWithSingleSignature(name, signature string, cacheable bool, logic govaluate.ExpressionFunction) dslFunction {

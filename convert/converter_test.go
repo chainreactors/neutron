@@ -28,6 +28,18 @@ func TestParseToAST(t *testing.T) {
 		{"cert_time_convert", `timeConvert(response.cert.not_before, "2006-01-02 03:04:05").icontains("2020")`, `icontains(time_convert(cert_not_before, concat("2", "0", "0", "6", "-", "0", "1", "-", "0", "2", " ", "0", "3", ":", "0", "4", ":", "0", "5")), "2020")`},
 		{"size_to_len", `size(response.body) < 100`, `(len(body) < 100)`},
 		{"bytes_func", `response.body.bcontains(bytes("ITDR"))`, `contains(body, "ITDR")`},
+		{"translate_literal", `response.body.bcontains(b"{{ 'Common.Title' | translate }}")`, `contains(body, "{{ \'Common.Title\' | translate }}")`},
+		{"bytes_md5", `response.body.bcontains(bytes(md5(string(s1))))`, `contains(body, md5(to_string(s1)))`},
+		{"arithmetic_latency", `response.latency - r0latency >= sleepSecond1 * 1000 - 1000`, `(xray_sub(latency, r0latency) >= xray_sub(xray_mul(sleepSecond1, 1000), 1000))`},
+		{"arithmetic_string", `response.body.contains(string(r1 * r2))`, `contains(body, to_string(xray_mul(r1, r2)))`},
+		{"concat_string", `response.body.contains("<script>" + string(rand) + "</script>")`, `contains(body, concat(concat("<script>", to_string(rand)), "</script>"))`},
+		{"bstarts_with", `response.body.bstartsWith(bytes("Salted__"))`, `starts_with(body, "Salted__")`},
+		{"version_submatch", `"version\":\"(?P<version>.*)\"".submatch(response.body_string)["version"].versionEqual("8.0.0")`, `xray_version_equal(xray_regex_group("version\":\"(?P<version>.*)\"", body, "version"), "8.0.0")`},
+		{"version_in", `versionIn("Stable tag: (?P<version>[0-9.]+)".submatch(response.body_string)["version"],"<= 5.1.16")`, `xray_version_in(xray_regex_group("Stable tag: (?P<version>[0-9.]+)", body, "version"), "<= 5.1.16")`},
+		{"valid_page", `isValidPage(response)`, `xray_valid_page(status_code, body)`},
+		{"replace_all", `replaceAll(tmp, "\\", "/")`, `replace(tmp, "\\", "/")`},
+		{"randomstr_alias", `response.body.contains("x" + randomstr)`, `contains(body, concat("x", randstr))`},
+		{"sha_alias", `sha(str1, "sha1") + "=" + sha(str2, "sha1")`, `concat(concat(xray_sha(str1, "sha1"), "="), xray_sha(str2, "sha1"))`},
 	}
 
 	for _, tt := range tests {
@@ -236,6 +248,104 @@ expression: payload_rule() || set_rule()
 	}
 	if !strings.Contains(s, "{{BaseURL}}/{{value}}") {
 		t.Fatalf("payload placeholder path was not preserved:\n%s", s)
+	}
+}
+
+func TestConvertXraySetExpressionSemantics(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--set-expression-semantics
+detail:
+  fingerprint:
+    name: Set Expression Semantics
+transport: http
+set:
+  time: int(now()) * 1000
+  token: base64("prefix:" + string(time))
+  referer: request.url.scheme+"://"+ request.url.host
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+      headers:
+        X-Token: "{{token}}"
+        Referer: "{{referer}}"
+    expression: response.status == 200
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+	for _, want := range []string{
+		`time: '{{xray_mul(to_number(unix_time()), 1000)}}'`,
+		`token: '{{base64(concat("prefix:", to_string(time)))}}'`,
+		`referer: '{{concat(concat(Scheme, "://"), Hostname)}}'`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q in converted output:\n%s", want, s)
+		}
+	}
+}
+
+func TestConvertXrayLatencyOutputExtractor(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--latency-output
+transport: http
+rules:
+  baseline:
+    request:
+      method: GET
+      path: /
+    expression: response.status == 200
+    output:
+      r0latency: response.latency
+  delayed:
+    request:
+      method: GET
+      path: /slow
+    expression: response.latency - r0latency >= 1000
+expression: baseline() && delayed()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+	for _, want := range []string{
+		"type: dsl",
+		"name: r0latency",
+		"dsl:",
+		"- latency",
+		"xray_sub(latency, r0latency)",
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q in converted output:\n%s", want, s)
+		}
+	}
+}
+
+func TestConvertXrayReverseUnsupported(t *testing.T) {
+	xrayYAML := `
+name: poc-reverse
+transport: http
+set:
+  reverse: newReverse()
+  reverseURL: reverse.url
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+    expression: reverse.wait(5)
+expression: r0()
+`
+	_, err := Convert([]byte(xrayYAML))
+	if err == nil || !strings.Contains(err.Error(), "unsupported xray reverse/oob") {
+		t.Fatalf("expected unsupported reverse error, got %v", err)
 	}
 }
 

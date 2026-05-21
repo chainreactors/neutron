@@ -94,7 +94,7 @@ func (p *parser) parseAnd() (*dsl.Node, error) {
 }
 
 func (p *parser) parseComparison() (*dsl.Node, error) {
-	left, err := p.parseUnary()
+	left, err := p.parseAdditive()
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (p *parser) parseComparison() (*dsl.Node, error) {
 	switch p.peek().Type {
 	case xTEq, xTNeq, xTGt, xTGte, xTLt, xTLte:
 		op := p.next()
-		right, err := p.parseUnary()
+		right, err := p.parseAdditive()
 		if err != nil {
 			return nil, err
 		}
@@ -137,7 +137,7 @@ func (p *parser) parseComparison() (*dsl.Node, error) {
 					p.next()
 					continue
 				}
-				item, err := p.parseUnary()
+				item, err := p.parseAdditive()
 				if err != nil {
 					return nil, err
 				}
@@ -159,14 +159,54 @@ func (p *parser) parseComparison() (*dsl.Node, error) {
 	return left, nil
 }
 
+func (p *parser) parseAdditive() (*dsl.Node, error) {
+	left, err := p.parseMultiplicative()
+	if err != nil {
+		return nil, err
+	}
+	for p.peek().Type == xTPlus || p.peek().Type == xTMinus {
+		op := p.next()
+		right, err := p.parseMultiplicative()
+		if err != nil {
+			return nil, err
+		}
+		left = buildArithmeticNode(op.Val, left, right)
+	}
+	return left, nil
+}
+
+func (p *parser) parseMultiplicative() (*dsl.Node, error) {
+	left, err := p.parseUnary()
+	if err != nil {
+		return nil, err
+	}
+	for p.peek().Type == xTStar || p.peek().Type == xTSlash || p.peek().Type == xTPercent {
+		op := p.next()
+		right, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		left = buildArithmeticNode(op.Val, left, right)
+	}
+	return left, nil
+}
+
 func (p *parser) parseUnary() (*dsl.Node, error) {
 	if p.peek().Type == xTNot {
 		p.next()
-		operand, err := p.parsePrimary()
+		operand, err := p.parseUnary()
 		if err != nil {
 			return nil, err
 		}
 		return dsl.UnaryOp("!", operand), nil
+	}
+	if p.peek().Type == xTMinus {
+		p.next()
+		operand, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return buildArithmeticNode("-", dsl.Literal(0), operand), nil
 	}
 	return p.parsePrimary()
 }
@@ -202,8 +242,13 @@ func (p *parser) parsePrimary() (*dsl.Node, error) {
 				if _, err := p.expect(xTRParen); err != nil {
 					return nil, err
 				}
+				if method == "submatch" || method == "bsubmatch" {
+					if group := p.consumeSubscriptValue(); group != nil {
+						return p.maybeMethodCall(dsl.Call("xray_regex_group", dsl.Literal(tok.Val), arg, group))
+					}
+				}
 				p.skipSubscript()
-				return dsl.Call("regex", dsl.Literal(tok.Val), arg), nil
+				return p.maybeMethodCall(dsl.Call("regex", dsl.Literal(tok.Val), arg))
 			}
 		}
 		// "X" in response.headers → handled in parseComparison
@@ -227,6 +272,9 @@ func (p *parser) parsePrimary() (*dsl.Node, error) {
 	case xTIdent:
 		if tok.Val == "response" {
 			return p.parseResponseAccess()
+		}
+		if tok.Val == "request" {
+			return p.parseRequestAccess()
 		}
 		return p.parseFuncOrIdent()
 
@@ -253,6 +301,9 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 
 	case "status":
 		return dsl.Variable("status_code"), nil
+
+	case "latency":
+		return dsl.Variable("latency"), nil
 
 	case "content_type":
 		return p.maybeMethodCall(dsl.Variable("content_type"))
@@ -307,6 +358,40 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 	}
 }
 
+func (p *parser) parseRequestAccess() (*dsl.Node, error) {
+	p.next() // request
+	if p.peek().Type != xTDot {
+		return dsl.Variable("request"), nil
+	}
+	p.next() // .
+	if p.peek().Type != xTIdent {
+		return dsl.Variable("request"), nil
+	}
+	field := p.next().Val
+	if field != "url" {
+		return p.maybeMethodCall(dsl.Variable(field))
+	}
+	if p.peek().Type != xTDot {
+		return p.maybeMethodCall(dsl.Variable("BaseURL"))
+	}
+	p.next() // .
+	if p.peek().Type != xTIdent {
+		return dsl.Variable("BaseURL"), nil
+	}
+	switch p.next().Val {
+	case "scheme":
+		return p.maybeMethodCall(dsl.Variable("Scheme"))
+	case "host":
+		return p.maybeMethodCall(dsl.Variable("Hostname"))
+	case "domain":
+		return p.maybeMethodCall(dsl.Variable("Host"))
+	case "path":
+		return p.maybeMethodCall(dsl.Variable("Path"))
+	default:
+		return p.consumeUnevaluable()
+	}
+}
+
 func (p *parser) parseCertAccess() (*dsl.Node, error) {
 	if p.peek().Type != xTDot {
 		return dsl.Variable("cert"), nil
@@ -349,16 +434,20 @@ func (p *parser) consumeUnevaluable() (*dsl.Node, error) {
 }
 
 var methodMap = map[string]string{
-	"contains":   "contains",
-	"bcontains":  "contains",
-	"icontains":  "icontains",
-	"ibcontains": "icontains",
-	"matches":    "regex",
-	"bmatches":   "regex",
-	"startsWith": "starts_with",
-	"endsWith":   "ends_with",
-	"submatch":   "regex",
-	"bsubmatch":  "regex",
+	"contains":     "contains",
+	"bcontains":    "contains",
+	"icontains":    "icontains",
+	"ibcontains":   "icontains",
+	"matches":      "regex",
+	"bmatches":     "regex",
+	"startsWith":   "starts_with",
+	"bstartsWith":  "starts_with",
+	"ibstartsWith": "starts_with",
+	"endsWith":     "ends_with",
+	"bendsWith":    "ends_with",
+	"ibendsWith":   "ends_with",
+	"submatch":     "regex",
+	"bsubmatch":    "regex",
 }
 
 func isMethodName(name string) bool {
@@ -370,6 +459,15 @@ func isReverseRegexMethod(name string) bool {
 	return name == "matches" || name == "bmatches" || name == "submatch" || name == "bsubmatch"
 }
 
+func isVersionMethod(name string) bool {
+	switch name {
+	case "versionLess", "versionGreater", "versionEqual":
+		return true
+	default:
+		return false
+	}
+}
+
 // maybeRawHeaderCall handles response.raw_header method calls.
 // xray's raw_header contains original-case headers ("X-Jenkins: v"),
 // but neutron's all_headers uses normalized keys ("x_jenkins: v").
@@ -379,7 +477,7 @@ func (p *parser) maybeRawHeaderCall() (*dsl.Node, error) {
 	if p.peek().Type != xTDot {
 		return receiver, nil
 	}
-	if p.lookAhead(1).Type != xTIdent || !isMethodName(p.lookAhead(1).Val) {
+	if p.lookAhead(1).Type != xTIdent || (!isMethodName(p.lookAhead(1).Val) && !isVersionMethod(p.lookAhead(1).Val)) {
 		return receiver, nil
 	}
 	if p.lookAhead(2).Type != xTLParen {
@@ -419,7 +517,7 @@ func (p *parser) maybeMethodCall(receiver *dsl.Node) (*dsl.Node, error) {
 	if p.peek().Type != xTDot {
 		return receiver, nil
 	}
-	if p.lookAhead(1).Type != xTIdent || !isMethodName(p.lookAhead(1).Val) {
+	if p.lookAhead(1).Type != xTIdent || (!isMethodName(p.lookAhead(1).Val) && !isVersionMethod(p.lookAhead(1).Val)) {
 		return receiver, nil
 	}
 	if p.lookAhead(2).Type != xTLParen {
@@ -439,14 +537,55 @@ func (p *parser) maybeMethodCall(receiver *dsl.Node) (*dsl.Node, error) {
 	}
 
 	if method == "submatch" || method == "bsubmatch" {
+		if group := p.consumeSubscriptValue(); group != nil {
+			pattern, corpus := regexCallArgs(receiver, arg)
+			return p.maybeMethodCall(dsl.Call("xray_regex_group", pattern, corpus, group))
+		}
 		p.skipSubscript()
+	}
+
+	if isVersionMethod(method) {
+		switch method {
+		case "versionLess":
+			return p.maybeMethodCall(dsl.Call("xray_version_less", receiver, arg))
+		case "versionGreater":
+			return p.maybeMethodCall(dsl.Call("xray_version_greater", receiver, arg))
+		case "versionEqual":
+			return p.maybeMethodCall(dsl.Call("xray_version_equal", receiver, arg))
+		}
 	}
 
 	fn := methodMap[method]
 	if fn == "regex" {
-		return dsl.Call("regex", arg, receiver), nil
+		pattern, corpus := regexCallArgs(receiver, arg)
+		return dsl.Call("regex", pattern, corpus), nil
 	}
 	return dsl.Call(fn, receiver, arg), nil
+}
+
+func regexCallArgs(receiver, arg *dsl.Node) (*dsl.Node, *dsl.Node) {
+	if isRegexPatternReceiver(receiver) {
+		return receiver, arg
+	}
+	return arg, receiver
+}
+
+func isRegexPatternReceiver(node *dsl.Node) bool {
+	if node == nil {
+		return false
+	}
+	if node.Type == dsl.NodeLiteral {
+		_, ok := node.Value.(string)
+		return ok
+	}
+	if node.Type == dsl.NodeCall && node.FuncName == "to_string" && len(node.Children) == 1 {
+		child := node.Children[0]
+		if child.Type == dsl.NodeLiteral {
+			_, ok := child.Value.(string)
+			return ok
+		}
+	}
+	return false
 }
 
 func (p *parser) skipSubscript() {
@@ -459,6 +598,26 @@ func (p *parser) skipSubscript() {
 			p.next()
 		}
 	}
+}
+
+func (p *parser) consumeSubscriptValue() *dsl.Node {
+	if p.peek().Type != xTLBracket {
+		return nil
+	}
+	p.next()
+	var group *dsl.Node
+	if p.peek().Type == xTString || p.peek().Type == xTIdent || p.peek().Type == xTNumber {
+		tok := p.next()
+		group = dsl.Literal(tok.Val)
+	} else {
+		for p.peek().Type != xTRBracket && p.peek().Type != xTEOF {
+			p.next()
+		}
+	}
+	if p.peek().Type == xTRBracket {
+		p.next()
+	}
+	return group
 }
 
 func (p *parser) parseFuncOrIdent() (*dsl.Node, error) {
@@ -480,12 +639,6 @@ func (p *parser) parseFuncOrIdent() (*dsl.Node, error) {
 		return p.maybeMethodCall(dsl.Call("favicon_hash", arg))
 	}
 
-	if tok.Val == "size" {
-		tok.Val = "len"
-	} else if tok.Val == "timeConvert" {
-		tok.Val = "time_convert"
-	}
-
 	if p.peek().Type == xTLParen {
 		p.next() // (
 		var args []*dsl.Node
@@ -504,13 +657,120 @@ func (p *parser) parseFuncOrIdent() (*dsl.Node, error) {
 		if _, err := p.expect(xTRParen); err != nil {
 			return nil, err
 		}
-		if tok.Val == "string" && len(args) == 1 {
-			return p.maybeMethodCall(args[0])
-		}
-		return p.maybeMethodCall(dsl.Call(tok.Val, args...))
+		return p.maybeMethodCall(convertFunctionCall(tok.Val, args))
 	}
 
-	return p.maybeMethodCall(dsl.Variable(tok.Val))
+	return p.maybeMethodCall(dsl.Variable(convertVariableName(tok.Val)))
+}
+
+func convertFunctionCall(name string, args []*dsl.Node) *dsl.Node {
+	switch name {
+	case "size":
+		return dsl.Call("len", args...)
+	case "timeConvert":
+		return dsl.Call("time_convert", args...)
+	case "replaceAll":
+		return dsl.Call("replace", args...)
+	case "string":
+		if len(args) == 1 {
+			if args[0].Type == dsl.NodeLiteral {
+				return args[0]
+			}
+			if isKnownStringVariable(args[0]) {
+				return args[0]
+			}
+			return dsl.Call("to_string", args[0])
+		}
+	case "int":
+		return dsl.Call("to_number", args...)
+	case "bytes":
+		if len(args) == 1 {
+			return args[0]
+		}
+	case "randomInt":
+		return dsl.Call("rand_int", args...)
+	case "randomLowercase":
+		if len(args) == 1 {
+			return dsl.Call("rand_base", args[0], dsl.Literal("abcdefghijklmnopqrstuvwxyz"))
+		}
+	case "base64Decode":
+		return dsl.Call("base64_decode", args...)
+	case "hexDecode":
+		return dsl.Call("hex_decode", args...)
+	case "sha":
+		return dsl.Call("xray_sha", args...)
+	case "now":
+		return dsl.Call("unix_time", args...)
+	case "sleep":
+		return dsl.Call("wait_for", args...)
+	case "versionIn":
+		return dsl.Call("xray_version_in", args...)
+	case "isValidPage":
+		return dsl.Call("xray_valid_page", dsl.Variable("status_code"), dsl.Variable("body"))
+	}
+	return dsl.Call(name, args...)
+}
+
+func convertVariableName(name string) string {
+	switch name {
+	case "randomstr":
+		return "randstr"
+	case "randomnum":
+		return "randnum"
+	default:
+		return name
+	}
+}
+
+func buildArithmeticNode(op string, left, right *dsl.Node) *dsl.Node {
+	switch op {
+	case "+":
+		if isStringLikeNode(left) || isStringLikeNode(right) {
+			return dsl.Call("concat", left, right)
+		}
+		return dsl.Call("xray_add", left, right)
+	case "-":
+		return dsl.Call("xray_sub", left, right)
+	case "*":
+		return dsl.Call("xray_mul", left, right)
+	case "/":
+		return dsl.Call("xray_div", left, right)
+	case "%":
+		return dsl.Call("xray_mod", left, right)
+	default:
+		return dsl.BinaryOp(op, left, right)
+	}
+}
+
+func isStringLikeNode(node *dsl.Node) bool {
+	if node == nil {
+		return false
+	}
+	if node.Type == dsl.NodeLiteral {
+		_, ok := node.Value.(string)
+		return ok
+	}
+	if node.Type != dsl.NodeCall {
+		return false
+	}
+	switch node.FuncName {
+	case "to_string", "concat", "base64", "base64_decode", "hex_decode", "md5", "substr", "rand_base":
+		return true
+	default:
+		return false
+	}
+}
+
+func isKnownStringVariable(node *dsl.Node) bool {
+	if node == nil || node.Type != dsl.NodeVariable {
+		return false
+	}
+	name, _ := node.Value.(string)
+	if name == "body" || name == "title" || name == "all_headers" ||
+		name == "content_type" || strings.HasPrefix(name, "cert_") {
+		return true
+	}
+	return false
 }
 
 func buildComparisonNode(left *dsl.Node, op string, right *dsl.Node) *dsl.Node {

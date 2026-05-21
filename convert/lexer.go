@@ -30,6 +30,10 @@ const (
 	xTLte                        // <=
 	xTIn                         // in
 	xTPlus                       // +
+	xTMinus                      // -
+	xTStar                       // *
+	xTSlash                      // /
+	xTPercent                    // %
 	xTQuestion                   // ?
 	xTColon                      // :
 	xTEOF
@@ -74,6 +78,24 @@ func xrayLex(input string) ([]xToken, error) {
 			i++
 		case ch == '+':
 			tokens = append(tokens, xToken{xTPlus, "+"})
+			i++
+		case ch == '-':
+			if i+1 < len(runes) && unicode.IsDigit(runes[i+1]) && canBeNeg(tokens) {
+				num, end := lexNumber(runes, i+1)
+				tokens = append(tokens, xToken{xTNumber, "-" + num})
+				i = end
+			} else {
+				tokens = append(tokens, xToken{xTMinus, "-"})
+				i++
+			}
+		case ch == '*':
+			tokens = append(tokens, xToken{xTStar, "*"})
+			i++
+		case ch == '/':
+			tokens = append(tokens, xToken{xTSlash, "/"})
+			i++
+		case ch == '%':
+			tokens = append(tokens, xToken{xTPercent, "%"})
 			i++
 		case ch == '?':
 			tokens = append(tokens, xToken{xTQuestion, "?"})
@@ -129,14 +151,6 @@ func xrayLex(input string) ([]xToken, error) {
 			}
 			tokens = append(tokens, xToken{xTString, val})
 			i = end
-		case ch == '-' && i+1 < len(runes) && unicode.IsDigit(runes[i+1]):
-			if canBeNeg(tokens) {
-				num, end := lexNumber(runes, i+1)
-				tokens = append(tokens, xToken{xTNumber, "-" + num})
-				i = end
-			} else {
-				return nil, fmt.Errorf("unexpected '-' at position %d", i)
-			}
 		case unicode.IsDigit(ch):
 			num, end := lexNumber(runes, i)
 			tokens = append(tokens, xToken{xTNumber, num})
@@ -177,7 +191,9 @@ func canBeNeg(tokens []xToken) bool {
 	last := tokens[len(tokens)-1].Type
 	return last == xTEq || last == xTNeq || last == xTGt || last == xTGte ||
 		last == xTLt || last == xTLte || last == xTIn ||
-		last == xTLBracket || last == xTComma || last == xTLParen
+		last == xTLBracket || last == xTComma || last == xTLParen ||
+		last == xTPlus || last == xTMinus || last == xTStar ||
+		last == xTSlash || last == xTPercent
 }
 
 func lexString(runes []rune, start int) (string, int, error) {
@@ -250,7 +266,9 @@ func isStringBoundary(runes []rune, pos int) bool {
 		return true
 	}
 	ch := runes[pos]
-	if ch == ')' || ch == ',' || ch == ']' || ch == '.' {
+	if ch == ')' || ch == ',' || ch == ']' || ch == '.' ||
+		ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' ||
+		ch == '>' || ch == '<' || ch == '?' || ch == ':' {
 		return true
 	}
 	j := pos
@@ -261,7 +279,9 @@ func isStringBoundary(runes []rune, pos int) bool {
 		return true
 	}
 	ch = runes[j]
-	if ch == ')' || ch == ',' || ch == ']' {
+	if ch == ')' || ch == ',' || ch == ']' ||
+		ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' ||
+		ch == '>' || ch == '<' || ch == '?' || ch == ':' {
 		return true
 	}
 	if ch == '&' && j+1 < len(runes) && runes[j+1] == '&' {
