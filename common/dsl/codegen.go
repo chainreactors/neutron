@@ -195,6 +195,17 @@ func genContains(node *Node, e Emitter, r *Result) string {
 		r.Errors = append(r.Errors, fmt.Sprintf("contains requires at least 2 args, got %d", len(node.Children)))
 		return ""
 	}
+	if node.Children[0].Type == NodeVariable {
+		part := NormalizePart(node.Children[0].Value.(string))
+		if part == "favicon_hash" || part == "body_favicon_hash" {
+			q, err := e.FaviconHash(resolveValue(node.Children[1]))
+			if err != nil {
+				r.Errors = append(r.Errors, err.Error())
+				return ""
+			}
+			return q
+		}
+	}
 	field := resolveField(node.Children[0], e)
 	value := resolveValue(node.Children[1])
 	return e.Contains(field, value)

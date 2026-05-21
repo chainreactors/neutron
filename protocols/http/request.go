@@ -3,15 +3,20 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/common/dsl"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
+	"github.com/spaolacci/murmur3"
+	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -111,6 +116,9 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 	case operators.DSLMatcher:
 		return matcher.Result(matcher.MatchDSL(data)), nil
 	case operators.FaviconMatcher:
+		if matcher.Part == "favicon_hash" || matcher.Part == "body_favicon_hash" {
+			return matcher.ResultWithMatchedSnippet(matcher.MatchHashValues(strings.Fields(item)))
+		}
 		// Favicon data should be provided in the data map under "favicon" key
 		// Expected format: map[string]interface{} where keys are URLs and values are hash arrays
 		faviconData, ok := data["favicon"]
@@ -446,8 +454,17 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 
 	// Add to history the current request number metadata if asked by the user.
 	if r.NeedsRequestCondition() {
+		requestIndex := reqcount
+		switch offset := request.dynamicValues["__request_index_offset"].(type) {
+		case int:
+			requestIndex += offset
+		case int64:
+			requestIndex += int(offset)
+		case float64:
+			requestIndex += int(offset)
+		}
 		for k, v := range outputEvent {
-			key := fmt.Sprintf("%s_%d", k, reqcount)
+			key := fmt.Sprintf("%s_%d", k, requestIndex)
 			previousEvent[key] = v
 			finalEvent[key] = v
 		}
@@ -498,6 +515,14 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 
 	body, _ := readResponseBody(resp)
 	data["body"] = string(body)
+	data["title"] = extractHTMLTitle(string(body))
+	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+		cert := resp.TLS.PeerCertificates[0]
+		data["cert_subject"] = cert.Subject.String()
+		data["cert_issuer"] = cert.Issuer.String()
+		data["cert_not_before"] = cert.NotBefore.Format("2006-01-02 03:04:05")
+		data["cert_not_after"] = cert.NotAfter.Format("2006-01-02 03:04:05")
+	}
 	if strings.TrimSpace(resp.Header.Get("Content-Encoding")) != "" {
 		data["content_length"] = len(body)
 	} else if resp.ContentLength > -1 {
@@ -528,6 +553,9 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 
 	if r.StopAtFirstMatch {
 		data["stop-at-first-match"] = true
+	}
+	if r.NeedsFaviconData() || r.NeedsRequestCondition() {
+		r.populateFaviconData(data, req, body)
 	}
 	return data
 }
@@ -564,6 +592,9 @@ var (
 
 // NeedsRequestCondition determines if request condition should be enabled
 func (request *Request) NeedsRequestCondition() bool {
+	if request.ReqCondition {
+		return true
+	}
 	for _, matcher := range request.Matchers {
 		if checkRequestConditionExpressions(matcher.DSL...) {
 			return true
@@ -584,6 +615,161 @@ func (request *Request) NeedsRequestCondition() bool {
 	return false
 }
 
+func (request *Request) NeedsFaviconData() bool {
+	for _, matcher := range request.Matchers {
+		if matcher.Type == "favicon" || matcher.Part == "favicon_hash" || matcher.Part == "body_favicon_hash" {
+			return true
+		}
+		if checkFaviconExpressions(matcher.DSL...) {
+			return true
+		}
+	}
+	return false
+}
+
+func checkFaviconExpressions(expressions ...string) bool {
+	for _, expression := range expressions {
+		if strings.Contains(expression, "favicon_hash") || strings.Contains(expression, "body_favicon_hash") {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Request) populateFaviconData(data protocols.InternalEvent, req *http.Request, body []byte) {
+	if req == nil || req.URL == nil {
+		return
+	}
+
+	faviconData := map[string]interface{}{}
+	bodyHash := xrayFaviconHash(body)
+	if bodyHash != "" {
+		data["body_favicon_hash"] = bodyHash
+		faviconData[req.URL.String()] = []string{bodyHash}
+	}
+
+	hashes := map[string]struct{}{}
+	for _, iconURL := range discoverIconURLs(req.URL, string(body)) {
+		hash := ""
+		if iconURL == req.URL.String() {
+			hash = bodyHash
+		} else if iconBody, ok := r.fetchFavicon(req, iconURL); ok {
+			hash = xrayFaviconHash(iconBody)
+		}
+		if hash == "" {
+			continue
+		}
+		hashes[hash] = struct{}{}
+		faviconData[iconURL] = []string{hash}
+	}
+
+	if len(hashes) > 0 {
+		data["favicon_hash"] = strings.Join(sortedHashKeys(hashes), "\n")
+	}
+	if len(faviconData) > 0 {
+		data["favicon"] = faviconData
+	}
+}
+
+func (r *Request) fetchFavicon(baseReq *http.Request, iconURL string) ([]byte, bool) {
+	iconReq, err := http.NewRequestWithContext(baseReq.Context(), http.MethodGet, iconURL, nil)
+	if err != nil {
+		return nil, false
+	}
+	iconReq.Header = baseReq.Header.Clone()
+	if iconReq.Header.Get("User-Agent") == "" {
+		iconReq.Header.Set("User-Agent", ua)
+	}
+	resp, err := r.httpClient.Do(iconReq)
+	if err != nil {
+		return nil, false
+	}
+	body, err := readResponseBody(resp)
+	if err != nil || len(body) == 0 {
+		return nil, false
+	}
+	return body, true
+}
+
+func discoverIconURLs(base *url.URL, body string) []string {
+	seen := map[string]struct{}{}
+	var urls []string
+	add := func(raw string) {
+		raw = strings.TrimSpace(html.UnescapeString(raw))
+		if raw == "" {
+			return
+		}
+		ref, err := url.Parse(raw)
+		if err != nil {
+			return
+		}
+		resolved := base.ResolveReference(ref).String()
+		if _, ok := seen[resolved]; ok {
+			return
+		}
+		seen[resolved] = struct{}{}
+		urls = append(urls, resolved)
+	}
+
+	for _, tag := range linkTagRE.FindAllString(body, -1) {
+		rel := attrValue(tag, "rel")
+		if !strings.Contains(strings.ToLower(rel), "icon") {
+			continue
+		}
+		add(attrValue(tag, "href"))
+	}
+	add("/favicon.ico")
+	return urls
+}
+
+func attrValue(tag, name string) string {
+	for _, match := range attrRE.FindAllStringSubmatch(tag, -1) {
+		if len(match) >= 4 && strings.EqualFold(match[1], name) {
+			if match[2] != "" {
+				return match[2]
+			}
+			return match[3]
+		}
+	}
+	return ""
+}
+
+func xrayFaviconHash(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	encoded := base64.StdEncoding.EncodeToString(body)
+	var wrapped strings.Builder
+	for len(encoded) > 76 {
+		wrapped.WriteString(encoded[:76])
+		wrapped.WriteByte('\n')
+		encoded = encoded[76:]
+	}
+	wrapped.WriteString(encoded)
+	wrapped.WriteByte('\n')
+
+	hasher := murmur3.New32WithSeed(0)
+	_, _ = hasher.Write([]byte(wrapped.String()))
+	return fmt.Sprintf("%d", int32(hasher.Sum32()))
+}
+
+func sortedHashKeys(hashes map[string]struct{}) []string {
+	out := make([]string, 0, len(hashes))
+	for hash := range hashes {
+		out = append(out, hash)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func extractHTMLTitle(body string) string {
+	match := titleRE.FindStringSubmatch(body)
+	if len(match) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(html.UnescapeString(match[1]))
+}
+
 func checkRequestConditionExpressions(expressions ...string) bool {
 	for _, expression := range expressions {
 		if reRequestCondition.MatchString(expression) {
@@ -592,6 +778,12 @@ func checkRequestConditionExpressions(expressions ...string) bool {
 	}
 	return false
 }
+
+var (
+	linkTagRE = regexp.MustCompile(`(?is)<link\b[^>]*>`)
+	attrRE    = regexp.MustCompile(`(?is)\b([a-z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')`)
+	titleRE   = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+)
 
 // generatedRequest is a single wrapped generated request for a template request
 type generatedRequest struct {

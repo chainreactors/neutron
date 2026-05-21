@@ -18,9 +18,14 @@ func TestParseToAST(t *testing.T) {
 		{"icontains", `response.body.icontains("Test")`, `icontains(body, "Test")`},
 		{"regex", `response.body_string.matches("ver\\d+")`, `regex("ver\\d+", body)`},
 		{"reverse_matches", `"pattern".matches(response.body_string)`, `regex("pattern", body)`},
-		{"favicon", `faviconHash(response.getIconContent()) == -297069493`, `(favicon_hash("mock") == -297069493)`},
+		{"favicon", `faviconHash(response.getIconContent()) == -297069493`, `contains(favicon_hash, "-297069493")`},
+		{"favicon_response_icon", `faviconHash(response.icon()) == 1677186191`, `contains(favicon_hash, "1677186191")`},
+		{"mmh3_icon", `mmh3(icon(response)) in [51234238, -1216867457]`, `(contains(favicon_hash, "51234238") || contains(favicon_hash, "-1216867457"))`},
 		{"title_to_title", `response.title_string.contains("Login")`, `contains(title, "Login")`},
-		{"cert_stub", `response.cert.issuer.contains("test")`, `true`},
+		{"string_title_contains", `string(response.title).contains("Sindoh")`, `contains(title, "Sindoh")`},
+		{"literal_contains", `"a".contains("b")`, `contains("a", "b")`},
+		{"cert_subject", `response.cert.issuer.contains("test")`, `contains(cert_issuer, "test")`},
+		{"cert_time_convert", `timeConvert(response.cert.not_before, "2006-01-02 03:04:05").icontains("2020")`, `icontains(time_convert(cert_not_before, concat("2", "0", "0", "6", "-", "0", "1", "-", "0", "2", " ", "0", "3", ":", "0", "4", ":", "0", "5")), "2020")`},
 		{"size_to_len", `size(response.body) < 100`, `(len(body) < 100)`},
 		{"bytes_func", `response.body.bcontains(bytes("ITDR"))`, `contains(body, "ITDR")`},
 	}
@@ -84,6 +89,24 @@ func TestExprToMatchers(t *testing.T) {
 				m := r.Matchers[0]
 				if m.Type != "dsl" {
 					t.Errorf("expected dsl matcher for individual header, got %+v", m)
+				}
+			},
+		},
+		{
+			"favicon_hash", `faviconHash(response.getIconContent()) == -297069493`, 1, "or",
+			func(t *testing.T, r *ConvertResult) {
+				m := r.Matchers[0]
+				if m.Type != "favicon" || m.Part != "favicon_hash" || m.Hash[0] != "-297069493" {
+					t.Errorf("got %+v", m)
+				}
+			},
+		},
+		{
+			"body_favicon_hash", `faviconHash(response.body) == 123`, 1, "or",
+			func(t *testing.T, r *ConvertResult) {
+				m := r.Matchers[0]
+				if m.Type != "favicon" || m.Part != "body_favicon_hash" || m.Hash[0] != "123" {
+					t.Errorf("got %+v", m)
 				}
 			},
 		},
@@ -167,5 +190,133 @@ expression: kw_in_home() || kw_in_server() || favicon_hash()
 	// Should NOT contain xray_hdr_ prefix
 	if strings.Contains(s, "xray_hdr_") {
 		t.Error("output contains xray_hdr_ prefix — should use nuclei variable names")
+	}
+}
+
+func TestConvertXraySetAndPayloadVariables(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--variables
+detail:
+  fingerprint:
+    name: Variable Test
+transport: http
+set:
+  randomPath: get404Path()
+payloads:
+  payloads:
+    p0:
+      value: '""'
+    p1:
+      value: '"admin/login"'
+rules:
+  payload_rule:
+    request:
+      method: GET
+      path: /{{value}}
+    expression: response.status == 200
+  set_rule:
+    request:
+      method: GET
+      path: /{{randomPath}}
+    expression: response.status == 404
+expression: payload_rule() || set_rule()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+
+	if !strings.Contains(s, "variables:") || !strings.Contains(s, "randomPath: '{{rand_text_alphanumeric(16)}}'") {
+		t.Fatalf("missing converted set variable:\n%s", s)
+	}
+	if !strings.Contains(s, "payloads:") || !strings.Contains(s, "value:") || !strings.Contains(s, "admin/login") {
+		t.Fatalf("missing converted payload values:\n%s", s)
+	}
+	if !strings.Contains(s, "{{BaseURL}}/{{value}}") {
+		t.Fatalf("payload placeholder path was not preserved:\n%s", s)
+	}
+}
+
+func TestConvertXrayOutputVariableExtractor(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--output-variable
+detail:
+  fingerprint:
+    name: Output Variable Test
+transport: http
+rules:
+  discover:
+    request:
+      method: GET
+      path: /
+    expression: response.body_string.contains("app.js")
+    output:
+      search: '"src=\"(?P<js_path>/static/app\.[a-z0-9]+\.js)\"".submatch(response.body_string)'
+      js_path: search["js_path"]
+  fetch_js:
+    request:
+      method: GET
+      path: /{{js_path}}
+    expression: response.body_string.contains("boot")
+expression: discover() && fetch_js()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+
+	for _, want := range []string{
+		"extractors:",
+		"name: js_path",
+		"internal: true",
+		`{{BaseURL}}/{{trim_prefix(js_path, "/")}}`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q in converted output:\n%s", want, s)
+		}
+	}
+}
+
+func TestConvertXrayRawStringPreservesRegexEscapes(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--raw-regex-output
+detail:
+  fingerprint:
+    name: Raw Regex Output Test
+transport: http
+rules:
+  discover:
+    request:
+      method: GET
+      path: /
+    expression: response.body_string.contains("location")
+    output:
+      search: r'location="(?P<nextpath>[\/\w]+)'.submatch(response.body_string)
+      nextpath: search["nextpath"]
+  follow:
+    request:
+      method: GET
+      path: /{{nextpath}}
+    expression: response.body_string.contains("ok")
+expression: discover() && follow()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+
+	for _, want := range []string{
+		`location="(?P<nextpath>[\/\w]+)`,
+		`{{BaseURL}}/{{trim_prefix(nextpath, "/")}}`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q in converted output:\n%s", want, s)
+		}
 	}
 }

@@ -106,7 +106,7 @@ func (p *parser) parseComparison() (*dsl.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return dsl.BinaryOp(op.Val, left, right), nil
+		return buildComparisonNode(left, op.Val, right), nil
 
 	case xTIn:
 		p.next()
@@ -149,9 +149,9 @@ func (p *parser) parseComparison() (*dsl.Node, error) {
 			if len(items) == 0 {
 				return dsl.Literal(false), nil
 			}
-			result := dsl.BinaryOp("==", left, items[0])
+			result := buildComparisonNode(left, "==", items[0])
 			for _, item := range items[1:] {
-				result = dsl.BinaryOp("||", result, dsl.BinaryOp("==", left, item))
+				result = dsl.BinaryOp("||", result, buildComparisonNode(left, "==", item))
 			}
 			return result, nil
 		}
@@ -207,7 +207,7 @@ func (p *parser) parsePrimary() (*dsl.Node, error) {
 			}
 		}
 		// "X" in response.headers → handled in parseComparison
-		return dsl.Literal(tok.Val), nil
+		return p.maybeMethodCall(dsl.Literal(tok.Val))
 
 	case xTNumber:
 		p.next()
@@ -278,7 +278,10 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 		}
 		return dsl.Variable("all_headers"), nil
 
-	case "cert", "url":
+	case "cert":
+		return p.parseCertAccess()
+
+	case "url":
 		return p.consumeUnevaluable()
 
 	case "getIconContent":
@@ -288,10 +291,36 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 				p.next()
 			}
 		}
-		return dsl.Literal(""), nil
+		return dsl.Variable("favicon_content"), nil
+
+	case "icon":
+		if p.peek().Type == xTLParen {
+			p.next()
+			if p.peek().Type == xTRParen {
+				p.next()
+			}
+		}
+		return dsl.Variable("favicon_content"), nil
 
 	default:
 		return p.maybeMethodCall(dsl.Variable(field))
+	}
+}
+
+func (p *parser) parseCertAccess() (*dsl.Node, error) {
+	if p.peek().Type != xTDot {
+		return dsl.Variable("cert"), nil
+	}
+	p.next() // .
+	if p.peek().Type != xTIdent {
+		return dsl.Variable("cert"), nil
+	}
+	field := headerVarName(p.next().Val)
+	switch field {
+	case "subject", "issuer", "not_before", "not_after":
+		return p.maybeMethodCall(dsl.Variable("cert_" + field))
+	default:
+		return p.consumeUnevaluable()
 	}
 }
 
@@ -437,21 +466,24 @@ func (p *parser) parseFuncOrIdent() (*dsl.Node, error) {
 
 	if tok.Val == "faviconHash" && p.peek().Type == xTLParen {
 		p.next() // (
-		depth := 1
-		for p.peek().Type != xTEOF && depth > 0 {
-			if p.peek().Type == xTLParen {
-				depth++
+		arg := dsl.Variable("favicon_content")
+		if p.peek().Type != xTRParen && p.peek().Type != xTEOF {
+			parsed, err := p.parseOr()
+			if err != nil {
+				return nil, err
 			}
-			if p.peek().Type == xTRParen {
-				depth--
-			}
-			p.next()
+			arg = parsed
 		}
-		return dsl.Call("favicon_hash", dsl.Literal("mock")), nil
+		if _, err := p.expect(xTRParen); err != nil {
+			return nil, err
+		}
+		return p.maybeMethodCall(dsl.Call("favicon_hash", arg))
 	}
 
 	if tok.Val == "size" {
 		tok.Val = "len"
+	} else if tok.Val == "timeConvert" {
+		tok.Val = "time_convert"
 	}
 
 	if p.peek().Type == xTLParen {
@@ -472,10 +504,60 @@ func (p *parser) parseFuncOrIdent() (*dsl.Node, error) {
 		if _, err := p.expect(xTRParen); err != nil {
 			return nil, err
 		}
-		return dsl.Call(tok.Val, args...), nil
+		if tok.Val == "string" && len(args) == 1 {
+			return p.maybeMethodCall(args[0])
+		}
+		return p.maybeMethodCall(dsl.Call(tok.Val, args...))
 	}
 
 	return p.maybeMethodCall(dsl.Variable(tok.Val))
+}
+
+func buildComparisonNode(left *dsl.Node, op string, right *dsl.Node) *dsl.Node {
+	if op != "==" && op != "!=" {
+		return dsl.BinaryOp(op, left, right)
+	}
+	if part, ok := faviconHashPart(left); ok {
+		hash := comparisonHashLiteral(right)
+		if hash != "" {
+			node := dsl.Call("contains", dsl.Variable(part), dsl.Literal(hash))
+			if op == "!=" {
+				return dsl.UnaryOp("!", node)
+			}
+			return node
+		}
+	}
+	return dsl.BinaryOp(op, left, right)
+}
+
+func faviconHashPart(node *dsl.Node) (string, bool) {
+	if node == nil || node.Type != dsl.NodeCall {
+		return "", false
+	}
+	if node.FuncName == "favicon_hash" {
+		if len(node.Children) == 0 {
+			return "favicon_hash", true
+		}
+		source := node.Children[0]
+		if source.Type == dsl.NodeVariable && source.Value.(string) == "body" {
+			return "body_favicon_hash", true
+		}
+		return "favicon_hash", true
+	}
+	if node.FuncName == "mmh3" && len(node.Children) == 1 {
+		child := node.Children[0]
+		if child.Type == dsl.NodeCall && child.FuncName == "icon" {
+			return "favicon_hash", true
+		}
+	}
+	return "", false
+}
+
+func comparisonHashLiteral(node *dsl.Node) string {
+	if node == nil || node.Type != dsl.NodeLiteral {
+		return ""
+	}
+	return fmt.Sprintf("%v", node.Value)
 }
 
 // headerVarName converts an HTTP header name to nuclei's variable convention.

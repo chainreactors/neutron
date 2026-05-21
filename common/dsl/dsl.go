@@ -433,6 +433,26 @@ func registerDefaultFunctions() {
 	MustAddFunction(NewWithPositionalArgs("icontains", 2, false, func(args ...interface{}) (interface{}, error) {
 		return strings.Contains(strings.ToLower(toString(args[0])), strings.ToLower(toString(args[1]))), nil
 	}))
+	MustAddFunction(NewWithPositionalArgs("time_convert", 2, false, func(args ...interface{}) (interface{}, error) {
+		value := strings.TrimSpace(toString(args[0]))
+		layout := strings.TrimSpace(toString(args[1]))
+		if value == "" || layout == "" {
+			return value, nil
+		}
+		for _, inputLayout := range []string{
+			time.RFC3339,
+			time.RFC1123,
+			time.RFC1123Z,
+			"2006-01-02 15:04:05",
+			"2006-01-02 03:04:05",
+			"2006-01-02",
+		} {
+			if parsed, err := time.Parse(inputLayout, value); err == nil {
+				return parsed.Format(layout), nil
+			}
+		}
+		return value, nil
+	}))
 	MustAddFunction(NewWithSingleSignature("contains_all",
 		"(body interface{}, substrs ...string) bool",
 		false,

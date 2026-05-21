@@ -27,7 +27,7 @@ func (n *Node) String() string {
 	switch n.Type {
 	case NodeLiteral:
 		if s, ok := n.Value.(string); ok {
-			return fmt.Sprintf("%q", s)
+			return quoteStringLiteral(s)
 		}
 		return fmt.Sprintf("%v", n.Value)
 	case NodeVariable:
@@ -46,8 +46,39 @@ func (n *Node) String() string {
 	return "?"
 }
 
+func quoteStringLiteral(s string) string {
+	if isGovaluateDateLikeLiteral(s) {
+		parts := make([]string, 0, len(s))
+		for _, r := range s {
+			parts = append(parts, quoteStringLiteralPlain(string(r)))
+		}
+		return "concat(" + strings.Join(parts, ", ") + ")"
+	}
+	return quoteStringLiteralPlain(s)
+}
+
+func quoteStringLiteralPlain(s string) string {
+	quoted := fmt.Sprintf("%q", s)
+	return strings.ReplaceAll(quoted, `'`, `\'`)
+}
+
+func isGovaluateDateLikeLiteral(s string) bool {
+	if len(s) < len("2006-01-02") {
+		return false
+	}
+	if s[4] != '-' || s[7] != '-' {
+		return false
+	}
+	for _, idx := range []int{0, 1, 2, 3, 5, 6, 8, 9} {
+		if s[idx] < '0' || s[idx] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func Literal(v interface{}) *Node { return &Node{Type: NodeLiteral, Value: v} }
-func Variable(name string) *Node { return &Node{Type: NodeVariable, Value: name} }
+func Variable(name string) *Node  { return &Node{Type: NodeVariable, Value: name} }
 func BinaryOp(op string, l, r *Node) *Node {
 	return &Node{Type: NodeBinaryOp, Op: op, Children: []*Node{l, r}}
 }

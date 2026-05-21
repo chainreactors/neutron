@@ -75,6 +75,13 @@ func evalXrayExpr(expr string, resp mockResponse) bool {
 func evalAtom(expr string, resp mockResponse) bool {
 	expr = strings.TrimSpace(expr)
 
+	if strings.Contains(expr, "faviconHash(response.getIconContent())") || strings.Contains(expr, "mmh3(icon(response))") {
+		return hashExpressionMatches(expr, getHeader(resp.Headers, "__favicon_hash"))
+	}
+	if strings.Contains(expr, "faviconHash(response.body)") {
+		return hashExpressionMatches(expr, getHeader(resp.Headers, "__body_favicon_hash"))
+	}
+
 	// response.status == N
 	if strings.Contains(expr, "response.status") {
 		if strings.Contains(expr, "==") {
@@ -103,6 +110,14 @@ func evalAtom(expr string, resp mockResponse) bool {
 
 	// response.body.icontains("X")
 	if strings.Contains(expr, ".icontains") || strings.Contains(expr, ".ibcontains") {
+		if strings.Contains(expr, "response.cert.subject.icontains") {
+			arg := extractMethodArg(expr, "icontains")
+			return strings.Contains(strings.ToLower(getHeader(resp.Headers, "__cert_subject")), strings.ToLower(arg))
+		}
+		if strings.Contains(expr, "timeConvert(response.cert.not_before") {
+			arg := extractMethodArg(expr, "icontains")
+			return strings.Contains(strings.ToLower(getHeader(resp.Headers, "__cert_not_before")), strings.ToLower(arg))
+		}
 		arg := extractMethodArg(expr, "icontains")
 		if arg == "" {
 			arg = extractMethodArg(expr, "ibcontains")
@@ -111,7 +126,7 @@ func evalAtom(expr string, resp mockResponse) bool {
 	}
 
 	// response.title_string.contains("X") or response.title == "X"
-	if strings.Contains(expr, "response.title_string.contains") || strings.Contains(expr, "response.title.contains") {
+	if strings.Contains(expr, "response.title_string.contains") || strings.Contains(expr, "response.title.contains") || strings.Contains(expr, "string(response.title).contains") {
 		arg := extractMethodArg(expr, "contains")
 		title := extractHTMLTitle(resp.Body)
 		return strings.Contains(title, arg)
@@ -154,6 +169,11 @@ func evalAtom(expr string, resp mockResponse) bool {
 		return exists
 	}
 
+	if literalContainsRE.MatchString(expr) {
+		match := literalContainsRE.FindStringSubmatch(expr)
+		return strings.Contains(match[1], match[2])
+	}
+
 	// true / false literals
 	if expr == "true" {
 		return true
@@ -162,6 +182,37 @@ func evalAtom(expr string, resp mockResponse) bool {
 		return false
 	}
 
+	return false
+}
+
+func hashExpressionMatches(expr, hashes string) bool {
+	hashSet := map[string]struct{}{}
+	for _, hash := range strings.Fields(hashes) {
+		hashSet[hash] = struct{}{}
+	}
+	if len(hashSet) == 0 {
+		return false
+	}
+	if strings.Contains(expr, " in ") {
+		start := strings.Index(expr, "[")
+		end := strings.LastIndex(expr, "]")
+		if start < 0 || end <= start {
+			return false
+		}
+		for _, item := range strings.Split(expr[start+1:end], ",") {
+			hash := strings.Trim(strings.TrimSpace(item), `"'`)
+			if _, ok := hashSet[hash]; ok {
+				return true
+			}
+		}
+		return false
+	}
+	if strings.Contains(expr, "==") {
+		parts := strings.SplitN(expr, "==", 2)
+		hash := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+		_, ok := hashSet[hash]
+		return ok
+	}
 	return false
 }
 
@@ -252,6 +303,8 @@ func buildRawHeader(headers map[string]string) string {
 	return b.String()
 }
 
+var literalContainsRE = regexp.MustCompile(`^["']([^"']*)["']\.contains\(["']([^"']*)["']\)$`)
+
 func splitTopLevel(expr, op string) []string {
 	var parts []string
 	depth := 0
@@ -312,8 +365,6 @@ func stripParens(s string) string {
 	}
 	return s[1 : len(s)-1]
 }
-
-
 
 // neutronEval evaluates the converted neutron template against mock response data.
 // Handles req-condition templates by populating _N suffixed variables.
@@ -403,8 +454,10 @@ func matchReq(req *nhttp.Request, data map[string]interface{}) bool {
 // expression and per-rule expressions.
 func xrayEvalPOC(poc string, resps map[string]mockResponse) bool {
 	var p struct {
-		Rules      map[string]struct{ Expression string `yaml:"expression"` } `yaml:"rules"`
-		Expression string                                                     `yaml:"expression"`
+		Rules map[string]struct {
+			Expression string `yaml:"expression"`
+		} `yaml:"rules"`
+		Expression string `yaml:"expression"`
 	}
 	yaml.Unmarshal([]byte(poc), &p)
 
@@ -669,10 +722,10 @@ expression: r0()
 	t.Logf("converted:\n%s", conv)
 
 	cases := []struct {
-		name  string
-		resp  mockResponse
-		want  bool
-		note  string
+		name string
+		resp mockResponse
+		want bool
+		note string
 	}{
 		{"server_apache", mockResponse{200, "", map[string]string{"Server": "Apache/2.4"}}, true, ""},
 		{"server_nginx", mockResponse{200, "", map[string]string{"Server": "nginx/1.0"}}, false, ""},

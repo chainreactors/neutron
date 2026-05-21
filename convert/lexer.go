@@ -123,7 +123,7 @@ func xrayLex(input string) ([]xToken, error) {
 			tokens = append(tokens, xToken{xTString, val})
 			i = end
 		case ch == 'r' && i+1 < len(runes) && (runes[i+1] == '"' || runes[i+1] == '\''):
-			val, end, err := lexString(runes, i+1)
+			val, end, err := lexRawString(runes, i+1)
 			if err != nil {
 				return nil, err
 			}
@@ -181,6 +181,14 @@ func canBeNeg(tokens []xToken) bool {
 }
 
 func lexString(runes []rune, start int) (string, int, error) {
+	return lexStringMode(runes, start, false)
+}
+
+func lexRawString(runes []rune, start int) (string, int, error) {
+	return lexStringMode(runes, start, true)
+}
+
+func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 	quote := runes[start]
 	i := start + 1
 	var buf []rune
@@ -224,8 +232,11 @@ func lexString(runes []rune, start int) (string, int, error) {
 
 	for j := i; j < end; j++ {
 		if runes[j] == '\\' && j+1 < len(runes) {
-			// Keep escape sequences as-is for govaluate compatibility
-			buf = append(buf, runes[j+1])
+			if raw {
+				buf = append(buf, runes[j], runes[j+1])
+			} else {
+				buf = append(buf, runes[j+1])
+			}
 			j++
 			continue
 		}

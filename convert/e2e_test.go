@@ -1,6 +1,9 @@
 package convert
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -59,6 +62,70 @@ expression: index_contains()
 	}
 	if !strings.Contains(fofa.Query, `body="/common/08cms.ico"`) {
 		t.Errorf("fofa query should contain body= from matchers, got: %s", fofa.Query)
+	}
+}
+
+func TestEndToEnd_OutputVariableFeedsNextRequest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(200)
+			fmt.Fprint(w, `<script src="/static/app.abc123.js"></script>`)
+		case "/static/app.abc123.js":
+			w.WriteHeader(200)
+			fmt.Fprint(w, "boot complete")
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+
+	xrayYAML := `
+name: fingerprint-test--dynamic-output
+detail:
+  fingerprint:
+    name: Dynamic Output
+transport: http
+rules:
+  discover:
+    request:
+      method: GET
+      path: /
+    expression: response.body_string.contains("app.abc123.js")
+    output:
+      search: '"src=\"(?P<asset>/static/app\.[a-z0-9]+\.js)\"".submatch(response.body_string)'
+      asset_path: search["asset"]
+  fetch_asset:
+    request:
+      method: GET
+      path: /{{asset_path}}
+    expression: response.body_string.contains("boot complete")
+expression: discover() && fetch_asset()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	if strings.Contains(string(out), "{{BaseURL}}/{{asset_path}}") {
+		t.Fatalf("dynamic path with leading-slash extractor should not keep an extra slash:\n%s", string(out))
+	}
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if err := tmpl.Compile(nil); err != nil {
+		t.Fatalf("compile: %v\n%s", err, string(out))
+	}
+	result, err := tmpl.Execute(server.URL, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result == nil || !result.Matched {
+		t.Fatalf("expected converted template to match, got %#v\n%s", result, string(out))
+	}
+	if !strings.Contains(result.Request, "/static/app.abc123.js") {
+		t.Fatalf("second request did not use extracted path:\n%s", result.Request)
 	}
 }
 

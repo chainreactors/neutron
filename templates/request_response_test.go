@@ -229,6 +229,66 @@ http:
 	require.GreaterOrEqual(t, callCount, 2)
 }
 
+func TestExecuteInternalExtractorAcrossHTTPBlocks(t *testing.T) {
+	var requested []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(200)
+			fmt.Fprint(w, `next=/dynamic-login`)
+		case "/dynamic-login":
+			w.WriteHeader(200)
+			fmt.Fprint(w, "dynamic endpoint matched")
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: cross-block-dynamic-variable-test
+info:
+  name: Cross Block Dynamic Variable Test
+  author: test
+  severity: info
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    extractors:
+      - type: regex
+        name: next_path
+        regex:
+          - "next=(/[a-z-]+)"
+        group: 1
+        internal: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}{{next_path}}"
+    matchers:
+      - type: word
+        words:
+          - "dynamic endpoint matched"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+
+	err = tmpl.Compile(nil)
+	require.NoError(t, err)
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Contains(t, result.Request, "/dynamic-login")
+	require.Contains(t, requested, "/")
+	require.Contains(t, requested, "/dynamic-login")
+}
+
 func TestExecuteWithEventsMultiStep(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/step1" {

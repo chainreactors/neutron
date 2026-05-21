@@ -2,7 +2,9 @@ package convert
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/chainreactors/neutron/operators"
@@ -12,17 +14,24 @@ import (
 
 // XrayPOC represents the xray POC YAML structure.
 type XrayPOC struct {
-	Name    string `yaml:"name"`
-	Detail  struct {
+	Name   string `yaml:"name"`
+	Detail struct {
 		Fingerprint struct {
 			Name string `yaml:"name"`
 			CPE  string `yaml:"cpe"`
 		} `yaml:"fingerprint"`
 	} `yaml:"detail"`
-	Transport  string              `yaml:"transport"`
-	Rules      map[string]XrayRule `yaml:"rules"`
-	Expression string              `yaml:"expression"`
-	Comments   CommentMetadata     `yaml:"-"`
+	Transport  string                 `yaml:"transport"`
+	Set        map[string]interface{} `yaml:"set"`
+	Payloads   XrayPayloadRoot        `yaml:"payloads"`
+	Rules      map[string]XrayRule    `yaml:"rules"`
+	Expression string                 `yaml:"expression"`
+	Comments   CommentMetadata        `yaml:"-"`
+}
+
+// XrayPayloadRoot represents xray's row-oriented payload table.
+type XrayPayloadRoot struct {
+	Payloads map[string]map[string]interface{} `yaml:"payloads"`
 }
 
 // CommentMetadata holds queries and URLs extracted from xray YAML comments.
@@ -42,7 +51,8 @@ type XrayRule struct {
 		FollowRedirects bool              `yaml:"follow_redirects"`
 		Cache           bool              `yaml:"cache"`
 	} `yaml:"request"`
-	Expression string `yaml:"expression"`
+	Expression string                 `yaml:"expression"`
+	Output     map[string]interface{} `yaml:"output"`
 }
 
 // ConvertedTemplate represents the neutron template output.
@@ -54,17 +64,20 @@ type ConvertedTemplate struct {
 
 // ConvertedHTTPReq represents one converted HTTP request block.
 type ConvertedHTTPReq struct {
-	Method            string                 `yaml:"method"`
-	Path              []string               `yaml:"path"`
-	Headers           map[string]string      `yaml:"headers,omitempty"`
-	Body              string                 `yaml:"body,omitempty"`
-	MatchersCondition string                 `yaml:"matchers-condition,omitempty"`
+	Method            string                   `yaml:"method"`
+	Path              []string                 `yaml:"path"`
+	Headers           map[string]string        `yaml:"headers,omitempty"`
+	Body              string                   `yaml:"body,omitempty"`
+	MatchersCondition string                   `yaml:"matchers-condition,omitempty"`
 	Matchers          []map[string]interface{} `yaml:"matchers,omitempty"`
-	Redirects         bool                   `yaml:"redirects,omitempty"`
+	Redirects         bool                     `yaml:"redirects,omitempty"`
 }
 
 // Convert converts an xray POC YAML to a neutron template YAML.
 func Convert(xrayYAML []byte) ([]byte, error) {
+	if strings.TrimSpace(string(xrayYAML)) == "" {
+		return nil, fmt.Errorf("empty xray yaml")
+	}
 	var poc XrayPOC
 	if err := yaml.Unmarshal(xrayYAML, &poc); err != nil {
 		return nil, fmt.Errorf("parse xray yaml: %w", err)
@@ -109,7 +122,11 @@ func ConvertPOC(poc *XrayPOC) ([]byte, error) {
 		info["metadata"] = metadata
 	}
 
-	httpReqs := buildHTTPBlocks(poc)
+	ctx := newConversionContext(poc)
+	httpReqs := buildHTTPBlocks(poc, ctx)
+	if len(ctx.variables) > 0 {
+		tmpl["variables"] = ctx.variables
+	}
 	if len(httpReqs) > 0 {
 		tmpl["http"] = httpReqs
 	}
@@ -123,34 +140,51 @@ func ConvertPOC(poc *XrayPOC) ([]byte, error) {
 }
 
 type requestGroup struct {
-	method    string
-	path      string
-	headers   map[string]string
-	body      string
-	redirects bool
-	rules     []string
-	exprs     []string
+	method     string
+	path       string
+	headers    map[string]string
+	body       string
+	redirects  bool
+	rules      []string
+	exprs      []string
+	extractors []interface{}
+	payloads   map[string]interface{}
 }
 
-func buildHTTPBlocks(poc *XrayPOC) []interface{} {
+type conversionContext struct {
+	variables   map[string]interface{}
+	payloads    map[string][]string
+	runtimeVars map[string]bool
+}
+
+func newConversionContext(poc *XrayPOC) *conversionContext {
+	return &conversionContext{
+		variables:   convertSetVariables(poc.Set),
+		payloads:    flattenPayloads(poc.Payloads),
+		runtimeVars: map[string]bool{},
+	}
+}
+
+func buildHTTPBlocks(poc *XrayPOC, ctx *conversionContext) []interface{} {
 	topExpr := parseTopExpression(poc.Expression)
 
 	keys := sortedKeys(poc.Rules)
 	if topExpr != nil {
-		referenced := map[string]bool{}
+		seen := map[string]bool{}
+		var ordered []string
 		for _, name := range collectRuleNames(topExpr) {
-			referenced[name] = true
-		}
-		var filtered []string
-		for _, k := range keys {
-			if referenced[k] {
-				filtered = append(filtered, k)
+			if seen[name] {
+				continue
+			}
+			if _, ok := poc.Rules[name]; ok {
+				ordered = append(ordered, name)
+				seen[name] = true
 			}
 		}
-		keys = filtered
+		keys = ordered
 	}
 
-	groups, ruleGroup, ruleExprs := groupRules(poc, keys)
+	groups, ruleGroup, ruleExprs := groupRules(poc, keys, ctx)
 	if len(groups) == 0 {
 		return nil
 	}
@@ -168,7 +202,7 @@ func buildHTTPBlocks(poc *XrayPOC) []interface{} {
 	return buildIndependentBlocks(groups)
 }
 
-func groupRules(poc *XrayPOC, keys []string) ([]*requestGroup, map[string]string, map[string]string) {
+func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext) ([]*requestGroup, map[string]string, map[string]string) {
 	var groups []*requestGroup
 	groupIndex := map[string]int{}
 	ruleGroup := map[string]string{}
@@ -188,24 +222,34 @@ func groupRules(poc *XrayPOC, keys []string) ([]*requestGroup, map[string]string
 		if path == "" {
 			path = "/"
 		}
+		path = normalizeRequestPath(path, ctx)
 
 		key := method + ":" + path + ":" + headersKey(rule.Request.Headers)
 		ruleGroup[ruleName] = key
 		ruleExprs[ruleName] = expr
+		extractors := outputExtractors(rule.Output, ctx)
+		payloads := payloadsForRequest(path, rule.Request.Headers, rule.Request.Body, ctx.payloads)
 
 		if idx, ok := groupIndex[key]; ok {
 			groups[idx].rules = append(groups[idx].rules, ruleName)
 			groups[idx].exprs = append(groups[idx].exprs, expr)
+			groups[idx].extractors = append(groups[idx].extractors, extractors...)
+			if len(payloads) > 0 && groups[idx].payloads == nil {
+				groups[idx].payloads = map[string]interface{}{}
+			}
+			mergePayloads(groups[idx].payloads, payloads)
 		} else {
 			groupIndex[key] = len(groups)
 			groups = append(groups, &requestGroup{
-				method:    method,
-				path:      path,
-				headers:   rule.Request.Headers,
-				body:      rule.Request.Body,
-				redirects: rule.Request.FollowRedirects,
-				rules:     []string{ruleName},
-				exprs:     []string{expr},
+				method:     method,
+				path:       path,
+				headers:    rule.Request.Headers,
+				body:       rule.Request.Body,
+				redirects:  rule.Request.FollowRedirects,
+				rules:      []string{ruleName},
+				exprs:      []string{expr},
+				extractors: extractors,
+				payloads:   payloads,
 			})
 		}
 	}
@@ -230,6 +274,7 @@ func buildSingleGroupBlocks(g *requestGroup, topExpr *TopExprNode, ruleExprs map
 	if req == nil {
 		return nil
 	}
+	applyGroupExtras(req, g)
 	return []interface{}{req}
 }
 
@@ -248,6 +293,7 @@ func buildIndependentBlocks(groups []*requestGroup) []interface{} {
 		}
 		req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, []string{combined})
 		if req != nil {
+			applyGroupExtras(req, g)
 			httpReqs = append(httpReqs, req)
 		}
 	}
@@ -291,8 +337,9 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 		if g.redirects {
 			req["redirects"] = true
 		}
+		applyGroupExtras(req, g)
+		req["req-condition"] = true
 		if i == len(groups)-1 {
-			req["req-condition"] = true
 			req["matchers"] = []interface{}{
 				map[string]interface{}{
 					"type": "dsl",
@@ -319,6 +366,424 @@ func headersKey(headers map[string]string) string {
 		parts = append(parts, k+"="+headers[k])
 	}
 	return strings.Join(parts, "&")
+}
+
+var (
+	placeholderRE      = regexp.MustCompile(`\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}`)
+	slashPlaceholderRE = regexp.MustCompile(`/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}`)
+)
+
+func applyGroupExtras(req map[string]interface{}, g *requestGroup) {
+	if len(g.extractors) > 0 {
+		req["extractors"] = g.extractors
+	}
+	if len(g.payloads) > 0 {
+		req["payloads"] = g.payloads
+		req["attack"] = "pitchfork"
+	}
+}
+
+func mergePayloads(dst, src map[string]interface{}) {
+	if len(src) == 0 || dst == nil {
+		return
+	}
+	for k, v := range src {
+		dst[k] = v
+	}
+}
+
+func payloadsForRequest(path string, headers map[string]string, body string, payloads map[string][]string) map[string]interface{} {
+	if len(payloads) == 0 {
+		return nil
+	}
+	used := map[string]bool{}
+	collectPlaceholders(path, used)
+	collectPlaceholders(body, used)
+	for k, v := range headers {
+		collectPlaceholders(k, used)
+		collectPlaceholders(v, used)
+	}
+	if len(used) == 0 {
+		return nil
+	}
+	out := map[string]interface{}{}
+	for name := range used {
+		values, ok := payloads[name]
+		if !ok || len(values) == 0 {
+			continue
+		}
+		out[name] = values
+	}
+	return out
+}
+
+func collectPlaceholders(s string, out map[string]bool) {
+	for _, match := range placeholderRE.FindAllStringSubmatch(s, -1) {
+		if len(match) > 1 {
+			out[match[1]] = true
+		}
+	}
+}
+
+func normalizeRequestPath(path string, ctx *conversionContext) string {
+	if ctx == nil {
+		return path
+	}
+	for _, match := range slashPlaceholderRE.FindAllStringSubmatch(path, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		name := match[1]
+		if ctx.runtimeVars[name] {
+			path = strings.ReplaceAll(path, match[0], slashSafeRuntimePlaceholder(name))
+			continue
+		}
+		if value, ok := ctx.variables[name].(string); ok && strings.HasPrefix(value, "/") {
+			ctx.variables[name] = strings.TrimLeft(value, "/")
+		}
+	}
+	return path
+}
+
+func slashSafeRuntimePlaceholder(name string) string {
+	return fmt.Sprintf(`/{{trim_prefix(%s, "/")}}`, name)
+}
+
+func flattenPayloads(root XrayPayloadRoot) map[string][]string {
+	if len(root.Payloads) == 0 {
+		return nil
+	}
+	rowKeys := make([]string, 0, len(root.Payloads))
+	for k := range root.Payloads {
+		rowKeys = append(rowKeys, k)
+	}
+	sortPayloadRows(rowKeys)
+
+	result := map[string][]string{}
+	for _, rowKey := range rowKeys {
+		row := root.Payloads[rowKey]
+		varKeys := make([]string, 0, len(row))
+		for k := range row {
+			varKeys = append(varKeys, k)
+		}
+		sort.Strings(varKeys)
+		for _, varName := range varKeys {
+			result[varName] = append(result[varName], normalizeXrayScalar(fmt.Sprint(row[varName])))
+		}
+	}
+	return result
+}
+
+func sortPayloadRows(keys []string) {
+	sort.Slice(keys, func(i, j int) bool {
+		ni, okI := payloadRowNumber(keys[i])
+		nj, okJ := payloadRowNumber(keys[j])
+		if okI && okJ && ni != nj {
+			return ni < nj
+		}
+		return keys[i] < keys[j]
+	})
+}
+
+func payloadRowNumber(s string) (int, bool) {
+	s = strings.TrimLeft(s, "pP")
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}
+
+func convertSetVariables(set map[string]interface{}) map[string]interface{} {
+	if len(set) == 0 {
+		return nil
+	}
+	vars := map[string]interface{}{}
+	for key, raw := range set {
+		switch raw.(type) {
+		case map[string]interface{}, map[interface{}]interface{}, []interface{}:
+			continue
+		}
+		value := strings.TrimSpace(fmt.Sprint(raw))
+		if value == "" {
+			continue
+		}
+		vars[key] = translateXraySetExpression(value)
+	}
+	return vars
+}
+
+func translateXraySetExpression(expr string) string {
+	trimmed := strings.TrimSpace(expr)
+	if strings.EqualFold(trimmed, "get404Path()") {
+		return "{{rand_text_alphanumeric(16)}}"
+	}
+	if converted, ok := translateFunctionCall(trimmed, "randomLowercase", func(args []string) string {
+		if len(args) != 1 {
+			return ""
+		}
+		return fmt.Sprintf(`{{rand_base(%s, "abcdefghijklmnopqrstuvwxyz")}}`, strings.TrimSpace(args[0]))
+	}); ok {
+		return converted
+	}
+	if converted, ok := translateFunctionCall(trimmed, "randomInt", func(args []string) string {
+		if len(args) != 2 {
+			return ""
+		}
+		return fmt.Sprintf("{{rand_int(%s, %s)}}", strings.TrimSpace(args[0]), strings.TrimSpace(args[1]))
+	}); ok {
+		return converted
+	}
+	replacer := strings.NewReplacer(
+		"base64Decode(", "base64_decode(",
+		"hexDecode(", "hex_decode(",
+	)
+	translated := replacer.Replace(trimmed)
+	if translated != trimmed && !strings.Contains(translated, "{{") {
+		return "{{" + translated + "}}"
+	}
+	return normalizeXrayScalar(trimmed)
+}
+
+func translateFunctionCall(expr, name string, build func([]string) string) (string, bool) {
+	prefix := name + "("
+	if !strings.HasPrefix(expr, prefix) || !strings.HasSuffix(expr, ")") {
+		return "", false
+	}
+	argsText := strings.TrimSuffix(strings.TrimPrefix(expr, prefix), ")")
+	var args []string
+	for _, part := range strings.Split(argsText, ",") {
+		args = append(args, strings.TrimSpace(part))
+	}
+	converted := build(args)
+	return converted, converted != ""
+}
+
+func normalizeXrayScalar(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	tokens, err := xrayLex(value)
+	if err == nil && len(tokens) >= 2 && tokens[0].Type == xTString && tokens[1].Type == xTEOF {
+		return strings.TrimSpace(tokens[0].Val)
+	}
+	return value
+}
+
+type submatchSpec struct {
+	Pattern   string
+	Part      string
+	GroupName string
+}
+
+func outputExtractors(output map[string]interface{}, ctx *conversionContext) []interface{} {
+	if len(output) == 0 {
+		return nil
+	}
+	sources := map[string]submatchSpec{}
+	for name, raw := range output {
+		expr := strings.TrimSpace(fmt.Sprint(raw))
+		if specs := findSubmatchSpecs(expr); len(specs) > 0 {
+			sources[name] = specs[0]
+		}
+	}
+
+	var extractors []interface{}
+	seen := map[string]bool{}
+	for name, raw := range output {
+		expr := strings.TrimSpace(fmt.Sprint(raw))
+		if name == "" || expr == "" {
+			continue
+		}
+
+		spec, ok := resolveOutputSpec(expr, sources)
+		if !ok {
+			continue
+		}
+		if spec.GroupName == "" {
+			spec.GroupName = name
+		}
+		ctx.runtimeVars[name] = true
+		group := regexGroupIndex(spec.Pattern, spec.GroupName)
+		if group == 0 {
+			group = 1
+		}
+		key := name + "\x00" + spec.Part + "\x00" + spec.Pattern + "\x00" + strconv.Itoa(group)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		extractor := map[string]interface{}{
+			"type":     "regex",
+			"name":     name,
+			"regex":    []string{spec.Pattern},
+			"group":    group,
+			"internal": true,
+		}
+		if spec.Part != "" && spec.Part != "body" {
+			extractor["part"] = spec.Part
+		}
+		extractors = append(extractors, extractor)
+
+		if fallback, ok := outputFallbackLiteral(expr); ok {
+			if ctx.variables == nil {
+				ctx.variables = map[string]interface{}{}
+			}
+			if _, exists := ctx.variables[name]; !exists {
+				ctx.variables[name] = normalizeXrayScalar(fallback)
+			}
+		}
+	}
+	return extractors
+}
+
+func resolveOutputSpec(expr string, sources map[string]submatchSpec) (submatchSpec, bool) {
+	if specs := findSubmatchSpecs(expr); len(specs) > 0 && specs[0].GroupName != "" {
+		return specs[0], true
+	}
+	if source, group, ok := outputSourceReference(expr); ok {
+		if spec, exists := sources[source]; exists {
+			spec.GroupName = group
+			return spec, true
+		}
+	}
+	return submatchSpec{}, false
+}
+
+func findSubmatchSpecs(expr string) []submatchSpec {
+	tokens, err := xrayLex(expr)
+	if err != nil {
+		return nil
+	}
+	var specs []submatchSpec
+	for i := 0; i+4 < len(tokens); i++ {
+		if tokens[i].Type != xTString || tokens[i+1].Type != xTDot ||
+			tokens[i+2].Type != xTIdent || !isSubmatchMethod(tokens[i+2].Val) ||
+			tokens[i+3].Type != xTLParen {
+			continue
+		}
+		closeIdx := findClosingParen(tokens, i+3)
+		if closeIdx < 0 {
+			continue
+		}
+		spec := submatchSpec{
+			Pattern: tokens[i].Val,
+			Part:    responsePartFromTokens(tokens[i+4 : closeIdx]),
+		}
+		if closeIdx+3 < len(tokens) && tokens[closeIdx+1].Type == xTLBracket &&
+			(tokens[closeIdx+2].Type == xTString || tokens[closeIdx+2].Type == xTIdent) {
+			spec.GroupName = tokens[closeIdx+2].Val
+		}
+		if spec.Part == "" {
+			spec.Part = "body"
+		}
+		specs = append(specs, spec)
+	}
+	return specs
+}
+
+func isSubmatchMethod(method string) bool {
+	return method == "submatch" || method == "bsubmatch"
+}
+
+func findClosingParen(tokens []xToken, openIdx int) int {
+	depth := 0
+	for i := openIdx; i < len(tokens); i++ {
+		switch tokens[i].Type {
+		case xTLParen:
+			depth++
+		case xTRParen:
+			depth--
+			if depth == 0 {
+				return i
+			}
+		case xTEOF:
+			return -1
+		}
+	}
+	return -1
+}
+
+func responsePartFromTokens(tokens []xToken) string {
+	if len(tokens) < 3 || tokens[0].Type != xTIdent || tokens[0].Val != "response" || tokens[1].Type != xTDot {
+		return "body"
+	}
+	field := tokens[2].Val
+	switch field {
+	case "body", "body_string":
+		return "body"
+	case "raw_header", "headers":
+		if len(tokens) >= 6 && tokens[3].Type == xTLBracket && tokens[4].Type == xTString {
+			return headerVarName(tokens[4].Val)
+		}
+		return "header"
+	case "content_type":
+		return "content_type"
+	case "title", "title_string":
+		return "body"
+	case "url":
+		return "matched"
+	default:
+		return "body"
+	}
+}
+
+func outputSourceReference(expr string) (string, string, bool) {
+	tokens, err := xrayLex(expr)
+	if err != nil {
+		return "", "", false
+	}
+	for i := 0; i+3 < len(tokens); i++ {
+		if tokens[i].Type == xTIdent && tokens[i+1].Type == xTLBracket &&
+			(tokens[i+2].Type == xTString || tokens[i+2].Type == xTIdent) &&
+			tokens[i+3].Type == xTRBracket {
+			return tokens[i].Val, tokens[i+2].Val, true
+		}
+	}
+	return "", "", false
+}
+
+func outputFallbackLiteral(expr string) (string, bool) {
+	tokens, err := xrayLex(expr)
+	if err != nil {
+		return "", false
+	}
+	hasQuestion := false
+	depth := 0
+	for i, tok := range tokens {
+		switch tok.Type {
+		case xTLParen, xTLBracket:
+			depth++
+		case xTRParen, xTRBracket:
+			if depth > 0 {
+				depth--
+			}
+		case xTQuestion:
+			if depth == 0 {
+				hasQuestion = true
+			}
+		case xTColon:
+			if hasQuestion && depth == 0 && i+1 < len(tokens) && tokens[i+1].Type == xTString {
+				return tokens[i+1].Val, true
+			}
+		}
+	}
+	return "", false
+}
+
+func regexGroupIndex(pattern, groupName string) int {
+	if groupName == "" {
+		return 1
+	}
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		return 1
+	}
+	for i, name := range compiled.SubexpNames() {
+		if name == groupName {
+			return i
+		}
+	}
+	return 1
 }
 
 // appendGeneratedQueries loads the YAML as a neutron Template, calls ToQuery()

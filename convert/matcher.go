@@ -117,6 +117,13 @@ func mergeCompatibleNodes(nodes []*dsl.Node, topOp string) []*dsl.Node {
 
 			w := literalString(node.Children[1])
 			part := variableToPartWithWord(node.Children[0], w)
+			if part == "" {
+				if currentKey != nil {
+					flush()
+				}
+				result = append(result, node)
+				continue
+			}
 			key := groupKey{fn: node.FuncName, part: part}
 
 			if currentKey != nil && *currentKey == key {
@@ -142,6 +149,10 @@ func mergeCompatibleNodes(nodes []*dsl.Node, topOp string) []*dsl.Node {
 }
 
 func nodeToMatcher(node *dsl.Node) *operators.Matcher {
+	if part, hash, ok := faviconContains(node); ok {
+		return &operators.Matcher{Type: "favicon", Part: part, Hash: []string{hash}}
+	}
+
 	// title contains/icontains → regex on body scoped to <title> tag
 	if node.Type == dsl.NodeCall && (node.FuncName == "contains" || node.FuncName == "icontains") && len(node.Children) == 2 {
 		if isTitleVar(node.Children[0]) {
@@ -344,8 +355,9 @@ func tryMergeStatusMatchers(node *dsl.Node) *operators.Matcher {
 }
 
 func tryMergeFaviconMatchers(node *dsl.Node) *operators.Matcher {
-	_, children := flattenBinaryOp(node)
+	op, children := flattenBinaryOp(node)
 	var hashes []string
+	part := ""
 	for _, child := range children {
 		if child.Type == dsl.NodeBinaryOp && child.Op == "==" &&
 			child.Children[0].Type == dsl.NodeCall && child.Children[0].FuncName == "favicon_hash" {
@@ -355,12 +367,44 @@ func tryMergeFaviconMatchers(node *dsl.Node) *operators.Matcher {
 				continue
 			}
 		}
+		if p, hash, ok := faviconContains(child); ok {
+			if part == "" {
+				part = p
+			} else if part != p {
+				return nil
+			}
+			hashes = append(hashes, hash)
+			continue
+		}
 		return nil
 	}
 	if len(hashes) < 2 {
 		return nil
 	}
-	return &operators.Matcher{Type: "favicon", Hash: hashes}
+	m := &operators.Matcher{Type: "favicon", Part: part, Hash: hashes}
+	if op == "&&" {
+		m.Condition = "and"
+	}
+	return m
+}
+
+func faviconContains(node *dsl.Node) (string, string, bool) {
+	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "contains" || len(node.Children) != 2 {
+		return "", "", false
+	}
+	partNode := node.Children[0]
+	if partNode.Type != dsl.NodeVariable {
+		return "", "", false
+	}
+	part := partNode.Value.(string)
+	if part != "favicon_hash" && part != "body_favicon_hash" {
+		return "", "", false
+	}
+	hash := literalString(node.Children[1])
+	if hash == "" {
+		return "", "", false
+	}
+	return part, hash, true
 }
 
 // variableToPart maps an AST variable to a nuclei matcher part.

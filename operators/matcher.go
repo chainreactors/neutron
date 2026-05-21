@@ -398,3 +398,38 @@ func (m *Matcher) MatchFavicon(faviconData map[string]interface{}) (bool, []stri
 
 	return false, []string{}
 }
+
+// MatchHashValues matches hash strings against matcher.Hash.
+func (m *Matcher) MatchHashValues(values []string) (bool, []string) {
+	if len(m.Hash) == 0 || len(values) == 0 {
+		return false, []string{}
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		seen[value] = struct{}{}
+	}
+
+	var matched []string
+	for _, templateHash := range m.Hash {
+		if _, ok := seen[templateHash]; ok {
+			matched = append(matched, templateHash)
+			if m.condition == ORCondition && !m.MatchAll {
+				return true, matched
+			}
+			continue
+		}
+		if m.condition == ANDCondition || m.MatchAll {
+			return false, []string{}
+		}
+	}
+	if len(matched) == 0 {
+		return false, []string{}
+	}
+	if m.condition == ANDCondition || m.MatchAll {
+		return len(matched) == len(m.Hash), matched
+	}
+	return true, matched
+}
