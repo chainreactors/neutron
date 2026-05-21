@@ -14,6 +14,8 @@ func TestParseToAST(t *testing.T) {
 		{"body_contains", `response.body_string.contains("hello")`, `contains(body, "hello")`},
 		{"status_and_body", `response.status == 200 && response.body.contains("test")`, `((status_code == 200) && contains(body, "test"))`},
 		{"header_access", `response.headers["Server"].contains("Apache")`, `contains(server, "Apache")`},
+		{"raw_header_contains", `response.raw_header.bcontains(b"X-Jenkins")`, `contains(header, "X-Jenkins")`},
+		{"raw_header_reverse_regex", `"Location: https://example.com".bmatches(response.raw_header)`, `regex("Location: https://example.com", header)`},
 		{"header_in", `"Server" in response.headers`, `contains(all_headers, "server:")`},
 		{"icontains", `response.body.icontains("Test")`, `icontains(body, "Test")`},
 		{"regex", `response.body_string.matches("ver\\d+")`, `regex("ver\\d+", body)`},
@@ -30,7 +32,8 @@ func TestParseToAST(t *testing.T) {
 		{"bytes_func", `response.body.bcontains(bytes("ITDR"))`, `contains(body, "ITDR")`},
 		{"translate_literal", `response.body.bcontains(b"{{ 'Common.Title' | translate }}")`, `contains(body, "{{ \'Common.Title\' | translate }}")`},
 		{"bytes_md5", `response.body.bcontains(bytes(md5(string(s1))))`, `contains(body, md5(to_string(s1)))`},
-		{"arithmetic_latency", `response.latency - r0latency >= sleepSecond1 * 1000 - 1000`, `(xray_sub(latency, r0latency) >= xray_sub(xray_mul(sleepSecond1, 1000), 1000))`},
+		{"arithmetic_latency", `response.latency - r0latency >= sleepSecond1 * 1000 - 1000`, `xray_gte(xray_sub(latency, r0latency), xray_sub(xray_mul(sleepSecond1, 1000), 1000))`},
+		{"latency_less_extracted", `response.latency < r1latency`, `xray_lt(latency, r1latency)`},
 		{"arithmetic_string", `response.body.contains(string(r1 * r2))`, `contains(body, to_string(xray_mul(r1, r2)))`},
 		{"concat_string", `response.body.contains("<script>" + string(rand) + "</script>")`, `contains(body, concat(concat("<script>", to_string(rand)), "</script>"))`},
 		{"bstarts_with", `response.body.bstartsWith(bytes("Salted__"))`, `starts_with(body, "Salted__")`},
@@ -328,6 +331,49 @@ expression: baseline() && delayed()
 	}
 }
 
+func TestConvertReqConditionDoesNotSuffixDynamicVariables(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--latency-dynamic-vars
+transport: http
+set:
+  sleepSecond1: randomInt(5, 8)
+rules:
+  baseline:
+    request:
+      method: GET
+      path: /base
+    expression: response.status == 200
+    output:
+      r0latency: response.latency
+  delayed:
+    request:
+      method: GET
+      path: /delay/{{sleepSecond1}}
+    expression: response.latency - r0latency >= sleepSecond1 * 1000
+  compare:
+    request:
+      method: GET
+      path: /compare
+    expression: response.latency < r0latency
+expression: baseline() && delayed() && compare()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+
+	for _, bad := range []string{"r0latency_1", "r0latency_2", "sleepSecond1_1", "sleepSecond1_2"} {
+		if strings.Contains(s, bad) {
+			t.Fatalf("dynamic variable was suffixed as %q:\n%s", bad, s)
+		}
+	}
+	if !strings.Contains(s, "latency_2") || !strings.Contains(s, "status_code_1") {
+		t.Fatalf("response variables should still be suffixed:\n%s", s)
+	}
+}
+
 func TestConvertXrayReverseUnsupported(t *testing.T) {
 	xrayYAML := `
 name: poc-reverse
@@ -384,6 +430,46 @@ expression: discover() && fetch_js()
 		"name: js_path",
 		"internal: true",
 		`{{BaseURL}}/{{trim_prefix(js_path, "/")}}`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q in converted output:\n%s", want, s)
+		}
+	}
+}
+
+func TestConvertXrayOutputTransformExtractor(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--output-transform
+transport: http
+rules:
+  upload:
+    request:
+      method: POST
+      path: /upload
+    expression: response.status == 200
+    output:
+      search: |-
+        "(?P<path>public\\\\/shell.php)".bsubmatch(response.body)
+      path: replaceAll(search["path"], "\\", "")
+  fetch:
+    request:
+      method: GET
+      path: /{{path}}
+    expression: response.status == 200
+expression: upload() && fetch()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+
+	for _, want := range []string{
+		"name: path_raw",
+		"name: path",
+		`replace(path_raw, "\\", "")`,
+		`{{BaseURL}}/{{trim_prefix(path, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)

@@ -469,11 +469,10 @@ func isVersionMethod(name string) bool {
 }
 
 // maybeRawHeaderCall handles response.raw_header method calls.
-// xray's raw_header contains original-case headers ("X-Jenkins: v"),
-// but neutron's all_headers uses normalized keys ("x_jenkins: v").
-// We normalize the search argument to match neutron's format.
+// xray's raw_header contains original-case headers ("X-Jenkins: v");
+// neutron exposes the same raw header block as the DSL variable "header".
 func (p *parser) maybeRawHeaderCall() (*dsl.Node, error) {
-	receiver := dsl.Variable("all_headers")
+	receiver := dsl.Variable("header")
 	if p.peek().Type != xTDot {
 		return receiver, nil
 	}
@@ -497,15 +496,6 @@ func (p *parser) maybeRawHeaderCall() (*dsl.Node, error) {
 	}
 
 	fn := methodMap[method]
-
-	// Normalize the search string: lowercase and replace hyphens with underscores
-	// to match neutron's all_headers format.
-	if arg.Type == dsl.NodeLiteral {
-		if s, ok := arg.Value.(string); ok {
-			normalized := strings.ToLower(strings.ReplaceAll(s, "-", "_"))
-			arg = dsl.Literal(normalized)
-		}
-	}
 
 	if fn == "regex" {
 		return dsl.Call("regex", arg, receiver), nil
@@ -697,6 +687,10 @@ func convertFunctionCall(name string, args []*dsl.Node) *dsl.Node {
 		return dsl.Call("base64_decode", args...)
 	case "hexDecode":
 		return dsl.Call("hex_decode", args...)
+	case "hex":
+		return dsl.Call("hex_encode", args...)
+	case "urlencode", "urlEncode", "urlencodeall", "urlEncodeAll", "url_encode":
+		return dsl.Call("url_encode", args...)
 	case "sha":
 		return dsl.Call("xray_sha", args...)
 	case "now":
@@ -754,7 +748,7 @@ func isStringLikeNode(node *dsl.Node) bool {
 		return false
 	}
 	switch node.FuncName {
-	case "to_string", "concat", "base64", "base64_decode", "hex_decode", "md5", "substr", "rand_base":
+	case "to_string", "concat", "base64", "base64_decode", "hex_encode", "hex_decode", "url_encode", "md5", "substr", "rand_base":
 		return true
 	default:
 		return false
@@ -774,6 +768,20 @@ func isKnownStringVariable(node *dsl.Node) bool {
 }
 
 func buildComparisonNode(left *dsl.Node, op string, right *dsl.Node) *dsl.Node {
+	if op == ">" || op == ">=" || op == "<" || op == "<=" {
+		if isXrayNumericComparison(left) || isXrayNumericComparison(right) {
+			switch op {
+			case ">":
+				return dsl.Call("xray_gt", left, right)
+			case ">=":
+				return dsl.Call("xray_gte", left, right)
+			case "<":
+				return dsl.Call("xray_lt", left, right)
+			case "<=":
+				return dsl.Call("xray_lte", left, right)
+			}
+		}
+	}
 	if op != "==" && op != "!=" {
 		return dsl.BinaryOp(op, left, right)
 	}
@@ -788,6 +796,28 @@ func buildComparisonNode(left *dsl.Node, op string, right *dsl.Node) *dsl.Node {
 		}
 	}
 	return dsl.BinaryOp(op, left, right)
+}
+
+func isXrayNumericComparison(node *dsl.Node) bool {
+	if node == nil {
+		return false
+	}
+	if node.Type == dsl.NodeVariable {
+		name, _ := node.Value.(string)
+		return name == "latency" || name == "duration" || strings.Contains(strings.ToLower(name), "latency")
+	}
+	if node.Type == dsl.NodeCall {
+		switch node.FuncName {
+		case "xray_add", "xray_sub", "xray_mul", "xray_div", "xray_mod", "to_number":
+			return true
+		}
+	}
+	for _, child := range node.Children {
+		if isXrayNumericComparison(child) {
+			return true
+		}
+	}
+	return false
 }
 
 func faviconHashPart(node *dsl.Node) (string, bool) {

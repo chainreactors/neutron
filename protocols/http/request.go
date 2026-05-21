@@ -238,15 +238,14 @@ func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *
 
 // requests returns the total number of requests the YAML rule will perform
 func (r *Request) Requests() int {
-	if r.generator != nil {
-		payloadRequests := r.generator.NewIterator().Total() * len(r.Raw)
-		return payloadRequests
-	}
+	sequenceCount := len(r.Path)
 	if len(r.Raw) > 0 {
-		requests := len(r.Raw)
-		return requests
+		sequenceCount = len(r.Raw)
 	}
-	return len(r.Path)
+	if r.generator != nil {
+		return r.generator.NewIterator().Total() * sequenceCount
+	}
+	return sequenceCount
 }
 
 func (r *Request) Compile(options *protocols.ExecuterOptions) error {
@@ -365,7 +364,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 					gotDynamicValues = common.MergeMapsMany(event.OperatorsResult.DynamicValues, gotDynamicValues)
 				}
 				callback(event)
-			}, generator.currentIndex)
+			}, requestCount)
 
 			// If a variable is unresolved, skip all further requests
 			if err == errStopExecution {
@@ -484,6 +483,9 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 			callback(event)
 			return nil
 		}
+	}
+	if input.TraceAll {
+		callback(event)
 	}
 	return err
 }

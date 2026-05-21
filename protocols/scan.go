@@ -15,6 +15,7 @@ type ScanContext struct {
 	// callbacks or hooks
 	OnError  func(error)
 	OnResult func(e *InternalWrappedEvent)
+	TraceAll bool
 
 	// unexported state fields
 	errors   []error

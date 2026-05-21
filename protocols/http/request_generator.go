@@ -112,10 +112,14 @@ func (r *requestGenerator) findNextIteration(sequence []string, index int) (stri
 
 // Total returns the total number of requests for the generator
 func (r *requestGenerator) Total() int {
-	if r.payloadIterator != nil {
-		return len(r.request.Raw) * r.payloadIterator.Remaining()
+	sequenceCount := len(r.request.Path)
+	if len(r.request.Raw) > 0 {
+		sequenceCount = len(r.request.Raw)
 	}
-	return len(r.request.Path)
+	if r.payloadIterator != nil {
+		return sequenceCount * r.payloadIterator.Remaining()
+	}
+	return sequenceCount
 }
 
 // Make creates a http request for the provided input.
@@ -143,8 +147,8 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(reqdata, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
-	values := common.MergeMaps(allVars, generateVariables(parsed, trailingSlash))
-	values = common.MergeMaps(values, globalValues)
+	values := common.MergeMaps(globalValues, generateVariables(parsed, trailingSlash))
+	values = common.MergeMaps(values, allVars)
 	reqdata, err = common.Evaluate(reqdata, values)
 	if err != nil {
 		return nil, err

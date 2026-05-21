@@ -167,6 +167,79 @@ func TestExecuteRequestWithPOSTBody(t *testing.T) {
 	require.Contains(t, capturedEvent.OperatorsResult.Request, "user=admin&pass=test")
 }
 
+func TestTemplateVariableOverridesGlobalRandstrInRequestBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		fmt.Fprint(w, string(body))
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:   []string{"{{BaseURL}}"},
+		Method: "POST",
+		Body:   "{{randstr}}",
+	}
+	r.Matchers = append(r.Matchers, &operators.Matcher{
+		Type: "dsl",
+		DSL:  []string{"contains(body, randstr)"},
+	})
+
+	var variables protocols.Variable
+	variables.InsertionOrderedStringMap = *protocols.NewEmptyInsertionOrderedStringMap(1)
+	variables.Set("randstr", "template-randstr")
+
+	options := &protocols.ExecuterOptions{
+		Variables: variables,
+		Options:   &protocols.Options{Timeout: 5},
+	}
+	require.NoError(t, r.Compile(options))
+
+	input := protocols.NewScanContext(server.URL, nil)
+	var capturedEvent *protocols.InternalWrappedEvent
+	err := r.ExecuteWithResults(input, make(map[string]interface{}), make(map[string]interface{}), func(event *protocols.InternalWrappedEvent) {
+		capturedEvent = event
+	})
+	require.NoError(t, err)
+	require.NotNil(t, capturedEvent)
+	require.NotNil(t, capturedEvent.OperatorsResult)
+	require.True(t, capturedEvent.OperatorsResult.Matched)
+	require.Contains(t, capturedEvent.OperatorsResult.Request, "template-randstr")
+	require.Contains(t, capturedEvent.OperatorsResult.Response, "template-randstr")
+}
+
+func TestPayloadPathRequestsUseSequentialRequestConditionIndexes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "payload=%s", strings.TrimPrefix(r.URL.Path, "/"))
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:     []string{"{{BaseURL}}/{{p}}"},
+		Method:   "GET",
+		Payloads: map[string]interface{}{"p": []string{"one", "two"}},
+	}
+	r.Matchers = append(r.Matchers, &operators.Matcher{
+		Type: "dsl",
+		DSL:  []string{`contains(body_1, "payload=one") && contains(body_2, "payload=two")`},
+	})
+
+	options := &protocols.ExecuterOptions{
+		Options: &protocols.Options{Timeout: 5},
+	}
+	require.NoError(t, r.Compile(options))
+	require.Equal(t, 2, r.Requests())
+
+	input := protocols.NewScanContext(server.URL, nil)
+	var matched bool
+	err := r.ExecuteWithResults(input, make(map[string]interface{}), make(map[string]interface{}), func(event *protocols.InternalWrappedEvent) {
+		if event.OperatorsResult != nil {
+			matched = event.OperatorsResult.Matched
+		}
+	})
+	require.NoError(t, err)
+	require.True(t, matched)
+}
+
 func TestMatcherTypes(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Server", "neutron-test")

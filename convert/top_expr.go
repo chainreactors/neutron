@@ -33,6 +33,13 @@ func parseTopExpression(expr string) *TopExprNode {
 	return simplifyTopExpr(result)
 }
 
+// ParseTopExpression parses an xray POC top-level expression into the
+// simplified rule-call tree used by the converter. It is exported for
+// harness-style tooling that needs the same rule ordering semantics.
+func ParseTopExpression(expr string) *TopExprNode {
+	return parseTopExpression(expr)
+}
+
 type topExprParser struct {
 	tokens []xToken
 	pos    int
@@ -277,15 +284,15 @@ func substituteRuleExprs(node *TopExprNode, ruleExprs map[string]string) string 
 
 // buildReqConditionDSL builds a single DSL expression for req-condition,
 // suffixing variables by request index.
-func buildReqConditionDSL(node *TopExprNode, rawExpr string, ruleExprs map[string]string, ruleReqIndex map[string]int, lastIndex int) string {
-	if needsRawTopExpression(rawExpr) {
+func buildReqConditionDSL(node *TopExprNode, rawExpr string, ruleExprs map[string]string, ruleReqIndex map[string][]int, lastIndex int, noSuffixVars map[string]bool) string {
+	if needsRawTopExpression(rawExpr) && !hasMultiRequestIndex(ruleReqIndex) {
 		if substituted, ok := substituteRuleCallsInExpression(rawExpr, ruleExprs, func(ruleName string) string {
-			idx, ok := ruleReqIndex[ruleName]
-			if !ok || idx == lastIndex {
+			indices, ok := ruleReqIndex[ruleName]
+			if !ok || len(indices) == 0 || indices[0] == lastIndex {
 				return ""
 			}
-			return fmt.Sprintf("_%d", idx)
-		}); ok {
+			return fmt.Sprintf("_%d", indices[0])
+		}, noSuffixVars); ok {
 			return substituted
 		}
 	}
@@ -298,29 +305,40 @@ func buildReqConditionDSL(node *TopExprNode, rawExpr string, ruleExprs map[strin
 		if !ok {
 			return "true"
 		}
-		idx, ok := ruleReqIndex[node.Name]
+		indices, ok := ruleReqIndex[node.Name]
 		if !ok {
 			return "(" + expr + ")"
 		}
-		if idx == lastIndex {
+		parts := make([]string, 0, len(indices))
+		for _, idx := range indices {
+			if idx == lastIndex {
+				parts = append(parts, "("+expr+")")
+			} else {
+				parts = append(parts, "("+suffixExprVars(expr, idx, noSuffixVars)+")")
+			}
+		}
+		if len(parts) == 0 {
 			return "(" + expr + ")"
 		}
-		return "(" + suffixExprVars(expr, idx) + ")"
+		if len(parts) == 1 {
+			return parts[0]
+		}
+		return "(" + strings.Join(parts, " || ") + ")"
 	case "and":
 		parts := make([]string, len(node.Children))
 		for i, child := range node.Children {
-			parts[i] = buildReqConditionDSL(child, "", ruleExprs, ruleReqIndex, lastIndex)
+			parts[i] = buildReqConditionDSL(child, "", ruleExprs, ruleReqIndex, lastIndex, noSuffixVars)
 		}
 		return "(" + strings.Join(parts, " && ") + ")"
 	case "or":
 		parts := make([]string, len(node.Children))
 		for i, child := range node.Children {
-			parts[i] = buildReqConditionDSL(child, "", ruleExprs, ruleReqIndex, lastIndex)
+			parts[i] = buildReqConditionDSL(child, "", ruleExprs, ruleReqIndex, lastIndex, noSuffixVars)
 		}
 		return "(" + strings.Join(parts, " || ") + ")"
 	case "not":
 		if len(node.Children) > 0 {
-			return "!(" + buildReqConditionDSL(node.Children[0], "", ruleExprs, ruleReqIndex, lastIndex) + ")"
+			return "!(" + buildReqConditionDSL(node.Children[0], "", ruleExprs, ruleReqIndex, lastIndex, noSuffixVars) + ")"
 		}
 		return "true"
 	case "literal":
@@ -330,6 +348,15 @@ func buildReqConditionDSL(node *TopExprNode, rawExpr string, ruleExprs map[strin
 		return "false"
 	}
 	return "true"
+}
+
+func hasMultiRequestIndex(ruleReqIndex map[string][]int) bool {
+	for _, indices := range ruleReqIndex {
+		if len(indices) > 1 {
+			return true
+		}
+	}
+	return false
 }
 
 func needsRawTopExpression(expr string) bool {
@@ -345,7 +372,7 @@ func needsRawTopExpression(expr string) bool {
 	return false
 }
 
-func substituteRuleCallsInExpression(expr string, ruleExprs map[string]string, suffixFor func(string) string) (string, bool) {
+func substituteRuleCallsInExpression(expr string, ruleExprs map[string]string, suffixFor func(string) string, noSuffixVars map[string]bool) (string, bool) {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return "", false
@@ -354,14 +381,14 @@ func substituteRuleCallsInExpression(expr string, ruleExprs map[string]string, s
 	if err != nil {
 		return "", false
 	}
-	replaced, changed, ok := replaceRuleCalls(ast, ruleExprs, suffixFor)
+	replaced, changed, ok := replaceRuleCalls(ast, ruleExprs, suffixFor, noSuffixVars)
 	if !ok || !changed {
 		return "", false
 	}
 	return replaced.String(), true
 }
 
-func replaceRuleCalls(node *dsl.Node, ruleExprs map[string]string, suffixFor func(string) string) (*dsl.Node, bool, bool) {
+func replaceRuleCalls(node *dsl.Node, ruleExprs map[string]string, suffixFor func(string) string, noSuffixVars map[string]bool) (*dsl.Node, bool, bool) {
 	if node == nil {
 		return nil, false, true
 	}
@@ -375,7 +402,7 @@ func replaceRuleCalls(node *dsl.Node, ruleExprs map[string]string, suffixFor fun
 			ruleAST = TransformTitleToBodyRegex(ruleAST)
 			if suffixFor != nil {
 				if suffix := suffixFor(name); suffix != "" {
-					ruleAST = dsl.SuffixVariables(ruleAST, suffix)
+					ruleAST = suffixRequestVariables(ruleAST, suffix, noSuffixVars)
 				}
 			}
 			return ruleAST, true, true
@@ -390,7 +417,7 @@ func replaceRuleCalls(node *dsl.Node, ruleExprs map[string]string, suffixFor fun
 	clone.Children = make([]*dsl.Node, len(node.Children))
 	changed := false
 	for i, child := range node.Children {
-		replaced, childChanged, ok := replaceRuleCalls(child, ruleExprs, suffixFor)
+		replaced, childChanged, ok := replaceRuleCalls(child, ruleExprs, suffixFor, noSuffixVars)
 		if !ok {
 			return nil, false, false
 		}
@@ -400,14 +427,36 @@ func replaceRuleCalls(node *dsl.Node, ruleExprs map[string]string, suffixFor fun
 	return clone, changed, true
 }
 
-func suffixExprVars(expr string, reqIndex int) string {
+func suffixExprVars(expr string, reqIndex int, noSuffixVars map[string]bool) string {
 	ast, err := ParseToAST(expr)
 	if err != nil {
 		return expr
 	}
 	suffix := fmt.Sprintf("_%d", reqIndex)
-	suffixed := dsl.SuffixVariables(ast, suffix)
+	suffixed := suffixRequestVariables(ast, suffix, noSuffixVars)
 	return suffixed.String()
+}
+
+func suffixRequestVariables(node *dsl.Node, suffix string, noSuffixVars map[string]bool) *dsl.Node {
+	if node == nil {
+		return nil
+	}
+	clone := &dsl.Node{
+		Type: node.Type, Value: node.Value, Op: node.Op, FuncName: node.FuncName,
+	}
+	if clone.Type == dsl.NodeVariable {
+		name := clone.Value.(string)
+		if !noSuffixVars[name] {
+			clone.Value = name + suffix
+		}
+	}
+	if len(node.Children) > 0 {
+		clone.Children = make([]*dsl.Node, len(node.Children))
+		for i, child := range node.Children {
+			clone.Children[i] = suffixRequestVariables(child, suffix, noSuffixVars)
+		}
+	}
+	return clone
 }
 
 func collectRuleNames(node *TopExprNode) []string {
@@ -422,4 +471,10 @@ func collectRuleNames(node *TopExprNode) []string {
 		names = append(names, collectRuleNames(child)...)
 	}
 	return names
+}
+
+// CollectRuleNames returns rule calls from a top-level expression tree in
+// left-to-right order.
+func CollectRuleNames(node *TopExprNode) []string {
+	return collectRuleNames(node)
 }

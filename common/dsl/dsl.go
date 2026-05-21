@@ -926,6 +926,18 @@ func registerDefaultFunctions() {
 		}
 		return math.Mod(left, right), nil
 	}))
+	MustAddFunction(NewWithPositionalArgs("xray_lt", 2, false, func(args ...interface{}) (interface{}, error) {
+		return xrayCompare(args[0], args[1], "<"), nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_lte", 2, false, func(args ...interface{}) (interface{}, error) {
+		return xrayCompare(args[0], args[1], "<="), nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_gt", 2, false, func(args ...interface{}) (interface{}, error) {
+		return xrayCompare(args[0], args[1], ">"), nil
+	}))
+	MustAddFunction(NewWithPositionalArgs("xray_gte", 2, false, func(args ...interface{}) (interface{}, error) {
+		return xrayCompare(args[0], args[1], ">="), nil
+	}))
 	MustAddFunction(NewWithPositionalArgs("xray_regex_group", 3, false, func(args ...interface{}) (interface{}, error) {
 		pattern := toString(args[0])
 		input := toString(args[1])
@@ -1447,6 +1459,38 @@ func xrayNumber(value interface{}) (float64, bool) {
 	default:
 		n, err := strconv.ParseFloat(strings.TrimSpace(toString(value)), 64)
 		return n, err == nil
+	}
+}
+
+func xrayCompare(left, right interface{}, op string) bool {
+	leftNum, okLeft := xrayNumber(left)
+	rightNum, okRight := xrayNumber(right)
+	if okLeft && okRight {
+		switch op {
+		case "<":
+			return leftNum < rightNum
+		case "<=":
+			return leftNum <= rightNum
+		case ">":
+			return leftNum > rightNum
+		case ">=":
+			return leftNum >= rightNum
+		}
+	}
+	leftString := toString(left)
+	rightString := toString(right)
+	cmp := strings.Compare(leftString, rightString)
+	switch op {
+	case "<":
+		return cmp < 0
+	case "<=":
+		return cmp <= 0
+	case ">":
+		return cmp > 0
+	case ">=":
+		return cmp >= 0
+	default:
+		return false
 	}
 }
 

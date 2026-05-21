@@ -419,14 +419,16 @@ func buildNeutronData(resp mockResponse) map[string]interface{} {
 		"content_length": len(resp.Body),
 	}
 	var hdr strings.Builder
+	var raw strings.Builder
 	for k, v := range resp.Headers {
 		norm := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(k), "-", "_"))
 		data[norm] = v
 		// neutron uses normalized keys in all_headers
 		fmt.Fprintf(&hdr, "%s: %s\r\n", norm, v)
+		fmt.Fprintf(&raw, "%s: %s\r\n", k, v)
 	}
 	data["all_headers"] = hdr.String()
-	data["header"] = hdr.String()
+	data["header"] = raw.String()
 	return data
 }
 
