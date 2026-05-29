@@ -507,7 +507,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	data["matched"] = matched
 	data["status_code"] = resp.StatusCode
 	data["duration"] = duration.Seconds()
-	data["latency"] = float64(duration.Milliseconds())
+	data["latency"] = float64(duration / time.Millisecond)
 
 	var headerBuilder strings.Builder
 	for k, v := range resp.Header {
