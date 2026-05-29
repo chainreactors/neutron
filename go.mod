@@ -8,7 +8,7 @@ require (
 	github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4
 	github.com/hashicorp/go-version v1.6.0
 	github.com/spaolacci/murmur3 v1.1.0
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
