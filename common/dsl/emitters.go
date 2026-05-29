@@ -44,7 +44,7 @@ func (f *FOFAEmitter) NotEquals(field, value string) string {
 }
 
 func fofaEscape(s string) string {
-	return strings.ReplaceAll(s, `"`, `\"`)
+	return strings.Replace(s, `"`, `\"`, -1)
 }
 func (f *FOFAEmitter) StatusCode(code int) string {
 	return fmt.Sprintf(`status_code="%d"`, code)

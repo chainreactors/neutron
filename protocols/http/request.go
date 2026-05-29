@@ -13,6 +13,7 @@ import (
 	"github.com/spaolacci/murmur3"
 	"html"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -421,7 +422,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 func (r *Request) executeRequest(input *protocols.ScanContext, request *generatedRequest, previousEvent map[string]interface{}, callback protocols.OutputEventCallback, reqcount int) error {
 	var reqBody []byte
 	if request.request.Body != nil {
-		reqBody, _ = io.ReadAll(request.request.Body)
+		reqBody, _ = ioutil.ReadAll(request.request.Body)
 		request.request.Body = NopCloser(bytes.NewReader(reqBody))
 	}
 
@@ -676,12 +677,26 @@ func (r *Request) populateFaviconData(data protocols.InternalEvent, req *http.Re
 	}
 }
 
+// cloneHeader 复制一份 http.Header（http.Header.Clone 是 go1.13 API，
+// 这里手写以保持 go1.11 兼容）。
+func cloneHeader(h http.Header) http.Header {
+	if h == nil {
+		return nil
+	}
+	c := make(http.Header, len(h))
+	for k, v := range h {
+		c[k] = append([]string(nil), v...)
+	}
+	return c
+}
+
 func (r *Request) fetchFavicon(baseReq *http.Request, iconURL string) ([]byte, bool) {
-	iconReq, err := http.NewRequestWithContext(baseReq.Context(), http.MethodGet, iconURL, nil)
+	iconReq, err := http.NewRequest(http.MethodGet, iconURL, nil)
 	if err != nil {
 		return nil, false
 	}
-	iconReq.Header = baseReq.Header.Clone()
+	iconReq = iconReq.WithContext(baseReq.Context())
+	iconReq.Header = cloneHeader(baseReq.Header)
 	if iconReq.Header.Get("User-Agent") == "" {
 		iconReq.Header.Set("User-Agent", ua)
 	}

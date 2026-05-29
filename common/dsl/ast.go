@@ -59,7 +59,7 @@ func quoteStringLiteral(s string) string {
 
 func quoteStringLiteralPlain(s string) string {
 	quoted := fmt.Sprintf("%q", s)
-	return strings.ReplaceAll(quoted, `'`, `\'`)
+	return strings.Replace(quoted, `'`, `\'`, -1)
 }
 
 func isGovaluateDateLikeLiteral(s string) bool {
