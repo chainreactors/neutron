@@ -154,6 +154,10 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 		return nil, err
 	}
 
+	if strings.Contains(reqdata, "{{") {
+		return nil, errStopExecution
+	}
+
 	if isRawRequest {
 		return r.makeHTTPRequestFromRaw(parsed.String(), reqdata, values, allVars)
 	}
