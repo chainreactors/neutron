@@ -522,13 +522,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	body, _ := readResponseBody(resp)
 	data["body"] = string(body)
 	data["title"] = extractHTMLTitle(string(body))
-	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
-		cert := resp.TLS.PeerCertificates[0]
-		data["cert_subject"] = cert.Subject.String()
-		data["cert_issuer"] = cert.Issuer.String()
-		data["cert_not_before"] = cert.NotBefore.Format("2006-01-02 03:04:05")
-		data["cert_not_after"] = cert.NotAfter.Format("2006-01-02 03:04:05")
-	}
+	addTLSCertFields(data, resp)
 	if strings.TrimSpace(resp.Header.Get("Content-Encoding")) != "" {
 		data["content_length"] = len(body)
 	} else if resp.ContentLength > -1 {
