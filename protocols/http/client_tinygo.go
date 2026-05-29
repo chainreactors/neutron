@@ -19,14 +19,13 @@ type Configuration struct {
 	MaxRedirects    int
 	CookieReuse     bool
 	Proxy           func(*http.Request) (*url.URL, error)
+	DialContext     func(ctx context.Context, network, address string) (net.Conn, error)
 }
 
 var DefaultOption = Configuration{
-	5,
-	true,
-	3,
-	false,
-	nil,
+	Timeout:         5,
+	FollowRedirects: true,
+	MaxRedirects:    3,
 }
 
 type Transport struct {
@@ -40,7 +39,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 var DefaultTransport = &Transport{}
 
 func createClient(opt *Configuration) *http.Client {
-	return &http.Client{Transport: DefaultTransport}
+	return &http.Client{Transport: &Transport{DialContext: opt.DialContext}}
 }
 
 type nopCloser struct{}

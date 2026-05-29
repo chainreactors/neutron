@@ -1,6 +1,7 @@
 package network
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"github.com/chainreactors/neutron/common"
@@ -147,6 +148,9 @@ func (r *Request) executeRequestWithPayloads(variables map[string]interface{}, a
 
 	if shouldUseTLS {
 		//conn, err = r.dialer.DialTLS(context.Background(), "tcp", actualAddress)
+	} else if r.options != nil && r.options.Options != nil && r.options.Options.DialContext != nil {
+		// 经注入的拨号器（可为代理）建连，保持与 http 协议一致的实例级行为。
+		conn, err = r.options.Options.DialContext(context.Background(), "tcp", actualAddress)
 	} else {
 		conn, err = r.dialer.Dial("tcp", actualAddress)
 	}

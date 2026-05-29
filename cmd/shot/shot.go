@@ -6,7 +6,6 @@ import (
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/protocols"
-	http2 "github.com/chainreactors/neutron/protocols/http"
 	"github.com/chainreactors/neutron/templates"
 	"github.com/davecgh/go-spew/spew"
 	"gopkg.in/yaml.v3"
@@ -40,6 +39,9 @@ func main() {
 	targetPath := flag.Arg(0)
 	targetURL := flag.Arg(1)
 
+	if ExecuterOptions == nil {
+		ExecuterOptions = &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}
+	}
 	if *proxyAddr != "" {
 		fmt.Println("Using proxy:", *proxyAddr)
 		proxyURL, err := url.Parse(*proxyAddr)
@@ -47,7 +49,8 @@ func main() {
 			fmt.Printf("Invalid proxy address: %s\n", err.Error())
 			return
 		}
-		http2.DefaultTransport.Proxy = http.ProxyURL(proxyURL)
+		// per-execution 代理：写入本次 ExecuterOptions，不再改写全局 transport。
+		ExecuterOptions.Options.Proxy = http.ProxyURL(proxyURL)
 	}
 
 	var yamlFiles []string

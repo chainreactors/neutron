@@ -257,6 +257,8 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		MaxRedirects:    r.MaxRedirects,
 		FollowRedirects: r.Redirects || r.HostRedirects,
 		CookieReuse:     r.CookieReuse,
+		DialContext:     options.Options.DialContext,
+		Proxy:           options.Options.Proxy,
 	}
 	r.httpClient = createClient(connectionConfiguration)
 
