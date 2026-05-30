@@ -14,10 +14,13 @@ import (
 var NeutronLog *logs.Logger
 
 func Logger() *logs.Logger {
-	if NeutronLog == nil {
-		NeutronLog = logs.Log
+	// Read-only: never lazily assign the package global here (that write races with
+	// concurrent Debug/Dump callers). Fall back to logs.Log when unset; an explicit
+	// override should be set once at startup, before concurrent scanning begins.
+	if NeutronLog != nil {
+		return NeutronLog
 	}
-	return NeutronLog
+	return logs.Log
 }
 
 func Debug(format string, s ...interface{}) {

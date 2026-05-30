@@ -243,8 +243,9 @@ func genFaviconHash(node *Node, e Emitter, r *Result) string {
 
 func resolveField(node *Node, e Emitter) string {
 	if node.Type == NodeVariable {
-		part := node.Value.(string)
-		return e.Field(NormalizePart(part))
+		if part, ok := node.Value.(string); ok {
+			return e.Field(NormalizePart(part))
+		}
 	}
 	return fmt.Sprintf("%v", node.Value)
 }

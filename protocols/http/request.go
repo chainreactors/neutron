@@ -427,7 +427,13 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 	}
 
 	timeStart := time.Now()
-	resp, err := r.httpClient.Do(request.request)
+	// Per-execution client override (ScanContext.Client) takes precedence over the
+	// shared compiled client, so callers never mutate the shared template at runtime.
+	client := r.httpClient
+	if input != nil && input.Client != nil {
+		client = input.Client
+	}
+	resp, err := client.Do(request.request)
 	common.Debug("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
 	common.Dump(request.request)
 	if err != nil {

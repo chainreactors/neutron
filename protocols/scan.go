@@ -3,6 +3,7 @@ package protocols
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 )
@@ -12,6 +13,11 @@ type ScanContext struct {
 	// exported / configurable fields
 	Input    string
 	Payloads map[string]interface{}
+	// Client, when non-nil, overrides the per-request default HTTP client for
+	// this execution only. It lets active-match engines inject a client/transport
+	// without mutating the shared, compiled template (which is concurrency-unsafe).
+	// nil = use the request's own compiled client.
+	Client *http.Client
 	// callbacks or hooks
 	OnError  func(error)
 	OnResult func(e *InternalWrappedEvent)

@@ -3,11 +3,13 @@ package templates
 import (
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/neutron/protocols/executer"
-	"strings"
 )
 
 func (t *Template) GetTags() []string {
@@ -76,6 +78,20 @@ func (t *Template) Execute(input string, payload map[string]interface{}) (*opera
 		return nil, protocols.OpsecError
 	}
 	return t.Executor.Execute(protocols.NewScanContext(input, payload))
+}
+
+// ExecuteWithClient runs the template using the provided HTTP client for this
+// execution only. The client is threaded through the ScanContext down to request
+// execution, so the shared compiled template is never mutated at runtime — making
+// concurrent active-match calls safe. A nil client falls back to Execute's behavior.
+func (t *Template) ExecuteWithClient(input string, payload map[string]interface{}, client *http.Client) (*operators.Result, error) {
+	if t.Executor.Options().Options.Opsec && t.Opsec {
+		common.Debug("(opsec!!!) skip template %s", t.Id)
+		return nil, protocols.OpsecError
+	}
+	ctx := protocols.NewScanContext(input, payload)
+	ctx.Client = client
+	return t.Executor.Execute(ctx)
 }
 
 // ExecuteWithEvents executes the template and returns both the final result

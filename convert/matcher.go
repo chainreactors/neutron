@@ -396,8 +396,8 @@ func faviconContains(node *dsl.Node) (string, string, bool) {
 	if partNode.Type != dsl.NodeVariable {
 		return "", "", false
 	}
-	part := partNode.Value.(string)
-	if part != "favicon_hash" && part != "body_favicon_hash" {
+	part, ok := partNode.Value.(string)
+	if !ok || (part != "favicon_hash" && part != "body_favicon_hash") {
 		return "", "", false
 	}
 	hash := literalString(node.Children[1])

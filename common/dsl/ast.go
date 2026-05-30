@@ -98,7 +98,9 @@ func SuffixVariables(n *Node, suffix string) *Node {
 		Type: n.Type, Value: n.Value, Op: n.Op, FuncName: n.FuncName,
 	}
 	if clone.Type == NodeVariable {
-		clone.Value = clone.Value.(string) + suffix
+		if s, ok := clone.Value.(string); ok {
+			clone.Value = s + suffix
+		}
 	}
 	if len(n.Children) > 0 {
 		clone.Children = make([]*Node, len(n.Children))

@@ -445,8 +445,7 @@ func suffixRequestVariables(node *dsl.Node, suffix string, noSuffixVars map[stri
 		Type: node.Type, Value: node.Value, Op: node.Op, FuncName: node.FuncName,
 	}
 	if clone.Type == dsl.NodeVariable {
-		name := clone.Value.(string)
-		if !noSuffixVars[name] {
+		if name, ok := clone.Value.(string); ok && !noSuffixVars[name] {
 			clone.Value = name + suffix
 		}
 	}
