@@ -545,3 +545,20 @@ func regexQuote(s string) string {
 	}
 	return out.String()
 }
+
+func hasNonASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > 0x7e || s[i] < 0x20 {
+			return true
+		}
+	}
+	return false
+}
+
+func toHex(s string) string {
+	var out strings.Builder
+	for i := 0; i < len(s); i++ {
+		fmt.Fprintf(&out, "%02x", s[i])
+	}
+	return out.String()
+}
