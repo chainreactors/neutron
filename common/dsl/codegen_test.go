@@ -220,6 +220,138 @@ func TestGenerateNewFields(t *testing.T) {
 	}
 }
 
+func TestGenerateHeaderVariablesUseAllHeadersNeedles(t *testing.T) {
+	tests := []struct {
+		expr   string
+		fofa   string
+		hunter string
+		censys string
+	}{
+		{
+			`contains(location, "/login")`,
+			`header="location: /login"`,
+			`header="location: /login"`,
+			`services.http.response.headers: "location: /login"`,
+		},
+		{
+			`contains(set_cookie, "JSESSIONID")`,
+			`header="set_cookie: JSESSIONID"`,
+			`header="set_cookie: JSESSIONID"`,
+			`services.http.response.headers: "set_cookie: JSESSIONID"`,
+		},
+		{
+			`contains(www_authenticate, "Basic")`,
+			`header="www_authenticate: Basic"`,
+			`header="www_authenticate: Basic"`,
+			`services.http.response.headers: "www_authenticate: Basic"`,
+		},
+		{
+			`location == "/admin"`,
+			`header="location: /admin"`,
+			`header="location: /admin"`,
+			`services.http.response.headers: "location: /admin"`,
+		},
+		{
+			`contains_all(location, "/one", "/two")`,
+			`(header="location: /one" && header="location: /two")`,
+			`(header="location: /one" && header="location: /two")`,
+			`(services.http.response.headers: "location: /one" AND services.http.response.headers: "location: /two")`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			node, err := Parse(tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			expected := map[string]string{"fofa": tt.fofa, "hunter": tt.hunter, "censys": tt.censys}
+			for platform, want := range expected {
+				e, _ := GetEmitter(platform)
+				r := Generate(node, e)
+				if r.Query != want {
+					t.Errorf("[%s] got %q, want %q", platform, r.Query, want)
+				}
+				if r.HasErrors() {
+					t.Errorf("[%s] unexpected errors: %v", platform, r.Errors)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateStatusCodeStringAndWrappedComparisons(t *testing.T) {
+	tests := []struct {
+		expr string
+		want string
+	}{
+		{`status_code == "200"`, `status_code="200"`},
+		{`to_number(status_code) == "401"`, `status_code="401"`},
+		{`status_code != "404"`, `!(status_code="404")`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			node, err := Parse(tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := Generate(node, &FOFAEmitter{})
+			if r.Query != tt.want {
+				t.Errorf("got %q, want %q", r.Query, tt.want)
+			}
+			if r.HasErrors() {
+				t.Errorf("unexpected errors: %v", r.Errors)
+			}
+		})
+	}
+}
+
+func TestGenerateHistoryVariablesNormalizeForQueries(t *testing.T) {
+	tests := []struct {
+		expr   string
+		fofa   string
+		censys string
+	}{
+		{
+			`contains(body_0, "redirect")`,
+			`body="redirect"`,
+			`services.http.response.body: "redirect"`,
+		},
+		{
+			`contains(headers_0, "location: /login")`,
+			`header="location: /login"`,
+			`services.http.response.headers: "location: /login"`,
+		},
+		{
+			`status_0 == "302"`,
+			`status_code="302"`,
+			`services.http.response.status_code: 302`,
+		},
+		{
+			`contains(location_1, "/login") && status_code_1 != "404"`,
+			`header="location: /login" && !(status_code="404")`,
+			`services.http.response.headers: "location: /login" AND NOT services.http.response.status_code: 404`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			node, err := Parse(tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := Generate(node, &FOFAEmitter{}).Query; got != tt.fofa {
+				t.Errorf("[fofa] got %q, want %q", got, tt.fofa)
+			}
+			if got := Generate(node, &CensysEmitter{}).Query; got != tt.censys {
+				t.Errorf("[censys] got %q, want %q", got, tt.censys)
+			}
+		})
+	}
+}
+
 func TestEndToEndAllEngines(t *testing.T) {
 	expr := `contains(body, "wp-content") && contains(body, "wp-includes")`
 	expected := map[string]string{
