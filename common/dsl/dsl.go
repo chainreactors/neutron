@@ -694,7 +694,11 @@ func registerDefaultFunctions() {
 				return nil, ErrInvalidDslFunction
 			}
 
-			length = int(args[0].(float64))
+			var err error
+			length, err = dslLength(args[0])
+			if err != nil {
+				return nil, err
+			}
 
 			if argSize == 2 {
 				inputCharSet := toString(args[1])
@@ -716,7 +720,11 @@ func registerDefaultFunctions() {
 				return nil, ErrInvalidDslFunction
 			}
 
-			length = int(args[0].(float64))
+			var err error
+			length, err = dslLength(args[0])
+			if err != nil {
+				return nil, err
+			}
 
 			if argSize == 2 {
 				badChars = toString(args[1])
@@ -736,7 +744,11 @@ func registerDefaultFunctions() {
 				return nil, ErrInvalidDslFunction
 			}
 
-			length = int(args[0].(float64))
+			var err error
+			length, err = dslLength(args[0])
+			if err != nil {
+				return nil, err
+			}
 
 			if argSize == 2 {
 				badChars = toString(args[1])
@@ -753,7 +765,10 @@ func registerDefaultFunctions() {
 				return nil, ErrInvalidDslFunction
 			}
 
-			length := int(args[0].(float64))
+			length, err := dslLength(args[0])
+			if err != nil {
+				return nil, err
+			}
 			badNumbers := ""
 
 			if argSize == 2 {
@@ -1460,6 +1475,17 @@ func xrayNumber(value interface{}) (float64, bool) {
 		n, err := strconv.ParseFloat(strings.TrimSpace(toString(value)), 64)
 		return n, err == nil
 	}
+}
+
+func dslLength(value interface{}) (int, error) {
+	n, ok := xrayNumber(value)
+	if !ok {
+		return 0, ErrParsingArg
+	}
+	if n < 0 {
+		return 0, ErrParsingArg
+	}
+	return int(n), nil
 }
 
 func xrayCompare(left, right interface{}, op string) bool {
