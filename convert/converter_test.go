@@ -22,6 +22,8 @@ func TestParseToAST(t *testing.T) {
 		{"reverse_matches", `"pattern".matches(response.body_string)`, `regex("pattern", body)`},
 		{"favicon", `faviconHash(response.getIconContent()) == -297069493`, `contains(favicon_hash, "-297069493")`},
 		{"favicon_response_icon", `faviconHash(response.icon()) == 1677186191`, `contains(favicon_hash, "1677186191")`},
+		{"mmh3_get_icon_content", `mmh3(response.getIconContent()) == 1677186191`, `contains(favicon_hash, "1677186191")`},
+		{"mmh3_response_icon", `mmh3(response.icon()) == 1677186191`, `contains(favicon_hash, "1677186191")`},
 		{"mmh3_icon", `mmh3(icon(response)) in [51234238, -1216867457]`, `(contains(favicon_hash, "51234238") || contains(favicon_hash, "-1216867457"))`},
 		{"title_to_title", `response.title_string.contains("Login")`, `contains(title, "Login")`},
 		{"string_title_contains", `string(response.title).contains("Sindoh")`, `contains(title, "Sindoh")`},
@@ -43,6 +45,15 @@ func TestParseToAST(t *testing.T) {
 		{"replace_all", `replaceAll(tmp, "\\", "/")`, `replace(tmp, "\\", "/")`},
 		{"randomstr_alias", `response.body.contains("x" + randomstr)`, `contains(body, concat("x", randstr))`},
 		{"sha_alias", `sha(str1, "sha1") + "=" + sha(str2, "sha1")`, `concat(concat(xray_sha(str1, "sha1"), "="), xray_sha(str2, "sha1"))`},
+		// \xNN hex escape sequences
+		{"hex_escape_0c", `response.body.bcontains(b"\x0c")`, "contains(body, \"\\f\")"},
+		{"hex_escape_gzip", `response.body.bstartsWith(b"\x1F\x8B")`, "starts_with(body, \"\\x1f\\u008b\")"},
+		{"hex_escape_zip", `response.body.bstartsWith(b"PK\x03\x04")`, "starts_with(body, \"PK\\x03\\x04\")"},
+		{"hex_escape_null", `response.body.bcontains(b"SQLite format 3\x00")`, "contains(body, \"SQLite format 3\\x00\")"},
+		// triple-quoted raw strings
+		{"triple_quote_regex", `r'''(?i)<input\b.+?type=["']?file['"]?'''.bmatches(response.body)`, "regex(\"(?i)<input\\\\b.+?type=[\\\"\\']?file[\\'\\\"]?\", body)"},
+		// variable-indexed header access
+		{"header_var_access", `response.headers[rHeader].startsWith(r1)`, `contains(all_headers, r1)`},
 	}
 
 	for _, tt := range tests {
@@ -109,6 +120,15 @@ func TestExprToMatchers(t *testing.T) {
 		},
 		{
 			"favicon_hash", `faviconHash(response.getIconContent()) == -297069493`, 1, "or",
+			func(t *testing.T, r *ConvertResult) {
+				m := r.Matchers[0]
+				if m.Type != "favicon" || m.Part != "favicon_hash" || m.Hash[0] != "-297069493" {
+					t.Errorf("got %+v", m)
+				}
+			},
+		},
+		{
+			"mmh3_favicon_content", `mmh3(response.getIconContent()) == -297069493`, 1, "or",
 			func(t *testing.T, r *ConvertResult) {
 				m := r.Matchers[0]
 				if m.Type != "favicon" || m.Part != "favicon_hash" || m.Hash[0] != "-297069493" {

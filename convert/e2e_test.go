@@ -172,6 +172,117 @@ expression: kw()
 	}
 }
 
+func TestEndToEnd_HeaderVariablesGenerateKeyedQueries(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--header-query
+detail:
+  fingerprint:
+    name: Header Query
+transport: http
+rules:
+  redirect:
+    request:
+      method: GET
+      path: /
+    expression: |-
+      response.headers["Location"].contains("/login")
+      && response.headers["Set-Cookie"].contains("JSESSIONID")
+      && response.headers["WWW-Authenticate"].contains("Basic")
+expression: redirect()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	t.Logf("converted:\n%s", out)
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	tmpl.Compile(nil)
+	for _, req := range tmpl.GetRequests() {
+		(&req.Operators).Compile()
+		req.CompiledOperators = &req.Operators
+	}
+
+	fofa := tmpl.ToQuery().ToFOFA()
+	for _, want := range []string{
+		`header="location: /login"`,
+		`header="set_cookie: JSESSIONID"`,
+		`header="www_authenticate: Basic"`,
+	} {
+		if !strings.Contains(fofa.Query, want) {
+			t.Fatalf("missing %s in fofa query %q\nconverted:\n%s", want, fofa.Query, out)
+		}
+	}
+}
+
+func TestEndToEnd_MultiRequestHistoryVariablesGenerateQueries(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--history-query
+detail:
+  fingerprint:
+    name: History Query
+transport: http
+rules:
+  first:
+    request:
+      method: GET
+      path: /
+    expression: |-
+      response.status == 302
+      && response.body_string.contains("redirect")
+      && response.headers["Location"].contains("/login")
+  second:
+    request:
+      method: GET
+      path: /login
+    expression: response.status == 200 && response.body_string.contains("ok")
+expression: first() && second()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		`status_code_1 == 302`,
+		`contains(body_1, "redirect")`,
+		`contains(location_1, "/login")`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("converted template missing history variable %q:\n%s", want, s)
+		}
+	}
+	for _, bad := range []string{"status_0", "status_code_0", "body_0", "headers_0"} {
+		if strings.Contains(s, bad) {
+			t.Fatalf("converted template should not emit zero-based history variable %q:\n%s", bad, s)
+		}
+	}
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	tmpl.Compile(nil)
+	for _, req := range tmpl.GetRequests() {
+		(&req.Operators).Compile()
+		req.CompiledOperators = &req.Operators
+	}
+
+	fofa := tmpl.ToQuery().ToFOFA()
+	for _, want := range []string{
+		`status_code="302"`,
+		`body="redirect"`,
+		`header="location: /login"`,
+	} {
+		if !strings.Contains(fofa.Query, want) {
+			t.Fatalf("query missing %s in %q\nconverted:\n%s", want, fofa.Query, s)
+		}
+	}
+}
+
 func TestEndToEnd_NoComment(t *testing.T) {
 	xrayYAML := `
 name: fingerprint-test--nocomment
