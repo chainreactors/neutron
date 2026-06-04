@@ -143,13 +143,27 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 	reqdata, parsed = baseURLWithTemplatePrefs(reqdata, parsed)
 	isRawRequest := len(r.request.Raw) > 0
 
+	// Deduplicate overlapping path prefix between target URL and template path.
+	// e.g. target=http://x/druid/ + template={{BaseURL}}/druid/index.html
+	//   → without dedup: /druid/druid/index.html (wrong)
+	//   → with dedup:    /druid/index.html (correct, matches xpoc behavior)
+	parsed = deduplicateBaseURLPath(parsed, reqdata)
+
 	trailingSlash := false
 	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(reqdata, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
-	values := common.MergeMaps(globalValues, generateVariables(parsed, trailingSlash))
-	values = common.MergeMaps(values, allVars)
-	reqdata, err = common.Evaluate(reqdata, values)
+	targetValues := common.MergeMaps(globalValues, generateVariables(parsed, trailingSlash))
+	values := common.MergeMaps(targetValues, allVars)
+	if r.request.options != nil && r.request.options.Variables.Len() > 0 {
+		variablesMap := r.request.options.Variables.Evaluate(values)
+		if len(variablesMap) > 0 {
+			allVars = common.MergeMaps(allVars, variablesMap)
+			dynamicValues = common.MergeMaps(dynamicValues, variablesMap)
+			values = common.MergeMaps(values, variablesMap)
+		}
+	}
+	reqdata, err = common.Evaluate(reqdata, common.MergeMaps(values, targetValues))
 	if err != nil {
 		return nil, err
 	}
@@ -308,6 +322,49 @@ func setHeader(req *http.Request, name, value string) {
 	if name == "Host" {
 		req.Host = value
 	}
+}
+
+// deduplicateBaseURLPath strips the target URL's path when the template path
+// shares a leading directory with it, preventing doubled segments like /druid/druid/.
+// Only acts when the template uses {{BaseURL}}/... and the target has a non-root path.
+func deduplicateBaseURLPath(parsed *url.URL, reqdata string) *url.URL {
+	targetPath := strings.TrimRight(parsed.Path, "/")
+	if targetPath == "" {
+		return parsed
+	}
+	idx := strings.Index(reqdata, "{{BaseURL}}/")
+	if idx < 0 {
+		return parsed
+	}
+	templateSuffix := reqdata[idx+len("{{BaseURL}}"):]
+	if i := strings.IndexAny(templateSuffix, "\"' \t\n}"); i > 0 {
+		templateSuffix = templateSuffix[:i]
+	}
+	// Find the first path segment of the template path: /druid/... → druid
+	templateSuffix = strings.TrimLeft(templateSuffix, "/")
+	firstSeg := templateSuffix
+	if i := strings.IndexAny(firstSeg, "/?"); i > 0 {
+		firstSeg = firstSeg[:i]
+	}
+	if firstSeg == "" {
+		return parsed
+	}
+	// Check if any segment in the target path matches the template's first segment.
+	// Keep everything before the matching segment so deeper prefixes survive.
+	targetSegs := strings.Split(strings.Trim(targetPath, "/"), "/")
+	for i, seg := range targetSegs {
+		if seg == firstSeg {
+			clone := *parsed
+			if i == 0 {
+				clone.Path = ""
+			} else {
+				clone.Path = "/" + strings.Join(targetSegs[:i], "/")
+			}
+			clone.RawPath = ""
+			return &clone
+		}
+	}
+	return parsed
 }
 
 // generateVariables will create default variables after parsing a url
