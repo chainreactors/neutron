@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html"
+	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
@@ -87,11 +88,17 @@ func buildRoute(ruleName string, rule *convert.XrayRule, values map[string]strin
 	outputUnsupported := applyOutputs(rule.Output, resp, values)
 	unsupported = append(unsupported, outputUnsupported...)
 
+	pathPattern, err := templateRegexp(reqPath, values, wildcards, true)
+	if err != nil {
+		unsupported = append(unsupported, "request path pattern unsupported: "+err.Error())
+		return nil, unsupported
+	}
+
 	route := &Route{
 		Rule:         ruleName,
 		Method:       strings.ToUpper(method),
 		PathTemplate: reqPath,
-		Path:         templateRegexp(reqPath, values, wildcards, true),
+		Path:         pathPattern,
 		Headers:      map[string]*Pattern{},
 		Response:     resp,
 	}
@@ -114,10 +121,20 @@ func buildRoute(ruleName string, rule *convert.XrayRule, values map[string]strin
 		return dynamicResp, outputs
 	}
 	if strings.TrimSpace(rule.Request.Body) != "" {
-		route.Body = templateRegexp(rule.Request.Body, values, wildcards, false)
+		bodyPattern, err := templateRegexp(rule.Request.Body, values, wildcards, false)
+		if err != nil {
+			unsupported = append(unsupported, "request body pattern unsupported: "+err.Error())
+		} else {
+			route.Body = bodyPattern
+		}
 	}
 	for k, v := range rule.Request.Headers {
-		route.Headers[strings.ToLower(k)] = templateRegexp(v, values, wildcards, false)
+		headerPattern, err := templateRegexp(v, values, wildcards, false)
+		if err != nil {
+			unsupported = append(unsupported, "request header pattern unsupported: "+err.Error())
+			continue
+		}
+		route.Headers[strings.ToLower(k)] = headerPattern
 	}
 	return route, unsupported
 }
@@ -254,7 +271,12 @@ func mutateComparison(node *dsl.Node, resp *ResponseSpec, hints groupHints, opt 
 	left, right := node.Children[0], node.Children[1]
 	if isStatusVar(left) {
 		if n, ok := literalInt(right); ok {
-			resp.StatusCode = chooseNumber(node.Op, n)
+			status, valid := chooseStatusCode(node.Op, n)
+			if !valid {
+				*unsupported = append(*unsupported, fmt.Sprintf("cannot generate valid HTTP status for response.status %s %d", node.Op, n))
+				return
+			}
+			resp.StatusCode = status
 			return
 		}
 	}
@@ -1291,6 +1313,64 @@ func chooseNumber(op string, target int) int {
 	}
 }
 
+func chooseStatusCode(op string, target int) (int, bool) {
+	const (
+		minStatus = 100
+		maxStatus = 599
+	)
+
+	switch op {
+	case "==":
+		if target < minStatus || target > maxStatus {
+			return 0, false
+		}
+		return target, true
+	case "!=":
+		if target != http.StatusOK {
+			return http.StatusOK, true
+		}
+		return http.StatusCreated, true
+	case ">":
+		status := target + 1
+		if status < minStatus {
+			status = minStatus
+		}
+		if status > maxStatus {
+			return 0, false
+		}
+		return status, true
+	case ">=":
+		status := target
+		if status < minStatus {
+			status = minStatus
+		}
+		if status > maxStatus {
+			return 0, false
+		}
+		return status, true
+	case "<":
+		status := target - 1
+		if status > maxStatus {
+			status = maxStatus
+		}
+		if status < minStatus {
+			return 0, false
+		}
+		return status, true
+	case "<=":
+		status := target
+		if status > maxStatus {
+			status = maxStatus
+		}
+		if status < minStatus {
+			return 0, false
+		}
+		return status, true
+	default:
+		return 0, false
+	}
+}
+
 func chooseDelay(op string, target float64, millis bool) time.Duration {
 	unit := time.Second
 	if millis {
@@ -1357,7 +1437,7 @@ func parseFloat(value interface{}) (float64, bool) {
 	}
 }
 
-func templateRegexp(tmpl string, values map[string]string, wildcards map[string]bool, forPath bool) *Pattern {
+func templateRegexp(tmpl string, values map[string]string, wildcards map[string]bool, forPath bool) (*Pattern, error) {
 	var b strings.Builder
 	b.WriteString("^")
 	last := 0
@@ -1388,7 +1468,11 @@ func templateRegexp(tmpl string, values map[string]string, wildcards map[string]
 	}
 	b.WriteString(regexp.QuoteMeta(tmpl[last:]))
 	b.WriteString("$")
-	return &Pattern{Re: regexp.MustCompile(b.String()), Groups: groups}
+	re, err := regexp.Compile(b.String())
+	if err != nil {
+		return nil, err
+	}
+	return &Pattern{Re: re, Groups: groups}, nil
 }
 
 func captureName(name string, index int) string {

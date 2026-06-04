@@ -37,6 +37,51 @@ expression: r0()
 	require.True(t, report.Matched)
 }
 
+func TestVerifyUnsupportedImpossibleHTTPStatus(t *testing.T) {
+	raw := `
+name: harness-impossible-status
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: /status
+    expression: response.status < 2
+expression: r0()
+`
+	report := VerifyFile(&POCFile{Path: "status.yml", Data: []byte(raw), POC: loadTestPOC(t, raw)}, VerifyOptions{})
+	require.Equal(t, StatusUnsupported, report.Status)
+	require.Contains(t, report.Unsupported, "cannot generate valid HTTP status for response.status < 2")
+}
+
+func TestChooseStatusCodeSolvesHTTPRange(t *testing.T) {
+	tests := []struct {
+		op     string
+		target int
+		want   int
+		ok     bool
+	}{
+		{op: "==", target: 200, want: 200, ok: true},
+		{op: "!=", target: 200, want: 201, ok: true},
+		{op: "!=", target: 700, want: 200, ok: true},
+		{op: ">", target: 99, want: 100, ok: true},
+		{op: ">", target: 599, ok: false},
+		{op: ">=", target: 0, want: 100, ok: true},
+		{op: "<", target: 101, want: 100, ok: true},
+		{op: "<", target: 2, ok: false},
+		{op: "<=", target: 700, want: 599, ok: true},
+		{op: "<=", target: 99, ok: false},
+	}
+
+	for _, tt := range tests {
+		got, ok := chooseStatusCode(tt.op, tt.target)
+		require.Equal(t, tt.ok, ok, "%s %d", tt.op, tt.target)
+		if tt.ok {
+			require.Equal(t, tt.want, got, "%s %d", tt.op, tt.target)
+		}
+	}
+}
+
 func TestVerifyOutputVariablePathChain(t *testing.T) {
 	raw := `
 name: harness-output-chain
