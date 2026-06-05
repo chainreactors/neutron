@@ -86,6 +86,18 @@ func refreshDefaultFunctions() {
 	FunctionNames = GetFunctionNames(DefaultHelperFunctions)
 }
 
+// IsFieldTransparent returns true if the named DSL function does not change
+// the identity of the response part it wraps (e.g. to_lower(body) is still body).
+func IsFieldTransparent(name string) bool {
+	ensureDefaultFunctions()
+	for _, f := range functions {
+		if f.Name == name {
+			return f.IsFieldTransparent
+		}
+	}
+	return false
+}
+
 func addFunction(function dslFunction) error {
 	for _, f := range functions {
 		if function.Name == f.Name {
@@ -162,10 +174,10 @@ func registerDefaultFunctions() {
 
 	MustAddFunction(NewWithPositionalArgs("to_upper", 1, false, func(args ...interface{}) (interface{}, error) {
 		return strings.ToUpper(toString(args[0])), nil
-	}))
+	}).WithFieldTransparent())
 	MustAddFunction(NewWithPositionalArgs("to_lower", 1, false, func(args ...interface{}) (interface{}, error) {
 		return strings.ToLower(toString(args[0])), nil
-	}))
+	}).WithFieldTransparent())
 	MustAddFunction(NewWithMultipleSignatures("sort", []string{
 		"(input string) string",
 		"(input number) string",
@@ -251,7 +263,7 @@ func registerDefaultFunctions() {
 	}))
 	MustAddFunction(NewWithPositionalArgs("trim_space", 1, false, func(args ...interface{}) (interface{}, error) {
 		return strings.TrimSpace(toString(args[0])), nil
-	}))
+	}).WithFieldTransparent())
 	MustAddFunction(NewWithPositionalArgs("trim_prefix", 2, false, func(args ...interface{}) (interface{}, error) {
 		return strings.TrimPrefix(toString(args[0]), toString(args[1])), nil
 	}))
@@ -694,7 +706,11 @@ func registerDefaultFunctions() {
 				return nil, ErrInvalidDslFunction
 			}
 
-			length = int(args[0].(float64))
+			var err error
+			length, err = dslLength(args[0])
+			if err != nil {
+				return nil, err
+			}
 
 			if argSize == 2 {
 				inputCharSet := toString(args[1])
@@ -716,7 +732,11 @@ func registerDefaultFunctions() {
 				return nil, ErrInvalidDslFunction
 			}
 
-			length = int(args[0].(float64))
+			var err error
+			length, err = dslLength(args[0])
+			if err != nil {
+				return nil, err
+			}
 
 			if argSize == 2 {
 				badChars = toString(args[1])
@@ -736,7 +756,11 @@ func registerDefaultFunctions() {
 				return nil, ErrInvalidDslFunction
 			}
 
-			length = int(args[0].(float64))
+			var err error
+			length, err = dslLength(args[0])
+			if err != nil {
+				return nil, err
+			}
 
 			if argSize == 2 {
 				badChars = toString(args[1])
@@ -753,7 +777,10 @@ func registerDefaultFunctions() {
 				return nil, ErrInvalidDslFunction
 			}
 
-			length := int(args[0].(float64))
+			length, err := dslLength(args[0])
+			if err != nil {
+				return nil, err
+			}
 			badNumbers := ""
 
 			if argSize == 2 {
@@ -1065,10 +1092,10 @@ func registerDefaultFunctions() {
 			return float64(sint), nil
 		}
 		return nil, fmt.Errorf("%v could not be converted to int", argStr)
-	}))
+	}).WithFieldTransparent())
 	MustAddFunction(NewWithPositionalArgs("to_string", 1, false, func(args ...interface{}) (interface{}, error) {
 		return toString(args[0]), nil
-	}))
+	}).WithFieldTransparent())
 	MustAddFunction(NewWithPositionalArgs("dec_to_hex", 1, false, func(args ...interface{}) (interface{}, error) {
 		if number, ok := args[0].(float64); ok {
 			hexNum := strconv.FormatInt(int64(number), 16)
@@ -1460,6 +1487,17 @@ func xrayNumber(value interface{}) (float64, bool) {
 		n, err := strconv.ParseFloat(strings.TrimSpace(toString(value)), 64)
 		return n, err == nil
 	}
+}
+
+func dslLength(value interface{}) (int, error) {
+	n, ok := xrayNumber(value)
+	if !ok {
+		return 0, ErrParsingArg
+	}
+	if n < 0 {
+		return 0, ErrParsingArg
+	}
+	return int(n), nil
 }
 
 func xrayCompare(left, right interface{}, op string) bool {

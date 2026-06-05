@@ -5,6 +5,7 @@ package protocols
 
 import (
 	"fmt"
+
 	"github.com/chainreactors/neutron/common"
 	"gopkg.in/yaml.v3"
 )
@@ -77,14 +78,7 @@ func (variables *Variable) Evaluate(values map[string]interface{}) map[string]in
 
 func (variables *Variable) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	variables.InsertionOrderedStringMap = InsertionOrderedStringMap{}
-	if err := unmarshal(&variables.InsertionOrderedStringMap); err != nil {
-		return err
-	}
-	evaluated := variables.Evaluate(map[string]interface{}{})
-	for k, v := range evaluated {
-		variables.Set(k, v)
-	}
-	return nil
+	return unmarshal(&variables.InsertionOrderedStringMap)
 }
 
 // evaluateVariableValue expression and returns final value

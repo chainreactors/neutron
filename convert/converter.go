@@ -99,7 +99,7 @@ func ConvertPOC(poc *XrayPOC) ([]byte, error) {
 			"name":     poc.Detail.Fingerprint.Name,
 			"author":   "xray-converter",
 			"severity": "info",
-			"tags":     "neutron,converted",
+			"tags":     "neutron,xray,converted",
 		},
 	}
 
@@ -159,18 +159,31 @@ type requestGroup struct {
 type conversionContext struct {
 	variables     map[string]interface{}
 	variableOrder []string
+	variableAlias map[string]string
 	payloads      map[string][]string
 	runtimeVars   map[string]bool
 }
 
 func newConversionContext(poc *XrayPOC) *conversionContext {
-	variables, order := convertSetVariables(poc.Set)
+	aliases := variableAliases(collectVariableNames(poc))
+	variables, order := convertSetVariables(poc.Set, aliases)
 	return &conversionContext{
 		variables:     variables,
 		variableOrder: order,
-		payloads:      flattenPayloads(poc.Payloads),
+		variableAlias: aliases,
+		payloads:      flattenPayloads(poc.Payloads, aliases),
 		runtimeVars:   map[string]bool{},
 	}
+}
+
+func (ctx *conversionContext) aliasName(name string) string {
+	if ctx == nil || len(ctx.variableAlias) == 0 {
+		return name
+	}
+	if alias, ok := ctx.variableAlias[name]; ok {
+		return alias
+	}
+	return name
 }
 
 func (ctx *conversionContext) noSuffixVariables() map[string]bool {
@@ -277,12 +290,16 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 
 	for _, ruleName := range keys {
 		rule := poc.Rules[ruleName]
-		expr := strings.TrimSpace(rule.Expression)
-		if expr == "" {
+		rawExpr := strings.TrimSpace(rule.Expression)
+		if rawExpr == "" {
 			continue
 		}
+		expr := rawExpr
+		if len(ctx.variableAlias) > 0 {
+			expr = translateXrayExpression(rawExpr, ctx.variableAlias)
+		}
 		ruleExprs[ruleName] = expr
-		if !hasXrayRequest(rule, expr) {
+		if !hasXrayRequest(rule, rawExpr) {
 			continue
 		}
 		method := rule.Request.Method
@@ -293,15 +310,18 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 		if path == "" {
 			path = "/"
 		}
+		path = rewriteTemplatePlaceholders(path, ctx.variableAlias)
 		path = normalizeRequestPath(path, ctx)
+		headers := rewriteHeaderPlaceholders(rule.Request.Headers, ctx.variableAlias)
+		body := rewriteTemplatePlaceholders(rule.Request.Body, ctx.variableAlias)
 
-		key := method + ":" + path + ":" + headersKey(rule.Request.Headers) + ":" + rule.Request.Body
+		key := method + ":" + path + ":" + headersKey(headers) + ":" + body
 		if preserveRuleOrder {
 			key = key + ":" + ruleName
 		}
 		ruleGroup[ruleName] = key
 		extractors := outputExtractors(rule.Output, ctx)
-		payloads := payloadsForRequest(path, rule.Request.Headers, rule.Request.Body, ctx.payloads)
+		payloads := payloadsForRequest(path, headers, body, ctx.payloads)
 
 		if idx, ok := groupIndex[key]; ok {
 			groups[idx].rules = append(groups[idx].rules, ruleName)
@@ -316,8 +336,8 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 			groups = append(groups, &requestGroup{
 				method:     method,
 				path:       path,
-				headers:    rule.Request.Headers,
-				body:       rule.Request.Body,
+				headers:    headers,
+				body:       body,
 				redirects:  rule.Request.FollowRedirects,
 				rules:      []string{ruleName},
 				exprs:      []string{expr},
@@ -424,7 +444,7 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 	for i, g := range groups {
 		req := map[string]interface{}{
 			"method": g.method,
-			"path":   []string{"{{BaseURL}}" + g.path},
+			"path":   []string{xrayTemplatePath(g.path)},
 		}
 		if len(g.headers) > 0 {
 			req["headers"] = g.headers
@@ -543,6 +563,45 @@ func collectPlaceholders(s string, out map[string]bool) {
 	}
 }
 
+func rewriteHeaderPlaceholders(headers map[string]string, aliases map[string]string) map[string]string {
+	if len(headers) == 0 || len(aliases) == 0 {
+		return headers
+	}
+	rewritten := make(map[string]string, len(headers))
+	for key, value := range headers {
+		rewritten[rewriteTemplatePlaceholders(key, aliases)] = rewriteTemplatePlaceholders(value, aliases)
+	}
+	return rewritten
+}
+
+func rewriteTemplatePlaceholders(value string, aliases map[string]string) string {
+	if value == "" || len(aliases) == 0 || !strings.Contains(value, "{{") {
+		return value
+	}
+	return placeholderRE.ReplaceAllStringFunc(value, func(match string) string {
+		parts := placeholderRE.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+		if alias, ok := aliases[parts[1]]; ok {
+			return "{{" + alias + "}}"
+		}
+		return match
+	})
+}
+
+// xrayTemplatePath returns the full path expression for a converted xray template.
+// xray POC paths are always absolute (relative to host root), so we use RootURL
+// instead of BaseURL. This avoids doubled path segments when the scan target
+// includes a path (e.g. http://host/app/) — BaseURL would include /app/ and the
+// template path /app/login would produce /app/app/login.
+func xrayTemplatePath(path string) string {
+	if strings.HasPrefix(path, "/") {
+		return "{{RootURL}}" + path
+	}
+	return "{{BaseURL}}" + path
+}
+
 func normalizeRequestPath(path string, ctx *conversionContext) string {
 	path = strings.TrimSpace(strings.TrimPrefix(path, "^"))
 	path = strings.ReplaceAll(path, " ", "%20")
@@ -570,7 +629,7 @@ func slashSafeRuntimePlaceholder(name string) string {
 	return fmt.Sprintf(`/{{trim_prefix(%s, "/")}}`, name)
 }
 
-func flattenPayloads(root XrayPayloadRoot) map[string][]string {
+func flattenPayloads(root XrayPayloadRoot, aliases map[string]string) map[string][]string {
 	if len(root.Payloads) == 0 {
 		return nil
 	}
@@ -589,7 +648,8 @@ func flattenPayloads(root XrayPayloadRoot) map[string][]string {
 		}
 		sort.Strings(varKeys)
 		for _, varName := range varKeys {
-			result[varName] = append(result[varName], normalizeXrayScalar(fmt.Sprint(row[varName])))
+			outName := aliasVariableName(varName, aliases)
+			result[outName] = append(result[outName], normalizeXrayScalar(fmt.Sprint(row[varName])))
 		}
 	}
 	return result
@@ -647,7 +707,7 @@ func scalarYAMLNode(value interface{}) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fmt.Sprint(value)}
 }
 
-func convertSetVariables(set map[string]interface{}) (map[string]interface{}, []string) {
+func convertSetVariables(set map[string]interface{}, aliases map[string]string) (map[string]interface{}, []string) {
 	if len(set) == 0 {
 		return nil, nil
 	}
@@ -664,7 +724,8 @@ func convertSetVariables(set map[string]interface{}) (map[string]interface{}, []
 		if key == "RootURL" && isRootURLSetExpression(value) {
 			continue
 		}
-		vars[key] = translateXraySetExpression(value)
+		outKey := aliasVariableName(key, aliases)
+		vars[outKey] = translateXraySetExpression(value, aliases)
 	}
 	if _, ok := vars["randomstr"]; ok {
 		if _, exists := vars["randstr"]; !exists {
@@ -692,20 +753,135 @@ func isRootURLSetExpression(expr string) bool {
 	}
 }
 
-func translateXraySetExpression(expr string) string {
+var neutronBuiltinVariableNames = map[string]bool{
+	"BaseURL":  true,
+	"RootURL":  true,
+	"Hostname": true,
+	"Host":     true,
+	"Port":     true,
+	"Path":     true,
+	"File":     true,
+	"Scheme":   true,
+}
+
+var neutronRuntimeVariableNames = map[string]bool{
+	"all_headers":       true,
+	"body":              true,
+	"body_favicon_hash": true,
+	"content_type":      true,
+	"duration":          true,
+	"favicon_content":   true,
+	"favicon_hash":      true,
+	"header":            true,
+	"latency":           true,
+	"matched":           true,
+	"raw":               true,
+	"status_code":       true,
+	"title":             true,
+}
+
+func collectVariableNames(poc *XrayPOC) map[string]bool {
+	names := map[string]bool{}
+	if poc == nil {
+		return names
+	}
+	for key, raw := range poc.Set {
+		value := strings.TrimSpace(fmt.Sprint(raw))
+		if key == "RootURL" && isRootURLSetExpression(value) {
+			continue
+		}
+		names[key] = true
+	}
+	for _, rule := range poc.Rules {
+		for key := range rule.Output {
+			names[key] = true
+		}
+	}
+	for _, row := range poc.Payloads.Payloads {
+		for key := range row {
+			names[key] = true
+		}
+	}
+	return names
+}
+
+func variableAliases(names map[string]bool) map[string]string {
+	if len(names) == 0 {
+		return nil
+	}
+	used := map[string]bool{}
+	for key := range names {
+		used[key] = true
+	}
+	aliases := map[string]string{}
+	for key := range names {
+		if !isReservedVariableName(key) {
+			continue
+		}
+		alias := "xray_" + key
+		for i := 2; used[alias]; i++ {
+			alias = fmt.Sprintf("xray_%s_%d", key, i)
+		}
+		aliases[key] = alias
+		used[alias] = true
+	}
+	if len(aliases) == 0 {
+		return nil
+	}
+	return aliases
+}
+
+func isReservedVariableName(name string) bool {
+	if neutronBuiltinVariableNames[name] || neutronRuntimeVariableNames[name] {
+		return true
+	}
+	switch name {
+	case "true", "false", "nil":
+		return true
+	}
+	for _, fn := range dsl.FunctionNames {
+		if name == fn {
+			return true
+		}
+	}
+	return false
+}
+
+func aliasVariableName(name string, aliases map[string]string) string {
+	if len(aliases) == 0 {
+		return name
+	}
+	if alias, ok := aliases[name]; ok {
+		return alias
+	}
+	return name
+}
+
+func translateXrayExpression(expr string, aliases map[string]string) string {
+	if len(aliases) == 0 {
+		return expr
+	}
+	ast, err := ParseToASTWithAliases(expr, aliases)
+	if err != nil {
+		return rewriteTemplatePlaceholders(expr, aliases)
+	}
+	return ast.String()
+}
+
+func translateXraySetExpression(expr string, aliases map[string]string) string {
 	trimmed := strings.TrimSpace(expr)
 	if strings.EqualFold(trimmed, "get404Path()") {
 		return "{{rand_text_alphanumeric(16)}}"
 	}
 	if strings.Contains(trimmed, "{{") {
-		return normalizeXrayScalar(trimmed)
+		return rewriteTemplatePlaceholders(normalizeXrayScalar(trimmed), aliases)
 	}
 	if base, ok := parseBFormat16Expression(trimmed); ok {
-		return "{{hex_encode(" + base + ")}}"
+		return "{{hex_encode(" + aliasVariableName(base, aliases) + ")}}"
 	}
-	if ast, err := ParseToAST(trimmed); err == nil {
+	if ast, err := ParseToASTWithAliases(trimmed, aliases); err == nil {
 		if ast.Type == dsl.NodeLiteral {
-			return normalizeXrayScalar(trimmed)
+			return literalSetValue(ast.Value)
 		}
 		if ast.Type == dsl.NodeVariable && !strings.HasPrefix(trimmed, "request.") {
 			if ast.String() != trimmed {
@@ -725,6 +901,15 @@ func translateXraySetExpression(expr string) string {
 		return "{{" + translated + "}}"
 	}
 	return normalizeXrayScalar(trimmed)
+}
+
+func literalSetValue(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	default:
+		return fmt.Sprint(v)
+	}
 }
 
 func parseBFormat16Expression(expr string) (string, bool) {
@@ -819,9 +1004,10 @@ func outputExtractors(output map[string]interface{}, ctx *conversionContext) []i
 		if name == "" || expr == "" {
 			continue
 		}
+		outName := ctx.aliasName(name)
 
-		if spec, tempName, dslExpr, ok := resolveOutputTransform(expr, name, sources); ok {
-			ctx.runtimeVars[name] = true
+		if spec, tempName, dslExpr, ok := resolveOutputTransform(expr, outName, sources); ok {
+			ctx.runtimeVars[outName] = true
 			ctx.runtimeVars[tempName] = true
 			group := regexGroupIndex(spec.Pattern, spec.GroupName)
 			if group == 0 {
@@ -844,12 +1030,12 @@ func outputExtractors(output map[string]interface{}, ctx *conversionContext) []i
 				extractors = append(extractors, extractor)
 			}
 
-			dslKey := name + "\x00dsl\x00" + dslExpr
+			dslKey := outName + "\x00dsl\x00" + dslExpr
 			if !seen[dslKey] {
 				seen[dslKey] = true
 				extractors = append(extractors, map[string]interface{}{
 					"type":     "dsl",
-					"name":     name,
+					"name":     outName,
 					"dsl":      []string{dslExpr},
 					"internal": true,
 				})
@@ -862,12 +1048,12 @@ func outputExtractors(output map[string]interface{}, ctx *conversionContext) []i
 			if spec.GroupName == "" {
 				spec.GroupName = name
 			}
-			ctx.runtimeVars[name] = true
+			ctx.runtimeVars[outName] = true
 			group := regexGroupIndex(spec.Pattern, spec.GroupName)
 			if group == 0 {
 				group = 1
 			}
-			key := name + "\x00" + spec.Part + "\x00" + spec.Pattern + "\x00" + strconv.Itoa(group)
+			key := outName + "\x00" + spec.Part + "\x00" + spec.Pattern + "\x00" + strconv.Itoa(group)
 			if seen[key] {
 				continue
 			}
@@ -875,7 +1061,7 @@ func outputExtractors(output map[string]interface{}, ctx *conversionContext) []i
 
 			extractor := map[string]interface{}{
 				"type":     "regex",
-				"name":     name,
+				"name":     outName,
 				"regex":    []string{spec.Pattern},
 				"group":    group,
 				"internal": true,
@@ -889,8 +1075,8 @@ func outputExtractors(output map[string]interface{}, ctx *conversionContext) []i
 				if ctx.variables == nil {
 					ctx.variables = map[string]interface{}{}
 				}
-				if _, exists := ctx.variables[name]; !exists {
-					ctx.variables[name] = normalizeXrayScalar(fallback)
+				if _, exists := ctx.variables[outName]; !exists {
+					ctx.variables[outName] = normalizeXrayScalar(fallback)
 				}
 			}
 			continue
@@ -1004,17 +1190,18 @@ func outputDSLExtractor(name, expr string, ctx *conversionContext) map[string]in
 	if name == "" || expr == "" || strings.Contains(expr, "submatch") || strings.Contains(expr, "?") {
 		return nil
 	}
-	ast, err := ParseToAST(expr)
+	ast, err := ParseToASTWithAliases(expr, ctx.variableAlias)
 	if err != nil {
 		return nil
 	}
 	if ast.Type == dsl.NodeLiteral {
 		return nil
 	}
-	ctx.runtimeVars[name] = true
+	outName := ctx.aliasName(name)
+	ctx.runtimeVars[outName] = true
 	return map[string]interface{}{
 		"type":     "dsl",
-		"name":     name,
+		"name":     outName,
 		"dsl":      []string{ast.String()},
 		"internal": true,
 	}
@@ -1276,7 +1463,7 @@ func convertGroup(method, path string, headers map[string]string, body string, r
 
 	req := map[string]interface{}{
 		"method": method,
-		"path":   []string{"{{BaseURL}}" + path},
+		"path":   []string{xrayTemplatePath(path)},
 	}
 	if len(headers) > 0 {
 		req["headers"] = headers

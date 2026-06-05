@@ -2,8 +2,10 @@ package protocols
 
 import (
 	"errors"
-	"github.com/chainreactors/neutron/common"
+	"sort"
 	"strings"
+
+	"github.com/chainreactors/neutron/common"
 )
 
 // Inspired from https://github.com/ffuf/ffuf/blob/master/pkg/input/input.go
@@ -77,11 +79,11 @@ func NewGenerator(payloads map[string]interface{}, payloadType Type) (*Generator
 	// Validate the payload types
 	if payloadType == PitchFork {
 		var totalLength int
-		for v := range compiled {
-			if totalLength != 0 && totalLength != len(v) {
+		for _, values := range compiled {
+			if totalLength != 0 && totalLength != len(values) {
 				return nil, errors.New("pitchfork payloads must be of equal number")
 			}
-			totalLength = len(v)
+			totalLength = len(values)
 		}
 	}
 	return generator, nil
@@ -98,10 +100,15 @@ type Iterator struct {
 
 // NewIterator creates a new iterator for the payloads generator
 func (g *Generator) NewIterator() *Iterator {
-	var payloads []*payloadIterator
+	names := make([]string, 0, len(g.payloads))
+	for name := range g.payloads {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 
-	for name, values := range g.payloads {
-		payloads = append(payloads, &payloadIterator{name: name, values: values})
+	payloads := make([]*payloadIterator, 0, len(names))
+	for _, name := range names {
+		payloads = append(payloads, &payloadIterator{name: name, values: g.payloads[name]})
 	}
 	iterator := &Iterator{
 		Type:     g.Type,
@@ -135,7 +142,11 @@ func (i *Iterator) Total() int {
 			count += len(p.values)
 		}
 	case PitchFork:
-		count = len(i.payloads[0].values)
+		if len(i.payloads) == 0 {
+			count = 0
+		} else {
+			count = len(i.payloads[0].values)
+		}
 	case ClusterBomb:
 		count = 1
 		for _, p := range i.payloads {

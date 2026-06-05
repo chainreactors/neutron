@@ -306,12 +306,12 @@ func TestDateTimeDslExpressions(t *testing.T) {
 
 func TestRandDslExpressions(t *testing.T) {
 	randDslExpressions := map[string]string{
-		`rand_base(10, "")`:         `[a-zA-Z0-9]{10}`,
-		`rand_base(5, "abc")`:       `[abc]{5}`,
-		`rand_base(5)`:              `[a-zA-Z0-9]{5}`,
-		`rand_char("abc")`:          `[abc]{1}`,
-		`rand_char("")`:             `[a-zA-Z0-9]{1}`,
-		`rand_char()`:               `[a-zA-Z0-9]{1}`,
+		`rand_base(10, "")`:                  `[a-zA-Z0-9]{10}`,
+		`rand_base(5, "abc")`:                `[abc]{5}`,
+		`rand_base(5)`:                       `[a-zA-Z0-9]{5}`,
+		`rand_char("abc")`:                   `[abc]{1}`,
+		`rand_char("")`:                      `[a-zA-Z0-9]{1}`,
+		`rand_char()`:                        `[a-zA-Z0-9]{1}`,
 		`rand_text_alpha(10, "abc")`:         `[^abc]{10}`,
 		`rand_text_alpha(10, "")`:            `[a-zA-Z]{10}`,
 		`rand_text_alpha(10)`:                `[a-zA-Z]{10}`,

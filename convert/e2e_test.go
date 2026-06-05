@@ -106,7 +106,7 @@ expression: discover() && fetch_asset()
 	if err != nil {
 		t.Fatalf("convert: %v", err)
 	}
-	if strings.Contains(string(out), "{{BaseURL}}/{{asset_path}}") {
+	if strings.Contains(string(out), "{{RootURL}}/{{asset_path}}") {
 		t.Fatalf("dynamic path with leading-slash extractor should not keep an extra slash:\n%s", string(out))
 	}
 
@@ -172,6 +172,117 @@ expression: kw()
 	}
 }
 
+func TestEndToEnd_HeaderVariablesGenerateKeyedQueries(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--header-query
+detail:
+  fingerprint:
+    name: Header Query
+transport: http
+rules:
+  redirect:
+    request:
+      method: GET
+      path: /
+    expression: |-
+      response.headers["Location"].contains("/login")
+      && response.headers["Set-Cookie"].contains("JSESSIONID")
+      && response.headers["WWW-Authenticate"].contains("Basic")
+expression: redirect()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	t.Logf("converted:\n%s", out)
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	tmpl.Compile(nil)
+	for _, req := range tmpl.GetRequests() {
+		(&req.Operators).Compile()
+		req.CompiledOperators = &req.Operators
+	}
+
+	fofa := tmpl.ToQuery().ToFOFA()
+	for _, want := range []string{
+		`header="location: /login"`,
+		`header="set_cookie: JSESSIONID"`,
+		`header="www_authenticate: Basic"`,
+	} {
+		if !strings.Contains(fofa.Query, want) {
+			t.Fatalf("missing %s in fofa query %q\nconverted:\n%s", want, fofa.Query, out)
+		}
+	}
+}
+
+func TestEndToEnd_MultiRequestHistoryVariablesGenerateQueries(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--history-query
+detail:
+  fingerprint:
+    name: History Query
+transport: http
+rules:
+  first:
+    request:
+      method: GET
+      path: /
+    expression: |-
+      response.status == 302
+      && response.body_string.contains("redirect")
+      && response.headers["Location"].contains("/login")
+  second:
+    request:
+      method: GET
+      path: /login
+    expression: response.status == 200 && response.body_string.contains("ok")
+expression: first() && second()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	for _, want := range []string{
+		`status_code_1 == 302`,
+		`contains(body_1, "redirect")`,
+		`contains(location_1, "/login")`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("converted template missing history variable %q:\n%s", want, s)
+		}
+	}
+	for _, bad := range []string{"status_0", "status_code_0", "body_0", "headers_0"} {
+		if strings.Contains(s, bad) {
+			t.Fatalf("converted template should not emit zero-based history variable %q:\n%s", bad, s)
+		}
+	}
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	tmpl.Compile(nil)
+	for _, req := range tmpl.GetRequests() {
+		(&req.Operators).Compile()
+		req.CompiledOperators = &req.Operators
+	}
+
+	fofa := tmpl.ToQuery().ToFOFA()
+	for _, want := range []string{
+		`status_code="302"`,
+		`body="redirect"`,
+		`header="location: /login"`,
+	} {
+		if !strings.Contains(fofa.Query, want) {
+			t.Fatalf("query missing %s in %q\nconverted:\n%s", want, fofa.Query, s)
+		}
+	}
+}
+
 func TestEndToEnd_NoComment(t *testing.T) {
 	xrayYAML := `
 name: fingerprint-test--nocomment
@@ -213,5 +324,79 @@ expression: kw()
 	}
 	if !strings.Contains(fofa.Query, `status_code="200"`) {
 		t.Errorf("fofa query should contain status_code from matcher, got: %s", fofa.Query)
+	}
+}
+
+func TestXrayTemplatePath(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"/admin", "{{RootURL}}/admin"},
+		{"/", "{{RootURL}}/"},
+		{"/druid/index.html", "{{RootURL}}/druid/index.html"},
+		{"", "{{BaseURL}}"},
+		{"/{{trim_prefix(path, \"/\")}}", "{{RootURL}}/{{trim_prefix(path, \"/\")}}"},
+	}
+	for _, tt := range tests {
+		got := xrayTemplatePath(tt.path)
+		if got != tt.want {
+			t.Errorf("xrayTemplatePath(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestEndToEnd_RootURLPreventsDoubledPath(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--rooturl-path
+detail:
+  fingerprint:
+    name: RootURL Path Test
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: /druid/index.html
+    expression: response.status == 200 && response.body_string.contains("druid")
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "{{RootURL}}/druid/index.html") {
+		t.Fatalf("expected RootURL in converted path:\n%s", s)
+	}
+	if strings.Contains(s, "{{BaseURL}}/druid") {
+		t.Fatalf("should not use BaseURL for absolute xray path:\n%s", s)
+	}
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	tmpl.Compile(nil)
+
+	// Simulate target with path: http://host/druid/
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/druid/index.html" {
+			w.WriteHeader(200)
+			fmt.Fprint(w, "druid dashboard")
+			return
+		}
+		w.WriteHeader(404)
+		fmt.Fprintf(w, "not found: %s", r.URL.Path)
+	}))
+	defer server.Close()
+
+	// Pass target WITH path — RootURL strips it, so template hits /druid/index.html not /druid/druid/index.html
+	result, err := tmpl.Execute(server.URL+"/druid/", nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result == nil || !result.Matched {
+		t.Fatalf("expected match — RootURL should prevent /druid/druid/ doubling")
 	}
 }

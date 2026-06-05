@@ -3,6 +3,7 @@ package dsl
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 type Emitter interface {
@@ -145,12 +146,37 @@ func generateGrouped(child *Node, parentOp string, e Emitter, r *Result) string 
 }
 
 func genComparison(node *Node, e Emitter, r *Result) string {
-	left := node.Children[0]
+	left := unwrapFieldNode(node.Children[0])
 	right := node.Children[1]
 
-	if left.Type == NodeVariable && left.Value.(string) == "status_code" {
+	if isStatusCodeVariable(left) {
 		if code, ok := toInt(right); ok {
-			return e.StatusCode(code)
+			clause := e.StatusCode(code)
+			switch node.Op {
+			case "==":
+				return clause
+			case "!=":
+				return e.Not(clause)
+			default:
+				r.Warnings = append(r.Warnings, fmt.Sprintf("status_code operator %s approximated as equals", node.Op))
+				return clause
+			}
+		}
+	}
+
+	if part, ok := variableName(left); ok {
+		if isHeaderVariable(part, e) {
+			needle := headerNeedle(part, resolveValue(right))
+			clause := e.Contains(e.Field("all_headers"), needle)
+			switch node.Op {
+			case "==":
+				return clause
+			case "!=":
+				return e.Not(clause)
+			default:
+				r.Warnings = append(r.Warnings, fmt.Sprintf("header variable operator %s approximated as contains", node.Op))
+				return clause
+			}
 		}
 	}
 
@@ -195,8 +221,9 @@ func genContains(node *Node, e Emitter, r *Result) string {
 		r.Errors = append(r.Errors, fmt.Sprintf("contains requires at least 2 args, got %d", len(node.Children)))
 		return ""
 	}
-	if node.Children[0].Type == NodeVariable {
-		part := NormalizePart(node.Children[0].Value.(string))
+	fieldNode := unwrapFieldNode(node.Children[0])
+	if fieldNode.Type == NodeVariable {
+		part := NormalizePart(fieldNode.Value.(string))
 		if part == "favicon_hash" || part == "body_favicon_hash" {
 			q, err := e.FaviconHash(resolveValue(node.Children[1]))
 			if err != nil {
@@ -205,8 +232,12 @@ func genContains(node *Node, e Emitter, r *Result) string {
 			}
 			return q
 		}
+		if isHeaderVariable(part, e) {
+			needle := headerNeedle(part, resolveValue(node.Children[1]))
+			return e.Contains(e.Field("all_headers"), needle)
+		}
 	}
-	field := resolveField(node.Children[0], e)
+	field := resolveField(fieldNode, e)
 	value := resolveValue(node.Children[1])
 	return e.Contains(field, value)
 }
@@ -216,10 +247,18 @@ func genContainsMulti(node *Node, e Emitter, r *Result, isAll bool) string {
 		r.Errors = append(r.Errors, fmt.Sprintf("%s requires at least 2 args", node.FuncName))
 		return ""
 	}
-	field := resolveField(node.Children[0], e)
+	fieldNode := unwrapFieldNode(node.Children[0])
+	field := resolveField(fieldNode, e)
 	clauses := make([]string, 0, len(node.Children)-1)
 	for _, arg := range node.Children[1:] {
-		clauses = append(clauses, e.Contains(field, resolveValue(arg)))
+		value := resolveValue(arg)
+		if part, ok := variableName(fieldNode); ok {
+			if isHeaderVariable(part, e) {
+				clauses = append(clauses, e.Contains(e.Field("all_headers"), headerNeedle(part, value)))
+				continue
+			}
+		}
+		clauses = append(clauses, e.Contains(field, value))
 	}
 	if isAll {
 		return e.Group(e.And(clauses...))
@@ -242,12 +281,54 @@ func genFaviconHash(node *Node, e Emitter, r *Result) string {
 }
 
 func resolveField(node *Node, e Emitter) string {
+	node = unwrapFieldNode(node)
 	if node.Type == NodeVariable {
 		if part, ok := node.Value.(string); ok {
 			return e.Field(NormalizePart(part))
 		}
 	}
 	return fmt.Sprintf("%v", node.Value)
+}
+
+func unwrapFieldNode(node *Node) *Node {
+	for node != nil && node.Type == NodeCall && IsFieldTransparent(node.FuncName) && len(node.Children) == 1 {
+		node = node.Children[0]
+	}
+	return node
+}
+
+// isHeaderVariable returns true if the emitter treats part as a generic header
+// field (i.e. it has no dedicated platform mapping and falls through to the
+// same target as "all_headers"). This replaces a hardcoded allowlist with the
+// emitter's own knowledge of its field mappings.
+func isHeaderVariable(part string, e Emitter) bool {
+	if part == "" || part == "all_headers" || part == "header" || part == "body" || part == "status_code" {
+		return false
+	}
+	return e.Field(part) == e.Field("all_headers")
+}
+
+func variableName(node *Node) (string, bool) {
+	if node == nil || node.Type != NodeVariable {
+		return "", false
+	}
+	part, ok := node.Value.(string)
+	if !ok {
+		return "", false
+	}
+	return NormalizePart(part), true
+}
+
+func isStatusCodeVariable(node *Node) bool {
+	part, ok := variableName(node)
+	return ok && part == "status_code"
+}
+
+func headerNeedle(part, value string) string {
+	if value == "" {
+		return part + ":"
+	}
+	return part + ": " + value
 }
 
 func resolveValue(node *Node) string {
@@ -271,12 +352,38 @@ func toInt(node *Node) (int, bool) {
 }
 
 func NormalizePart(part string) string {
+	part = strings.TrimSpace(part)
 	switch part {
-	case "":
+	case "", "body", "body_string":
 		return "body"
-	case "header":
+	case "header", "headers", "all_headers", "raw_header":
 		return "all_headers"
+	case "status", "status_code":
+		return "status_code"
 	default:
-		return part
+		if base, ok := stripRequestIndex(part); ok {
+			switch base {
+			case "", "body", "body_string":
+				return "body"
+			case "header", "headers", "all_headers", "raw_header":
+				return "all_headers"
+			case "status", "status_code":
+				return "status_code"
+			default:
+				return base
+			}
+		}
 	}
+	return part
+}
+
+func stripRequestIndex(part string) (string, bool) {
+	idx := strings.LastIndex(part, "_")
+	if idx <= 0 || idx == len(part)-1 {
+		return "", false
+	}
+	if _, err := strconv.Atoi(part[idx+1:]); err != nil {
+		return "", false
+	}
+	return part[:idx], true
 }

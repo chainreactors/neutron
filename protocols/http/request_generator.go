@@ -147,9 +147,17 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(reqdata, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
-	values := common.MergeMaps(globalValues, generateVariables(parsed, trailingSlash))
-	values = common.MergeMaps(values, allVars)
-	reqdata, err = common.Evaluate(reqdata, values)
+	targetValues := common.MergeMaps(globalValues, generateVariables(parsed, trailingSlash))
+	values := common.MergeMaps(targetValues, allVars)
+	if r.request.options != nil && r.request.options.Variables.Len() > 0 {
+		variablesMap := r.request.options.Variables.Evaluate(values)
+		if len(variablesMap) > 0 {
+			allVars = common.MergeMaps(allVars, variablesMap)
+			dynamicValues = common.MergeMaps(dynamicValues, variablesMap)
+			values = common.MergeMaps(values, variablesMap)
+		}
+	}
+	reqdata, err = common.Evaluate(reqdata, common.MergeMaps(values, targetValues))
 	if err != nil {
 		return nil, err
 	}
