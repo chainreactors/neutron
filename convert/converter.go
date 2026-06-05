@@ -444,7 +444,7 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 	for i, g := range groups {
 		req := map[string]interface{}{
 			"method": g.method,
-			"path":   []string{"{{BaseURL}}" + g.path},
+			"path":   []string{xrayTemplatePath(g.path)},
 		}
 		if len(g.headers) > 0 {
 			req["headers"] = g.headers
@@ -588,6 +588,18 @@ func rewriteTemplatePlaceholders(value string, aliases map[string]string) string
 		}
 		return match
 	})
+}
+
+// xrayTemplatePath returns the full path expression for a converted xray template.
+// xray POC paths are always absolute (relative to host root), so we use RootURL
+// instead of BaseURL. This avoids doubled path segments when the scan target
+// includes a path (e.g. http://host/app/) — BaseURL would include /app/ and the
+// template path /app/login would produce /app/app/login.
+func xrayTemplatePath(path string) string {
+	if strings.HasPrefix(path, "/") {
+		return "{{RootURL}}" + path
+	}
+	return "{{BaseURL}}" + path
 }
 
 func normalizeRequestPath(path string, ctx *conversionContext) string {
@@ -1374,15 +1386,7 @@ func regexGroupIndex(pattern, groupName string) int {
 
 // appendGeneratedQueries loads the YAML as a neutron Template, calls ToQuery()
 // to generate fofa-query/hunter-query from matchers, and writes them back.
-func appendGeneratedQueries(yamlData []byte, tmpl map[string]interface{}) (out []byte) {
-	out = yamlData
-	defer func() {
-		if recover() != nil {
-			// Query generation is best-effort during xray conversion. Keep the
-			// converted template instead of aborting the whole batch.
-			out = yamlData
-		}
-	}()
+func appendGeneratedQueries(yamlData []byte, tmpl map[string]interface{}) []byte {
 	var t templates.Template
 	if yaml.Unmarshal(yamlData, &t) != nil {
 		return yamlData
@@ -1459,7 +1463,7 @@ func convertGroup(method, path string, headers map[string]string, body string, r
 
 	req := map[string]interface{}{
 		"method": method,
-		"path":   []string{"{{BaseURL}}" + path},
+		"path":   []string{xrayTemplatePath(path)},
 	}
 	if len(headers) > 0 {
 		req["headers"] = headers

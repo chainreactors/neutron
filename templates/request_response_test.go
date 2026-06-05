@@ -462,6 +462,48 @@ http:
 	_ = hasStep1
 }
 
+func TestExecuteStaticVariableChainWithoutPreEvaluation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/prefix-hello-suffix" {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "chain resolved")
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "unexpected path: %s", r.URL.Path)
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: static-variable-chain-test
+info:
+  name: Static Variable Chain Test
+  author: test
+  severity: info
+variables:
+  a: hello
+  b: '{{concat("prefix-", a)}}'
+  c: '{{concat(b, "-suffix")}}'
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/{{c}}'
+    matchers:
+      - type: word
+        words:
+          - "chain resolved"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+}
+
 func containsAll(s string, substrs ...string) bool {
 	for _, sub := range substrs {
 		if !strings.Contains(s, sub) {
