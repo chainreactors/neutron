@@ -326,3 +326,77 @@ expression: kw()
 		t.Errorf("fofa query should contain status_code from matcher, got: %s", fofa.Query)
 	}
 }
+
+func TestXrayTemplatePath(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"/admin", "{{RootURL}}/admin"},
+		{"/", "{{RootURL}}/"},
+		{"/druid/index.html", "{{RootURL}}/druid/index.html"},
+		{"", "{{BaseURL}}"},
+		{"/{{trim_prefix(path, \"/\")}}", "{{RootURL}}/{{trim_prefix(path, \"/\")}}"},
+	}
+	for _, tt := range tests {
+		got := xrayTemplatePath(tt.path)
+		if got != tt.want {
+			t.Errorf("xrayTemplatePath(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestEndToEnd_RootURLPreventsDoubledPath(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--rooturl-path
+detail:
+  fingerprint:
+    name: RootURL Path Test
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: /druid/index.html
+    expression: response.status == 200 && response.body_string.contains("druid")
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "{{RootURL}}/druid/index.html") {
+		t.Fatalf("expected RootURL in converted path:\n%s", s)
+	}
+	if strings.Contains(s, "{{BaseURL}}/druid") {
+		t.Fatalf("should not use BaseURL for absolute xray path:\n%s", s)
+	}
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	tmpl.Compile(nil)
+
+	// Simulate target with path: http://host/druid/
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/druid/index.html" {
+			w.WriteHeader(200)
+			fmt.Fprint(w, "druid dashboard")
+			return
+		}
+		w.WriteHeader(404)
+		fmt.Fprintf(w, "not found: %s", r.URL.Path)
+	}))
+	defer server.Close()
+
+	// Pass target WITH path — RootURL strips it, so template hits /druid/index.html not /druid/druid/index.html
+	result, err := tmpl.Execute(server.URL+"/druid/", nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result == nil || !result.Matched {
+		t.Fatalf("expected match — RootURL should prevent /druid/druid/ doubling")
+	}
+}

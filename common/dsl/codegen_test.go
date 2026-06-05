@@ -352,6 +352,73 @@ func TestGenerateHistoryVariablesNormalizeForQueries(t *testing.T) {
 	}
 }
 
+func TestIsFieldTransparentRegisteredCorrectly(t *testing.T) {
+	transparent := []string{"to_lower", "to_upper", "to_number", "to_string", "trim_space"}
+	for _, name := range transparent {
+		if !IsFieldTransparent(name) {
+			t.Errorf("%s should be field-transparent", name)
+		}
+	}
+	notTransparent := []string{"md5", "base64", "len", "concat", "reverse", "hex_encode"}
+	for _, name := range notTransparent {
+		if IsFieldTransparent(name) {
+			t.Errorf("%s should NOT be field-transparent", name)
+		}
+	}
+}
+
+func TestIsHeaderVariableUsesEmitterFieldMapping(t *testing.T) {
+	tests := []struct {
+		part     string
+		platform string
+		want     bool
+	}{
+		{"location", "fofa", true},
+		{"set_cookie", "fofa", true},
+		{"www_authenticate", "fofa", true},
+		{"x_powered_by", "fofa", true},
+		{"content_type", "fofa", true},
+		{"body", "fofa", false},
+		{"all_headers", "fofa", false},
+		{"status_code", "fofa", false},
+		{"server", "fofa", false},
+		{"title", "fofa", false},
+		// censys has a dedicated content_type field
+		{"content_type", "censys", false},
+		{"location", "censys", true},
+	}
+	for _, tt := range tests {
+		e, _ := GetEmitter(tt.platform)
+		got := isHeaderVariable(tt.part, e)
+		if got != tt.want {
+			t.Errorf("isHeaderVariable(%q, %s) = %v, want %v", tt.part, tt.platform, got, tt.want)
+		}
+	}
+}
+
+func TestGenerateUnmappedHeaderVariablesProduceNeedleQueries(t *testing.T) {
+	tests := []struct {
+		expr string
+		fofa string
+	}{
+		{`contains(content_type, "json")`, `header="content_type: json"`},
+		{`contains(x_powered_by, "PHP")`, `header="x_powered_by: PHP"`},
+		{`x_forwarded_for == "127.0.0.1"`, `header="x_forwarded_for: 127.0.0.1"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			node, err := Parse(tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := Generate(node, &FOFAEmitter{})
+			if r.Query != tt.fofa {
+				t.Errorf("got %q, want %q", r.Query, tt.fofa)
+			}
+		})
+	}
+}
+
 func TestEndToEndAllEngines(t *testing.T) {
 	expr := `contains(body, "wp-content") && contains(body, "wp-includes")`
 	expected := map[string]string{
