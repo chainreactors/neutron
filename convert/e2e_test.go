@@ -106,7 +106,7 @@ expression: discover() && fetch_asset()
 	if err != nil {
 		t.Fatalf("convert: %v", err)
 	}
-	if strings.Contains(string(out), "{{BaseURL}}/{{asset_path}}") {
+	if strings.Contains(string(out), "{{RootURL}}/{{asset_path}}") {
 		t.Fatalf("dynamic path with leading-slash extractor should not keep an extra slash:\n%s", string(out))
 	}
 

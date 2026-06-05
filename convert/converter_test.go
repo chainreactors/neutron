@@ -269,7 +269,7 @@ expression: payload_rule() || set_rule()
 	if !strings.Contains(s, "payloads:") || !strings.Contains(s, "value:") || !strings.Contains(s, "admin/login") {
 		t.Fatalf("missing converted payload values:\n%s", s)
 	}
-	if !strings.Contains(s, "{{BaseURL}}/{{value}}") {
+	if !strings.Contains(s, "{{RootURL}}/{{value}}") {
 		t.Fatalf("payload placeholder path was not preserved:\n%s", s)
 	}
 }
@@ -449,7 +449,7 @@ expression: discover() && fetch_js()
 		"extractors:",
 		"name: js_path",
 		"internal: true",
-		`{{BaseURL}}/{{trim_prefix(js_path, "/")}}`,
+		`{{RootURL}}/{{trim_prefix(js_path, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
@@ -489,7 +489,7 @@ expression: upload() && fetch()
 		"name: path_raw",
 		"name: path",
 		`replace(path_raw, "\\", "")`,
-		`{{BaseURL}}/{{trim_prefix(path, "/")}}`,
+		`{{RootURL}}/{{trim_prefix(path, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
@@ -529,7 +529,7 @@ expression: discover() && follow()
 
 	for _, want := range []string{
 		`location="(?P<nextpath>[\/\w]+)`,
-		`{{BaseURL}}/{{trim_prefix(nextpath, "/")}}`,
+		`{{RootURL}}/{{trim_prefix(nextpath, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
