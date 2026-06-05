@@ -15,6 +15,11 @@ type dslFunction struct {
 	NumberOfArgs       int
 	Signatures         []string
 	ExpressionFunction govaluate.ExpressionFunction
+	// IsFieldTransparent marks functions that do not change the identity of
+	// the response part they wrap (e.g. to_lower, to_upper). The codegen
+	// layer uses this to "see through" wrapping calls and identify the
+	// underlying field variable.
+	IsFieldTransparent bool
 }
 
 func (d dslFunction) GetSignatures() []string {
@@ -65,6 +70,11 @@ func (d dslFunction) Exec(args ...interface{}) (interface{}, error) {
 	//}
 
 	return result, err
+}
+
+func (d dslFunction) WithFieldTransparent() dslFunction {
+	d.IsFieldTransparent = true
+	return d
 }
 
 func (d dslFunction) hash(args ...interface{}) string {

@@ -165,7 +165,8 @@ func genComparison(node *Node, e Emitter, r *Result) string {
 	}
 
 	if part, ok := variableName(left); ok {
-		if needle, headerOK := headerVariableNeedle(part, resolveValue(right)); headerOK {
+		if isHeaderVariable(part, e) {
+			needle := headerNeedle(part, resolveValue(right))
 			clause := e.Contains(e.Field("all_headers"), needle)
 			switch node.Op {
 			case "==":
@@ -231,7 +232,8 @@ func genContains(node *Node, e Emitter, r *Result) string {
 			}
 			return q
 		}
-		if needle, ok := headerVariableNeedle(part, resolveValue(node.Children[1])); ok {
+		if isHeaderVariable(part, e) {
+			needle := headerNeedle(part, resolveValue(node.Children[1]))
 			return e.Contains(e.Field("all_headers"), needle)
 		}
 	}
@@ -251,8 +253,8 @@ func genContainsMulti(node *Node, e Emitter, r *Result, isAll bool) string {
 	for _, arg := range node.Children[1:] {
 		value := resolveValue(arg)
 		if part, ok := variableName(fieldNode); ok {
-			if needle, headerOK := headerVariableNeedle(part, value); headerOK {
-				clauses = append(clauses, e.Contains(e.Field("all_headers"), needle))
+			if isHeaderVariable(part, e) {
+				clauses = append(clauses, e.Contains(e.Field("all_headers"), headerNeedle(part, value)))
 				continue
 			}
 		}
@@ -288,25 +290,22 @@ func resolveField(node *Node, e Emitter) string {
 	return fmt.Sprintf("%v", node.Value)
 }
 
-var transparentFieldFuncs = map[string]bool{
-	"to_lower":   true,
-	"to_number":  true,
-	"to_string":  true,
-	"to_upper":   true,
-	"trim_space": true,
-}
-
-var headerVariableParts = map[string]bool{
-	"location":         true,
-	"set_cookie":       true,
-	"www_authenticate": true,
-}
-
 func unwrapFieldNode(node *Node) *Node {
-	for node != nil && node.Type == NodeCall && transparentFieldFuncs[node.FuncName] && len(node.Children) == 1 {
+	for node != nil && node.Type == NodeCall && IsFieldTransparent(node.FuncName) && len(node.Children) == 1 {
 		node = node.Children[0]
 	}
 	return node
+}
+
+// isHeaderVariable returns true if the emitter treats part as a generic header
+// field (i.e. it has no dedicated platform mapping and falls through to the
+// same target as "all_headers"). This replaces a hardcoded allowlist with the
+// emitter's own knowledge of its field mappings.
+func isHeaderVariable(part string, e Emitter) bool {
+	if part == "" || part == "all_headers" || part == "header" || part == "body" || part == "status_code" {
+		return false
+	}
+	return e.Field(part) == e.Field("all_headers")
 }
 
 func variableName(node *Node) (string, bool) {
@@ -325,15 +324,11 @@ func isStatusCodeVariable(node *Node) bool {
 	return ok && part == "status_code"
 }
 
-func headerVariableNeedle(part, value string) (string, bool) {
-	part = NormalizePart(part)
-	if !headerVariableParts[part] {
-		return "", false
-	}
+func headerNeedle(part, value string) string {
 	if value == "" {
-		return part + ":", true
+		return part + ":"
 	}
-	return part + ": " + value, true
+	return part + ": " + value
 }
 
 func resolveValue(node *Node) string {
@@ -375,9 +370,7 @@ func NormalizePart(part string) string {
 			case "status", "status_code":
 				return "status_code"
 			default:
-				if headerVariableParts[base] {
-					return base
-				}
+				return base
 			}
 		}
 	}
