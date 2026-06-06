@@ -3,6 +3,8 @@ package convert
 import (
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestParseToAST(t *testing.T) {
@@ -22,6 +24,9 @@ func TestParseToAST(t *testing.T) {
 		{"reverse_matches", `"pattern".matches(response.body_string)`, `regex("pattern", body)`},
 		{"favicon", `faviconHash(response.getIconContent()) == -297069493`, `contains(favicon_hash, "-297069493")`},
 		{"favicon_response_icon", `faviconHash(response.icon()) == 1677186191`, `contains(favicon_hash, "1677186191")`},
+		{"md5_get_icon_content", `md5(response.getIconContent()) == "0488faca4c19046b94d07c3ee83cf9d6"`, `contains(favicon_hash, "0488faca4c19046b94d07c3ee83cf9d6")`},
+		{"mmh3_get_icon_content", `mmh3(response.getIconContent()) == 1677186191`, `contains(favicon_hash, "1677186191")`},
+		{"mmh3_response_icon", `mmh3(response.icon()) == 1677186191`, `contains(favicon_hash, "1677186191")`},
 		{"mmh3_icon", `mmh3(icon(response)) in [51234238, -1216867457]`, `(contains(favicon_hash, "51234238") || contains(favicon_hash, "-1216867457"))`},
 		{"title_to_title", `response.title_string.contains("Login")`, `contains(title, "Login")`},
 		{"string_title_contains", `string(response.title).contains("Sindoh")`, `contains(title, "Sindoh")`},
@@ -41,8 +46,18 @@ func TestParseToAST(t *testing.T) {
 		{"version_in", `versionIn("Stable tag: (?P<version>[0-9.]+)".submatch(response.body_string)["version"],"<= 5.1.16")`, `xray_version_in(xray_regex_group("Stable tag: (?P<version>[0-9.]+)", body, "version"), "<= 5.1.16")`},
 		{"valid_page", `isValidPage(response)`, `xray_valid_page(status_code, body)`},
 		{"replace_all", `replaceAll(tmp, "\\", "/")`, `replace(tmp, "\\", "/")`},
+		{"dir_to_replace_regex", `dir("/" + config_path)`, `replace_regex(concat("/", config_path), "[^/]*$", "")`},
 		{"randomstr_alias", `response.body.contains("x" + randomstr)`, `contains(body, concat("x", randstr))`},
 		{"sha_alias", `sha(str1, "sha1") + "=" + sha(str2, "sha1")`, `concat(concat(xray_sha(str1, "sha1"), "="), xray_sha(str2, "sha1"))`},
+		// \xNN hex escape sequences
+		{"hex_escape_0c", `response.body.bcontains(b"\x0c")`, "contains(body, \"\\f\")"},
+		{"hex_escape_gzip", `response.body.bstartsWith(b"\x1F\x8B")`, "starts_with(body, \"\\x1f\\u008b\")"},
+		{"hex_escape_zip", `response.body.bstartsWith(b"PK\x03\x04")`, "starts_with(body, \"PK\\x03\\x04\")"},
+		{"hex_escape_null", `response.body.bcontains(b"SQLite format 3\x00")`, "contains(body, \"SQLite format 3\\x00\")"},
+		// triple-quoted raw strings
+		{"triple_quote_regex", `r'''(?i)<input\b.+?type=["']?file['"]?'''.bmatches(response.body)`, "regex(\"(?i)<input\\\\b.+?type=[\\\"\\']?file[\\'\\\"]?\", body)"},
+		// variable-indexed header access
+		{"header_var_access", `response.headers[rHeader].startsWith(r1)`, `contains(all_headers, r1)`},
 	}
 
 	for _, tt := range tests {
@@ -109,6 +124,15 @@ func TestExprToMatchers(t *testing.T) {
 		},
 		{
 			"favicon_hash", `faviconHash(response.getIconContent()) == -297069493`, 1, "or",
+			func(t *testing.T, r *ConvertResult) {
+				m := r.Matchers[0]
+				if m.Type != "favicon" || m.Part != "favicon_hash" || m.Hash[0] != "-297069493" {
+					t.Errorf("got %+v", m)
+				}
+			},
+		},
+		{
+			"mmh3_favicon_content", `mmh3(response.getIconContent()) == -297069493`, 1, "or",
 			func(t *testing.T, r *ConvertResult) {
 				m := r.Matchers[0]
 				if m.Type != "favicon" || m.Part != "favicon_hash" || m.Hash[0] != "-297069493" {
@@ -208,6 +232,112 @@ expression: kw_in_home() || kw_in_server() || favicon_hash()
 	}
 }
 
+func TestConvertFollowRedirectsTriState(t *testing.T) {
+	tests := []struct {
+		name        string
+		directive   string
+		wantPresent bool
+		wantValue   bool
+	}{
+		{name: "absent"},
+		{name: "true", directive: "      follow_redirects: true\n", wantPresent: true, wantValue: true},
+		{name: "false", directive: "      follow_redirects: false\n", wantPresent: true, wantValue: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			xrayYAML := `
+name: fingerprint-test--redirect-tristate
+detail:
+  fingerprint:
+    name: Redirect TriState
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+` + tt.directive + `    expression: response.status == 200
+expression: r0()
+`
+			out, err := Convert([]byte(xrayYAML))
+			if err != nil {
+				t.Fatalf("convert: %v", err)
+			}
+			var converted struct {
+				HTTP []map[string]interface{} `yaml:"http"`
+			}
+			if err := yaml.Unmarshal(out, &converted); err != nil {
+				t.Fatalf("unmarshal converted: %v\n%s", err, out)
+			}
+			if len(converted.HTTP) != 1 {
+				t.Fatalf("http request count: got %d want 1\n%s", len(converted.HTTP), out)
+			}
+			got, ok := converted.HTTP[0]["redirects"]
+			if ok != tt.wantPresent {
+				t.Fatalf("redirects presence: got %v want %v\n%s", ok, tt.wantPresent, out)
+			}
+			if !tt.wantPresent {
+				return
+			}
+			gotBool, ok := got.(bool)
+			if !ok || gotBool != tt.wantValue {
+				t.Fatalf("redirects value: got %#v want %v\n%s", got, tt.wantValue, out)
+			}
+		})
+	}
+}
+
+func TestConvertDoesNotMergeDifferentRedirectStates(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--redirect-merge
+detail:
+  fingerprint:
+    name: Redirect Merge
+transport: http
+rules:
+  no_redirect:
+    request:
+      method: GET
+      path: /
+      follow_redirects: false
+    expression: response.body_string.contains("no-redirect")
+  default_redirect:
+    request:
+      method: GET
+      path: /
+    expression: response.body_string.contains("default")
+expression: no_redirect() || default_redirect()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	var converted struct {
+		HTTP []map[string]interface{} `yaml:"http"`
+	}
+	if err := yaml.Unmarshal(out, &converted); err != nil {
+		t.Fatalf("unmarshal converted: %v\n%s", err, out)
+	}
+	if len(converted.HTTP) != 2 {
+		t.Fatalf("http request count: got %d want 2\n%s", len(converted.HTTP), out)
+	}
+	var falseCount, unsetCount int
+	for _, req := range converted.HTTP {
+		value, ok := req["redirects"]
+		if !ok {
+			unsetCount++
+			continue
+		}
+		if value == false {
+			falseCount++
+		}
+	}
+	if falseCount != 1 || unsetCount != 1 {
+		t.Fatalf("redirect states: false=%d unset=%d want false=1 unset=1\n%s", falseCount, unsetCount, out)
+	}
+}
+
 func TestConvertXraySetAndPayloadVariables(t *testing.T) {
 	xrayYAML := `
 name: fingerprint-test--variables
@@ -251,6 +381,90 @@ expression: payload_rule() || set_rule()
 	}
 	if !strings.Contains(s, "{{BaseURL}}/{{value}}") {
 		t.Fatalf("payload placeholder path was not preserved:\n%s", s)
+	}
+}
+
+func TestConvertPreservesPathOnlyPayloads(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--path-payload
+detail:
+  fingerprint:
+    name: Path Payload
+transport: http
+payloads:
+  payloads:
+    p0:
+      entry: string("/")
+    p1:
+      entry: string("/nacos/")
+rules:
+  r0:
+    request:
+      method: GET
+      path: "{{entry}}"
+    expression: response.body_string.contains("nacos")
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+	for _, want := range []string{"payloads:", "attack: pitchfork", "entry:", "{{BaseURL}}{{entry}}"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing preserved payload marker %s:\n%s", want, s)
+		}
+	}
+	for _, want := range []string{"/", "/nacos/"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing normalized payload value %s:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "string(") {
+		t.Fatalf("xray string() payload literal should be normalized in converter:\n%s", s)
+	}
+	if strings.Contains(s, "{{BaseURL}}/nacos/") {
+		t.Fatalf("path-only payload should not be expanded in converter:\n%s", s)
+	}
+}
+
+func TestConvertPathPayloadReqConditionIndexes(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--path-payload-req-condition
+detail:
+  fingerprint:
+    name: Path Payload Req Condition
+transport: http
+payloads:
+  payloads:
+    p0:
+      entry: string("/a")
+    p1:
+      entry: string("/b")
+rules:
+  enum:
+    request:
+      method: GET
+      path: "{{entry}}"
+    expression: response.body_string.contains("enum-hit")
+  confirm:
+    request:
+      method: GET
+      path: /confirm
+    expression: response.body_string.contains("confirm-hit")
+expression: enum() && confirm()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+	for _, want := range []string{"{{BaseURL}}{{entry}}", "payloads:", "entry:", "req-condition: true", "body_1", "body_2"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %s in req-condition output:\n%s", want, s)
+		}
 	}
 }
 
@@ -514,5 +728,103 @@ expression: discover() && follow()
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
 		}
+	}
+}
+
+// TestConvertRewritesIconContentHashes verifies that icon-content hash checks
+// are converted to favicon_hash. Raw favicon_content expressions are now
+// supported at runtime and should no longer be pruned by the converter.
+func TestConvertRewritesIconContentHashes(t *testing.T) {
+	// Case 1: an md5(getIconContent()) operand must become a favicon_hash check
+	// and must not poison sibling OR
+	// branches. The (a() && b()) clause forces the req-condition combined-DSL
+	// path (the one that bit SpringBoot / 致远-OA).
+	poison := `name: fingerprint-test--favicon-poison
+detail:
+  fingerprint:
+    name: FaviconPoison
+rules:
+  fav:
+    request:
+      method: GET
+      path: /
+    expression: md5(response.getIconContent()) == "deadbeef"
+  body_rule:
+    request:
+      method: GET
+      path: /info
+    expression: response.body_string.contains("WhitelabelMarker")
+  a:
+    request:
+      method: GET
+      path: /
+    expression: response.body_string.contains("aaa")
+  b:
+    request:
+      method: GET
+      path: /b
+    expression: response.body_string.contains("bbb")
+expression: fav() || body_rule() || (a() && b())
+`
+	out, err := Convert([]byte(poison))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+	if strings.Contains(s, "favicon_content") {
+		t.Fatalf("favicon_content (unevaluable) leaked into output:\n%s", s)
+	}
+	if !strings.Contains(s, "deadbeef") || !strings.Contains(s, "favicon_hash") {
+		t.Fatalf("md5(getIconContent()) was not rewritten to favicon_hash:\n%s", s)
+	}
+	// Case 2: the recoverable faviconHash(getIconContent())==N form must survive
+	// alongside the md5(getIconContent()) form.
+	recoverable := `name: fingerprint-test--favicon-hash
+detail:
+  fingerprint:
+    name: FaviconHashOK
+rules:
+  fav:
+    request:
+      method: GET
+      path: /
+    expression: md5(response.getIconContent()) == "deadbeef" || faviconHash(response.getIconContent()) == 12345
+expression: fav()
+`
+	out2, err := Convert([]byte(recoverable))
+	if err != nil {
+		t.Fatalf("convert recoverable: %v", err)
+	}
+	s2 := string(out2)
+	t.Logf("output2:\n%s", s2)
+	if strings.Contains(s2, "favicon_content") {
+		t.Fatalf("favicon_content leaked into recoverable output:\n%s", s2)
+	}
+	for _, want := range []string{"deadbeef", "12345", "favicon_hash"} {
+		if !strings.Contains(s2, want) {
+			t.Fatalf("missing %q in recoverable output:\n%s", want, s2)
+		}
+	}
+
+	rawContent := `name: fingerprint-test--favicon-content
+detail:
+  fingerprint:
+    name: FaviconContent
+rules:
+  fav:
+    request:
+      method: GET
+      path: /
+    expression: response.getIconContent().contains("ICON")
+expression: fav()
+`
+	out3, err := Convert([]byte(rawContent))
+	if err != nil {
+		t.Fatalf("convert raw content: %v", err)
+	}
+	s3 := string(out3)
+	if !strings.Contains(s3, "favicon_content") || !strings.Contains(s3, "ICON") {
+		t.Fatalf("raw favicon_content expression was not preserved:\n%s", s3)
 	}
 }

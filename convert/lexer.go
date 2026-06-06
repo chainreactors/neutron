@@ -206,6 +206,12 @@ func lexRawString(runes []rune, start int) (string, int, error) {
 
 func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 	quote := runes[start]
+
+	// Triple-quoted string: '''...''' or """..."""
+	if start+2 < len(runes) && runes[start+1] == quote && runes[start+2] == quote {
+		return lexTripleQuoteString(runes, start+3, raw, quote)
+	}
+
 	i := start + 1
 	var buf []rune
 
@@ -247,11 +253,34 @@ func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 	}
 
 	for j := i; j < end; j++ {
-		if runes[j] == '\\' && j+1 < len(runes) {
+		if runes[j] == '\\' && j+1 < end {
 			if raw {
 				buf = append(buf, runes[j], runes[j+1])
 			} else {
-				buf = append(buf, runes[j+1])
+				next := runes[j+1]
+				switch next {
+				case 'x':
+					if j+3 < end {
+						hi := hexDigitVal(runes[j+2])
+						lo := hexDigitVal(runes[j+3])
+						if hi >= 0 && lo >= 0 {
+							buf = append(buf, rune(hi<<4|lo))
+							j += 3
+							continue
+						}
+					}
+					buf = append(buf, next)
+				case 'n':
+					buf = append(buf, '\n')
+				case 'r':
+					buf = append(buf, '\r')
+				case 't':
+					buf = append(buf, '\t')
+				case '0':
+					buf = append(buf, 0)
+				default:
+					buf = append(buf, next)
+				}
 			}
 			j++
 			continue
@@ -259,6 +288,63 @@ func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 		buf = append(buf, runes[j])
 	}
 	return string(buf), end + 1, nil
+}
+
+func hexDigitVal(r rune) int {
+	switch {
+	case r >= '0' && r <= '9':
+		return int(r - '0')
+	case r >= 'a' && r <= 'f':
+		return int(r-'a') + 10
+	case r >= 'A' && r <= 'F':
+		return int(r-'A') + 10
+	default:
+		return -1
+	}
+}
+
+func lexTripleQuoteString(runes []rune, start int, raw bool, quote rune) (string, int, error) {
+	var buf []rune
+	for j := start; j < len(runes); j++ {
+		if runes[j] == quote && j+2 < len(runes) && runes[j+1] == quote && runes[j+2] == quote {
+			return string(buf), j + 3, nil
+		}
+		if runes[j] == '\\' && j+1 < len(runes) && !raw {
+			j++
+			next := runes[j]
+			switch next {
+			case 'x':
+				if j+2 < len(runes) {
+					hi := hexDigitVal(runes[j+1])
+					lo := hexDigitVal(runes[j+2])
+					if hi >= 0 && lo >= 0 {
+						buf = append(buf, rune(hi<<4|lo))
+						j += 2
+						continue
+					}
+				}
+				buf = append(buf, next)
+			case 'n':
+				buf = append(buf, '\n')
+			case 'r':
+				buf = append(buf, '\r')
+			case 't':
+				buf = append(buf, '\t')
+			case '0':
+				buf = append(buf, 0)
+			default:
+				buf = append(buf, next)
+			}
+			continue
+		}
+		if runes[j] == '\\' && j+1 < len(runes) && raw {
+			buf = append(buf, runes[j], runes[j+1])
+			j++
+			continue
+		}
+		buf = append(buf, runes[j])
+	}
+	return "", 0, fmt.Errorf("unterminated triple-quoted string at position %d", start-3)
 }
 
 func isStringBoundary(runes []rune, pos int) bool {

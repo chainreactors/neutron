@@ -526,6 +526,68 @@ func TransformTitleToBodyRegex(node *dsl.Node) *dsl.Node {
 	return clone
 }
 
+// PruneUnevaluableFavicon removes boolean operands that reference favicon_content
+// (xray's raw icon bytes, from response.getIconContent()) in a form neutron cannot
+// evaluate. Recoverable hash constructs such as faviconHash/getIconContent,
+// mmh3/getIconContent and md5/getIconContent are already rewritten to
+// contains(favicon_hash, "...") during parsing (see faviconHashPart), so any
+// favicon_content left in the AST here is dead. Leaving that undefined variable
+// in a combined OR DSL would error at evaluation time and silently drop sibling
+// branches.
+//
+// Returns (pruned, true) normally; (nil, false) when the whole expression is dead.
+func PruneUnevaluableFavicon(node *dsl.Node) (*dsl.Node, bool) {
+	if node == nil {
+		return nil, false
+	}
+	if node.Type == dsl.NodeBinaryOp && (node.Op == "||" || node.Op == "&&") && len(node.Children) == 2 {
+		left, lok := PruneUnevaluableFavicon(node.Children[0])
+		right, rok := PruneUnevaluableFavicon(node.Children[1])
+		switch {
+		case lok && rok:
+			return dsl.BinaryOp(node.Op, left, right), true
+		case node.Op == "||" && lok:
+			return left, true
+		case node.Op == "||" && rok:
+			return right, true
+		default:
+			// AND with a dead operand, or OR with both dead → dead.
+			return nil, false
+		}
+	}
+	if node.Type == dsl.NodeUnaryOp && len(node.Children) == 1 {
+		if child, ok := PruneUnevaluableFavicon(node.Children[0]); ok {
+			return dsl.UnaryOp(node.Op, child), true
+		}
+		return nil, false
+	}
+	if referencesFaviconContent(node) {
+		return nil, false
+	}
+	return node, true
+}
+
+func referencesFaviconContent(node *dsl.Node) bool {
+	if node == nil {
+		return false
+	}
+	// favicon_content nested inside favicon_hash(...) is fine — neutron resolves
+	// favicon_hash. Only bare/other uses are unevaluable.
+	if node.Type == dsl.NodeCall && node.FuncName == "favicon_hash" {
+		return false
+	}
+	if node.Type == dsl.NodeVariable {
+		name, _ := node.Value.(string)
+		return name == "favicon_content"
+	}
+	for _, c := range node.Children {
+		if referencesFaviconContent(c) {
+			return true
+		}
+	}
+	return false
+}
+
 func isEmptyStringLiteral(node *dsl.Node) bool {
 	if node.Type != dsl.NodeLiteral {
 		return false
@@ -542,6 +604,23 @@ func regexQuote(s string) string {
 			out.WriteByte('\\')
 		}
 		out.WriteRune(c)
+	}
+	return out.String()
+}
+
+func hasNonASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > 0x7e || s[i] < 0x20 {
+			return true
+		}
+	}
+	return false
+}
+
+func toHex(s string) string {
+	var out strings.Builder
+	for i := 0; i < len(s); i++ {
+		fmt.Fprintf(&out, "%02x", s[i])
 	}
 	return out.String()
 }

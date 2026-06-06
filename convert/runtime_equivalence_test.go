@@ -394,7 +394,7 @@ func requestXrayRule(baseURL string, rule *XrayRule, values map[string]string) (
 	if strings.HasPrefix(target, "https://") {
 		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}
-	if !rule.Request.FollowRedirects {
+	if rule.Request.FollowRedirects == nil || !*rule.Request.FollowRedirects {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		}
@@ -588,9 +588,6 @@ func applyXrayRuntimeOutput(output map[string]interface{}, resp mockResponse, va
 				vars[name] = value
 			}
 			continue
-		}
-		if fallback, ok := outputFallbackLiteral(expr); ok {
-			vars[name] = normalizeXrayScalar(fallback)
 		}
 	}
 }

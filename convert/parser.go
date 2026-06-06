@@ -14,6 +14,19 @@ func ParseToAST(expr string) (*dsl.Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lex: %w", err)
 	}
+	return parseTokensToAST(tokens)
+}
+
+func ParseToASTWithAliases(expr string, aliases map[string]string) (*dsl.Node, error) {
+	tokens, err := xrayLex(expr)
+	if err != nil {
+		return nil, fmt.Errorf("lex: %w", err)
+	}
+	rewriteIdentifierTokens(tokens, aliases)
+	return parseTokensToAST(tokens)
+}
+
+func parseTokensToAST(tokens []xToken) (*dsl.Node, error) {
 	p := &parser{tokens: tokens}
 	node, err := p.parseOr()
 	if err != nil {
@@ -23,6 +36,28 @@ func ParseToAST(expr string) (*dsl.Node, error) {
 		return nil, fmt.Errorf("unexpected trailing token: %q at pos %d", p.peek().Val, p.pos)
 	}
 	return node, nil
+}
+
+func rewriteIdentifierTokens(tokens []xToken, aliases map[string]string) {
+	if len(aliases) == 0 {
+		return
+	}
+	for i := range tokens {
+		if tokens[i].Type != xTIdent {
+			continue
+		}
+		alias, ok := aliases[tokens[i].Val]
+		if !ok {
+			continue
+		}
+		if i > 0 && tokens[i-1].Type == xTDot {
+			continue
+		}
+		if i+1 < len(tokens) && (tokens[i+1].Type == xTDot || tokens[i+1].Type == xTLParen) {
+			continue
+		}
+		tokens[i].Val = alias
+	}
 }
 
 type parser struct {
@@ -317,15 +352,26 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 	case "headers":
 		if p.peek().Type == xTLBracket {
 			p.next() // [
-			if p.peek().Type != xTString {
-				return dsl.Variable("all_headers"), nil
+			tok := p.peek()
+			if tok.Type == xTString {
+				hdrName := p.next().Val
+				if p.peek().Type == xTRBracket {
+					p.next()
+				}
+				varName := headerVarName(hdrName)
+				return p.maybeMethodCall(dsl.Variable(varName))
 			}
-			hdrName := p.next().Val
-			if p.peek().Type == xTRBracket {
-				p.next()
+			if tok.Type == xTIdent {
+				p.next() // consume the variable name
+				if p.peek().Type == xTRBracket {
+					p.next()
+				}
+				// Dynamic header access: response.headers[varName]
+				// Cannot bind a specific header at DSL level; use all_headers.
+				// Force startsWith/endsWith → contains since all_headers is the full block.
+				return p.maybeMethodCallForAllHeaders()
 			}
-			varName := headerVarName(hdrName)
-			return p.maybeMethodCall(dsl.Variable(varName))
+			return dsl.Variable("all_headers"), nil
 		}
 		return dsl.Variable("all_headers"), nil
 
@@ -342,7 +388,7 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 				p.next()
 			}
 		}
-		return dsl.Variable("favicon_content"), nil
+		return p.maybeMethodCall(dsl.Variable("favicon_content"))
 
 	case "icon":
 		if p.peek().Type == xTLParen {
@@ -351,7 +397,7 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 				p.next()
 			}
 		}
-		return dsl.Variable("favicon_content"), nil
+		return p.maybeMethodCall(dsl.Variable("favicon_content"))
 
 	default:
 		return p.maybeMethodCall(dsl.Variable(field))
@@ -466,6 +512,37 @@ func isVersionMethod(name string) bool {
 	default:
 		return false
 	}
+}
+
+// maybeMethodCallForAllHeaders parses a method call on all_headers,
+// downgrading startsWith/endsWith to contains since all_headers is the
+// full header block (startsWith on the whole block is meaningless).
+func (p *parser) maybeMethodCallForAllHeaders() (*dsl.Node, error) {
+	receiver := dsl.Variable("all_headers")
+	if p.peek().Type != xTDot {
+		return receiver, nil
+	}
+	if p.lookAhead(1).Type != xTIdent || !isMethodName(p.lookAhead(1).Val) {
+		return receiver, nil
+	}
+	if p.lookAhead(2).Type != xTLParen {
+		return receiver, nil
+	}
+	p.next() // .
+	method := p.next().Val
+	p.next() // (
+	arg, err := p.parseOr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(xTRParen); err != nil {
+		return nil, err
+	}
+	fn := methodMap[method]
+	if fn == "starts_with" || fn == "ends_with" {
+		fn = "contains"
+	}
+	return dsl.Call(fn, receiver, arg), nil
 }
 
 // maybeRawHeaderCall handles response.raw_header method calls.
@@ -661,6 +738,14 @@ func convertFunctionCall(name string, args []*dsl.Node) *dsl.Node {
 		return dsl.Call("time_convert", args...)
 	case "replaceAll":
 		return dsl.Call("replace", args...)
+	case "dir":
+		// xray dir(p) returns the directory part of a path (strips the last
+		// segment, keeps the trailing slash). neutron has no dir(); emulate with
+		// replace_regex so the template still compiles — an unmapped dir() makes
+		// the whole template fail to compile, killing every branch.
+		if len(args) == 1 {
+			return dsl.Call("replace_regex", args[0], dsl.Literal("[^/]*$"), dsl.Literal(""))
+		}
 	case "string":
 		if len(args) == 1 {
 			if args[0].Type == dsl.NodeLiteral {
@@ -689,6 +774,14 @@ func convertFunctionCall(name string, args []*dsl.Node) *dsl.Node {
 		return dsl.Call("hex_decode", args...)
 	case "hex":
 		return dsl.Call("hex_encode", args...)
+	case "decToHex", "dec_to_hex":
+		return dsl.Call("dec_to_hex", args...)
+	case "rev":
+		return dsl.Call("reverse", args...)
+	case "upper", "toUpper", "to_upper":
+		return dsl.Call("to_upper", args...)
+	case "lower", "toLower", "to_lower":
+		return dsl.Call("to_lower", args...)
 	case "urlencode", "urlEncode", "urlencodeall", "urlEncodeAll", "url_encode":
 		return dsl.Call("url_encode", args...)
 	case "sha":
@@ -748,7 +841,7 @@ func isStringLikeNode(node *dsl.Node) bool {
 		return false
 	}
 	switch node.FuncName {
-	case "to_string", "concat", "base64", "base64_decode", "hex_encode", "hex_decode", "url_encode", "md5", "substr", "rand_base":
+	case "to_string", "concat", "base64", "base64_decode", "hex_encode", "hex_decode", "dec_to_hex", "url_encode", "md5", "substr", "rand_base", "reverse", "to_upper", "to_lower":
 		return true
 	default:
 		return false
@@ -837,6 +930,18 @@ func faviconHashPart(node *dsl.Node) (string, bool) {
 	if node.FuncName == "mmh3" && len(node.Children) == 1 {
 		child := node.Children[0]
 		if child.Type == dsl.NodeCall && child.FuncName == "icon" {
+			return "favicon_hash", true
+		}
+		if child.Type == dsl.NodeVariable {
+			switch child.Value.(string) {
+			case "favicon_content":
+				return "favicon_hash", true
+			}
+		}
+	}
+	if node.FuncName == "md5" && len(node.Children) == 1 {
+		child := node.Children[0]
+		if child.Type == dsl.NodeVariable && child.Value.(string) == "favicon_content" {
 			return "favicon_hash", true
 		}
 	}
