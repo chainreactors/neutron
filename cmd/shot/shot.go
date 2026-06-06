@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/chainreactors/logs"
@@ -19,37 +20,48 @@ import (
 var ExecuterOptions *protocols.ExecuterOptions
 
 func main() {
-	// 定义命令行参数
+	pathFlag := flag.String("path", "", "Path to YAML template file or directory")
+	targetFlag := flag.String("target", "", "Target URL")
+	jsonFlag := flag.Bool("json", false, "Output results as JSON")
+	timeoutFlag := flag.Int("timeout", 5, "Request timeout in seconds")
 	proxyAddr := flag.String("proxy", "", "Proxy address (e.g., http://127.0.0.1:8080)")
 	debug := flag.Bool("debug", false, "Enable debug mode")
 	flag.Parse()
 
-	if len(flag.Args()) < 2 {
-		fmt.Println("Usage: shot [-proxy <proxy_address>] <path_or_file> <target_url>")
-		return
+	targetPath := *pathFlag
+	targetURL := *targetFlag
+
+	if targetPath == "" && len(flag.Args()) >= 1 {
+		targetPath = flag.Arg(0)
 	}
+	if targetURL == "" && len(flag.Args()) >= 2 {
+		targetURL = flag.Arg(1)
+	}
+
+	if targetPath == "" || targetURL == "" {
+		fmt.Println("Usage: shot -path <template> -target <url> [-json] [-timeout N] [-proxy <addr>]")
+		fmt.Println("       shot [-proxy <addr>] <path_or_file> <target_url>")
+		os.Exit(1)
+	}
+
 	if *debug {
 		logs.Log.SetLevel(logs.DebugLevel)
 		common.NeutronLog = logs.Log
-		spew.Config.Indent = "\t"                  // 使用 tab 缩进
-		spew.Config.DisablePointerAddresses = true // 不显示指针地址
-		spew.Config.DisableCapacities = true       // 不显示容量信息
-		spew.Config.SortKeys = true                // 对 map 按键排序
+		spew.Config.Indent = "\t"
+		spew.Config.DisablePointerAddresses = true
+		spew.Config.DisableCapacities = true
+		spew.Config.SortKeys = true
 	}
-	targetPath := flag.Arg(0)
-	targetURL := flag.Arg(1)
 
 	if ExecuterOptions == nil {
-		ExecuterOptions = &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}
+		ExecuterOptions = &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: *timeoutFlag}}
 	}
 	if *proxyAddr != "" {
-		fmt.Println("Using proxy:", *proxyAddr)
 		proxyURL, err := url.Parse(*proxyAddr)
 		if err != nil {
 			fmt.Printf("Invalid proxy address: %s\n", err.Error())
-			return
+			os.Exit(1)
 		}
-		// per-execution 代理：写入本次 ExecuterOptions，不再改写全局 transport。
 		ExecuterOptions.Options.Proxy = http.ProxyURL(proxyURL)
 	}
 
@@ -63,40 +75,67 @@ func main() {
 		}
 		return nil
 	})
-
 	if err != nil {
-		fmt.Println("Error walking the path:", err)
-		return
+		fmt.Printf("Error walking the path: %s\n", err.Error())
+		os.Exit(1)
 	}
+
+	matchedCount := 0
+	totalCount := len(yamlFiles)
 
 	for _, yamlFile := range yamlFiles {
 		content, err := os.ReadFile(yamlFile)
 		if err != nil {
-			fmt.Printf("Error reading %s: %s\n", yamlFile, err.Error())
+			if !*jsonFlag {
+				fmt.Printf("Error reading %s: %s\n", yamlFile, err.Error())
+			}
 			continue
 		}
 
 		t := &templates.Template{}
 		err = yaml.Unmarshal(content, t)
 		if err != nil {
-			fmt.Printf("Error unmarshalling %s: %s\n", yamlFile, err.Error())
+			if !*jsonFlag {
+				fmt.Printf("Error unmarshalling %s: %s\n", yamlFile, err.Error())
+			}
 			continue
 		}
 
 		err = t.Compile(ExecuterOptions)
 		if err != nil {
-			fmt.Printf("Error compiling %s: %s\n", yamlFile, err.Error())
+			if !*jsonFlag {
+				fmt.Printf("Error compiling %s: %s\n", yamlFile, err.Error())
+			}
 			continue
 		}
 
-		fmt.Printf("Load success for %s\n", yamlFile)
+		if !*jsonFlag {
+			fmt.Printf("Load success for %s\n", yamlFile)
+		}
 		start := time.Now()
 		res, err := t.Execute(targetURL, nil)
-		if err == nil {
-			fmt.Println("execute finish:", res)
+		if err == nil && res != nil && res.Matched {
+			matchedCount++
+			if !*jsonFlag {
+				fmt.Printf("Matched: %s (%s)\n", yamlFile, time.Since(start))
+			}
+		} else if err != nil {
+			if !*jsonFlag {
+				fmt.Printf("Error executing %s: %s\n", yamlFile, err.Error())
+			}
 		} else {
-			fmt.Println("Error: ", err.Error())
+			if !*jsonFlag {
+				fmt.Printf("No match: %s (%s)\n", yamlFile, time.Since(start))
+			}
 		}
-		fmt.Println("Execution time:", time.Since(start))
+	}
+
+	if *jsonFlag {
+		out, _ := json.Marshal(map[string]interface{}{
+			"matched_count": matchedCount,
+			"total":         totalCount,
+			"target":        targetURL,
+		})
+		fmt.Println(string(out))
 	}
 }
