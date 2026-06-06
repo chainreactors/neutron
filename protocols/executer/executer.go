@@ -52,6 +52,11 @@ func (e *Executer) Requests() int {
 func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, error) {
 	var result *operators.Result
 
+	if e.options != nil && e.options.Variables.Len() > 0 {
+		input.PreEvaluatedVariables = e.options.Variables.PreEvaluate(map[string]interface{}{})
+		input.HasPreEvaluatedVariables = true
+	}
+
 	previous := make(map[string]interface{})
 	dynamicValues := common.MergeMaps(make(map[string]interface{}), input.Payloads)
 	requestIndexOffset := 0
@@ -64,9 +69,11 @@ func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, err
 						dynamicValues[key] = values[0]
 					}
 				}
-				result = event.OperatorsResult
-				if len(event.Results) == 0 {
-					event.Results = []*protocols.ResultEvent{req.MakeResultEventItem(event)}
+				if event.OperatorsResult.Matched || event.OperatorsResult.Extracted || len(event.Results) > 0 {
+					result = event.OperatorsResult
+					if len(event.Results) == 0 {
+						event.Results = []*protocols.ResultEvent{req.MakeResultEventItem(event)}
+					}
 				}
 			}
 			input.LogEvent(event)

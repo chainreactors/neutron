@@ -75,17 +75,21 @@ func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extr
 
 // ExecuteWithResults executes the protocol requests and returns results instead of writing them.
 func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues, previous map[string]interface{}, callback protocols.OutputEventCallback) error {
-	variablesMap := r.options.Variables.Evaluate(common.MergeMaps(dynamicValues, previous))
-	dynamicValues = common.MergeMaps(variablesMap, dynamicValues)
 	address, err := getAddress(input.Input)
 	if err != nil {
 		return err
 	}
-	dynamicValues = common.MergeMaps(dynamicValues, map[string]interface{}{"Hostname": address})
+	targetValues := generateNetworkVariables(address)
+	variables := r.options.Variables
+	if input != nil && input.HasPreEvaluatedVariables {
+		variables = input.PreEvaluatedVariables
+	}
+	variablesMap := variables.Evaluate(common.MergeMaps(common.MergeMaps(dynamicValues, previous), targetValues))
+	dynamicValues = common.MergeMaps(variablesMap, dynamicValues)
+	dynamicValues = common.MergeMaps(dynamicValues, targetValues)
 	for _, kv := range r.addresses {
-		variables := generateNetworkVariables(address)
-		actualAddress := common.Replace(kv.address, variables)
-		err = r.executeAddress(input, variables, actualAddress, address, kv.tls, dynamicValues, callback)
+		actualAddress := common.Replace(kv.address, targetValues)
+		err = r.executeAddress(input, targetValues, actualAddress, address, kv.tls, dynamicValues, callback)
 		if err != nil {
 			continue
 		}

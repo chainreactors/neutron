@@ -22,13 +22,12 @@ func (variables *Variable) Evaluate(values map[string]interface{}) map[string]in
 	return result
 }
 
-// evaluateVariableValue expression and returns final value
-func evaluateVariableValue(expression string, values, processing map[string]interface{}) string {
-	finalMap := common.MergeMaps(values, processing)
-
-	result, err := common.Evaluate(expression, finalMap)
-	if err != nil {
-		return expression
+func (variables *Variable) PreEvaluate(values map[string]interface{}) Variable {
+	result := make(Variable, len(*variables))
+	evaluated := make(map[string]interface{}, len(*variables))
+	for key, value := range *variables {
+		evaluated[key] = preEvaluateVariableValue(common.ToString(value), values, evaluated)
+		result[key] = evaluated[key]
 	}
 	return result
 }

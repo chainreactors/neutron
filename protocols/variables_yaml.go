@@ -5,6 +5,7 @@ package protocols
 
 import (
 	"fmt"
+
 	"github.com/chainreactors/neutron/common"
 	"gopkg.in/yaml.v3"
 )
@@ -77,23 +78,19 @@ func (variables *Variable) Evaluate(values map[string]interface{}) map[string]in
 
 func (variables *Variable) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	variables.InsertionOrderedStringMap = InsertionOrderedStringMap{}
-	if err := unmarshal(&variables.InsertionOrderedStringMap); err != nil {
-		return err
-	}
-	evaluated := variables.Evaluate(map[string]interface{}{})
-	for k, v := range evaluated {
-		variables.Set(k, v)
-	}
-	return nil
+	return unmarshal(&variables.InsertionOrderedStringMap)
 }
 
-// evaluateVariableValue expression and returns final value
-func evaluateVariableValue(expression string, values, processing map[string]interface{}) string {
-	finalMap := common.MergeMaps(values, processing)
-
-	result, err := common.Evaluate(expression, finalMap)
-	if err != nil {
-		return expression
+// PreEvaluate resolves variables that are safe to freeze for one execution,
+// while leaving target/runtime-dependent chains for request-time evaluation.
+func (variables *Variable) PreEvaluate(values map[string]interface{}) Variable {
+	result := Variable{InsertionOrderedStringMap: *NewEmptyInsertionOrderedStringMap(variables.Len())}
+	evaluated := make(map[string]interface{}, variables.Len())
+	variables.ForEach(func(key string, value interface{}) {
+		evaluated[key] = preEvaluateVariableValue(common.ToString(value), values, evaluated)
+	})
+	for _, key := range variables.keys {
+		result.Set(key, evaluated[key])
 	}
 	return result
 }
