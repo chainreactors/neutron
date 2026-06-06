@@ -114,7 +114,7 @@ func main() {
 		}
 		start := time.Now()
 		res, err := t.Execute(targetURL, nil)
-		if err == nil && res != nil && res.Matched {
+		if err == nil && res != nil && (res.Matched || res.Extracted) {
 			matchedCount++
 			if !*jsonFlag {
 				fmt.Printf("Matched: %s (%s)\n", yamlFile, time.Since(start))
