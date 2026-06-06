@@ -117,61 +117,20 @@ func Lex(input string) ([]Token, error) {
 func lexString(runes []rune, start int) (string, int, error) {
 	quote := runes[start]
 	i := start + 1
-	var buf []byte
+	var buf []rune
 	for i < len(runes) {
 		if runes[i] == '\\' && i+1 < len(runes) {
-			next := runes[i+1]
-			switch next {
-			case 'x':
-				if i+3 < len(runes) {
-					hi := hexDigitVal(runes[i+2])
-					lo := hexDigitVal(runes[i+3])
-					if hi >= 0 && lo >= 0 {
-						buf = append(buf, byte(hi<<4|lo))
-						i += 4
-						continue
-					}
-				}
-				buf = append(buf, byte(next))
-				i += 2
-			case 'n':
-				buf = append(buf, '\n')
-				i += 2
-			case 'r':
-				buf = append(buf, '\r')
-				i += 2
-			case 't':
-				buf = append(buf, '\t')
-				i += 2
-			case '0':
-				buf = append(buf, 0)
-				i += 2
-			default:
-				buf = append(buf, byte(next))
-				i += 2
-			}
+			buf = append(buf, runes[i+1])
+			i += 2
 			continue
 		}
 		if runes[i] == quote {
 			return string(buf), i + 1, nil
 		}
-		buf = append(buf, []byte(string(runes[i]))...)
+		buf = append(buf, runes[i])
 		i++
 	}
 	return "", 0, fmt.Errorf("unterminated string at position %d", start)
-}
-
-func hexDigitVal(r rune) int {
-	switch {
-	case r >= '0' && r <= '9':
-		return int(r - '0')
-	case r >= 'a' && r <= 'f':
-		return int(r-'a') + 10
-	case r >= 'A' && r <= 'F':
-		return int(r-'A') + 10
-	default:
-		return -1
-	}
 }
 
 func lexNumber(runes []rune, start int) (string, int) {
