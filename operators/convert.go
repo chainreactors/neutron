@@ -8,9 +8,6 @@ import (
 
 func (m *Matcher) ToQuery() *dsl.Query {
 	q := dsl.NewQuery()
-	if m == nil {
-		return q
-	}
 	part := dsl.NormalizePart(m.Part)
 
 	var node *dsl.Node
@@ -42,19 +39,10 @@ func (m *Matcher) ToQuery() *dsl.Query {
 
 func (o *Operators) ToQuery() *dsl.Query {
 	q := dsl.NewQuery()
-	if o == nil {
-		return q
-	}
 	var nodes []*dsl.Node
 
 	for _, m := range o.Matchers {
-		if m == nil {
-			continue
-		}
 		mq := m.ToQuery()
-		if mq == nil {
-			continue
-		}
 		q.Warnings = append(q.Warnings, mq.Warnings...)
 		q.Errors = append(q.Errors, mq.Errors...)
 		if mq.Node != nil {

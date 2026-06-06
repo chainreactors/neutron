@@ -66,16 +66,9 @@ func (q *Query) Emit(platform string) *Result {
 }
 
 func (q *Query) emit(platform string, e Emitter) *Result {
-	if q == nil {
-		return &Result{Errors: []string{"nil query"}}
-	}
 	r := &Result{
 		Warnings: q.Warnings,
 		Errors:   q.Errors,
-	}
-	if e == nil {
-		r.Errors = append(r.Errors, fmt.Sprintf("nil emitter for platform: %s", platform))
-		return r
 	}
 
 	var clauses []string
