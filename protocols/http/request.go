@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -67,6 +68,10 @@ type Request struct {
 	// their history for being matched at the end.
 	// Currently only works with sequential http requests.
 	ReqCondition bool `json:"req-condition,omitempty" yaml:"req-condition,omitempty"`
+	// InternalMatchers gates internal extractors without emitting a match for the
+	// request itself. This is used by converted xray output rules whose final
+	// decision is evaluated by a later req-condition matcher.
+	InternalMatchers bool `json:"internal-matchers,omitempty" yaml:"internal-matchers,omitempty"`
 	//   StopAtFirstMatch stops the execution of the requests and template as soon as a match is found.
 	StopAtFirstMatch bool `json:"stop-at-first-match,omitempty" yaml:"stop-at-first-match,omitempty"`
 
@@ -193,6 +198,9 @@ func (r *Request) GetCompiledOperators() []*operators.Operators {
 // )
 // MakeResultEvent creates a result event from internal wrapped event
 func (r *Request) MakeResultEvent(wrapped *protocols.InternalWrappedEvent) []*protocols.ResultEvent {
+	if r.InternalMatchers {
+		return nil
+	}
 	if len(wrapped.OperatorsResult.DynamicValues) > 0 && !wrapped.OperatorsResult.Matched {
 		return nil
 	}
@@ -339,9 +347,10 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 }
 
 func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynamicValues, previous map[string]interface{}, callback protocols.OutputEventCallback) error {
-	variablesMap := r.options.Variables.Evaluate(common.MergeMaps(dynamicValues, previous))
-	dynamicValues = common.MergeMaps(variablesMap, dynamicValues)
-	generator := r.newGenerator(input.Payloads)
+	if previous == nil {
+		previous = make(map[string]interface{})
+	}
+	generator := r.newGenerator(input)
 	requestCount := 1
 	var requestErr error
 	var gotDynamicValues map[string][]string
@@ -350,7 +359,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 		executeFunc := func(data string, payloads, dynamicValue map[string]interface{}) (bool, error) {
 			generatedHttpRequest, err := generator.Make(input.Input, data, payloads, dynamicValue, r.globalVars)
 			if err != nil {
-				if err == io.EOF {
+				if err == io.EOF || err == errStopExecution {
 					return true, nil
 				}
 
@@ -452,7 +461,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 		}
 	}
 	finalEvent := make(map[string]interface{})
-	outputEvent := r.responseToDSLMap(request.request, resp, input.Input, matchedURL, duration, request.dynamicValues, reqBody)
+	outputEvent := r.responseToDSLMap(request.request, resp, input.Input, matchedURL, duration, request.dynamicValues, reqBody, client)
 	for k, v := range previousEvent {
 		finalEvent[k] = v
 	}
@@ -485,6 +494,10 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 		var ok bool
 		event.OperatorsResult, ok = r.CompiledOperators.Execute(finalEvent, r.Match, r.Extract)
 		if ok && event.OperatorsResult != nil {
+			if r.InternalMatchers {
+				event.OperatorsResult.Matched = false
+				event.OperatorsResult.Matches = make(map[string][]string)
+			}
 			event.OperatorsResult.PayloadValues = request.dynamicValues
 			event.OperatorsResult.Request = common.ToString(finalEvent["request"])
 			event.OperatorsResult.Response = common.ToString(finalEvent["response"])
@@ -500,7 +513,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 }
 
 // responseToDSLMap converts an HTTP response to a map for use in DSL matching
-func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host, matched string, duration time.Duration, extra map[string]interface{}, reqBody []byte) protocols.InternalEvent {
+func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host, matched string, duration time.Duration, extra map[string]interface{}, reqBody []byte, client *http.Client) protocols.InternalEvent {
 	data := make(protocols.InternalEvent, 12+len(extra)+len(resp.Header)+len(resp.Cookies()))
 	for k, v := range extra {
 		data[k] = v
@@ -561,7 +574,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 		data["stop-at-first-match"] = true
 	}
 	if r.NeedsFaviconData() || r.NeedsRequestCondition() {
-		r.populateFaviconData(data, req, body)
+		r.populateFaviconData(data, req, body, client)
 	}
 	return data
 }
@@ -635,14 +648,16 @@ func (request *Request) NeedsFaviconData() bool {
 
 func checkFaviconExpressions(expressions ...string) bool {
 	for _, expression := range expressions {
-		if strings.Contains(expression, "favicon_hash") || strings.Contains(expression, "body_favicon_hash") {
+		if strings.Contains(expression, "favicon_hash") ||
+			strings.Contains(expression, "body_favicon_hash") ||
+			strings.Contains(expression, "favicon_content") {
 			return true
 		}
 	}
 	return false
 }
 
-func (r *Request) populateFaviconData(data protocols.InternalEvent, req *http.Request, body []byte) {
+func (r *Request) populateFaviconData(data protocols.InternalEvent, req *http.Request, body []byte, client *http.Client) {
 	if req == nil || req.URL == nil {
 		return
 	}
@@ -656,17 +671,25 @@ func (r *Request) populateFaviconData(data protocols.InternalEvent, req *http.Re
 
 	hashes := map[string]struct{}{}
 	for _, iconURL := range discoverIconURLs(req.URL, string(body)) {
-		hash := ""
+		var iconHashes []string
+		var iconBody []byte
 		if iconURL == req.URL.String() {
-			hash = bodyHash
-		} else if iconBody, ok := r.fetchFavicon(req, iconURL); ok {
-			hash = xrayFaviconHash(iconBody)
+			iconBody = body
+			iconHashes = faviconHashes(iconBody)
+		} else if fetchedBody, ok := r.fetchFavicon(req, iconURL, client); ok {
+			iconBody = fetchedBody
+			iconHashes = faviconHashes(iconBody)
 		}
-		if hash == "" {
+		if len(iconHashes) == 0 {
 			continue
 		}
-		hashes[hash] = struct{}{}
-		faviconData[iconURL] = []string{hash}
+		if _, ok := data["favicon_content"]; !ok && len(iconBody) > 0 {
+			data["favicon_content"] = string(iconBody)
+		}
+		for _, hash := range iconHashes {
+			hashes[hash] = struct{}{}
+		}
+		faviconData[iconURL] = iconHashes
 	}
 
 	if len(hashes) > 0 {
@@ -690,7 +713,7 @@ func cloneHeader(h http.Header) http.Header {
 	return c
 }
 
-func (r *Request) fetchFavicon(baseReq *http.Request, iconURL string) ([]byte, bool) {
+func (r *Request) fetchFavicon(baseReq *http.Request, iconURL string, client *http.Client) ([]byte, bool) {
 	iconReq, err := http.NewRequest(http.MethodGet, iconURL, nil)
 	if err != nil {
 		return nil, false
@@ -700,7 +723,10 @@ func (r *Request) fetchFavicon(baseReq *http.Request, iconURL string) ([]byte, b
 	if iconReq.Header.Get("User-Agent") == "" {
 		iconReq.Header.Set("User-Agent", ua)
 	}
-	resp, err := r.httpClient.Do(iconReq)
+	if client == nil {
+		client = r.httpClient
+	}
+	resp, err := client.Do(iconReq)
 	if err != nil {
 		return nil, false
 	}
@@ -771,6 +797,19 @@ func xrayFaviconHash(body []byte) string {
 	hasher := murmur3.New32WithSeed(0)
 	_, _ = hasher.Write([]byte(wrapped.String()))
 	return fmt.Sprintf("%d", int32(hasher.Sum32()))
+}
+
+func faviconHashes(body []byte) []string {
+	if len(body) == 0 {
+		return nil
+	}
+	hashes := []string{}
+	if mmh3Hash := xrayFaviconHash(body); mmh3Hash != "" {
+		hashes = append(hashes, mmh3Hash)
+	}
+	md5Hash := md5.Sum(body)
+	hashes = append(hashes, fmt.Sprintf("%x", md5Hash))
+	return hashes
 }
 
 func sortedHashKeys(hashes map[string]struct{}) []string {

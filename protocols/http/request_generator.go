@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/chainreactors/neutron/common"
@@ -17,16 +18,22 @@ type requestGenerator struct {
 	currentPayloads  map[string]interface{}
 	okCurrentPayload bool
 	request          *Request
+	input            *protocols.ScanContext
 	payloadIterator  *protocols.Iterator
 	rawRequest       *rawRequest
 }
 
 // newGenerator creates a NewGenerator request generator instance
-func (r *Request) newGenerator(payloads map[string]interface{}) *requestGenerator {
+func (r *Request) newGenerator(input *protocols.ScanContext) *requestGenerator {
 	generator := &requestGenerator{
 		request: r,
+		input:   input,
 	}
-	if payloads != nil {
+	var payloads map[string]interface{}
+	if input != nil && len(input.Payloads) > 0 {
+		payloads = input.Payloads
+	}
+	if len(payloads) > 0 {
 		gen, err := protocols.NewGenerator(payloads, r.attackType)
 		if err != nil {
 			return nil
@@ -147,11 +154,26 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(reqdata, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
-	values := common.MergeMaps(globalValues, generateVariables(parsed, trailingSlash))
-	values = common.MergeMaps(values, allVars)
-	reqdata, err = common.Evaluate(reqdata, values)
+	targetValues := common.MergeMaps(globalValues, generateVariables(parsed, trailingSlash))
+	values := common.MergeMaps(targetValues, allVars)
+	if r.request.options != nil && r.request.options.Variables.Len() > 0 {
+		variables := r.request.options.Variables
+		if r.input != nil && r.input.HasPreEvaluatedVariables {
+			variables = r.input.PreEvaluatedVariables
+		}
+		variablesMap := variables.Evaluate(values)
+		if len(variablesMap) > 0 {
+			allVars = common.MergeMaps(variablesMap, allVars)
+			dynamicValues = common.MergeMaps(variablesMap, dynamicValues)
+			values = common.MergeMaps(targetValues, allVars)
+		}
+	}
+	reqdata, err = common.Evaluate(reqdata, common.MergeMaps(values, targetValues))
 	if err != nil {
 		return nil, err
+	}
+	if hasUnresolvedTemplate(reqdata, values) {
+		return nil, errStopExecution
 	}
 
 	if isRawRequest {
@@ -261,6 +283,9 @@ func (r *requestGenerator) fillRequest(req *http.Request, values map[string]inte
 		if err != nil {
 			return nil, err
 		}
+		if hasUnresolvedTemplate(value, values) {
+			return nil, errStopExecution
+		}
 		req.Header[header] = []string{value}
 		if header == "Host" {
 			req.Host = value
@@ -279,6 +304,9 @@ func (r *requestGenerator) fillRequest(req *http.Request, values map[string]inte
 		if err != nil {
 			return nil, err
 		}
+		if hasUnresolvedTemplate(body, values) {
+			return nil, errStopExecution
+		}
 		req.Body = NopCloser(strings.NewReader(body))
 	}
 	//if !r.request.Unsafe {
@@ -292,6 +320,39 @@ func (r *requestGenerator) fillRequest(req *http.Request, values map[string]inte
 	//}
 
 	return req, nil
+}
+
+var (
+	templateExpressionRE = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
+	simpleIdentifierRE   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+)
+
+func hasUnresolvedTemplate(value string, values map[string]interface{}) bool {
+	if !strings.Contains(value, "{{") || !strings.Contains(value, "}}") {
+		return false
+	}
+	for _, match := range templateExpressionRE.FindAllStringSubmatch(value, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		if isUnresolvedNeutronExpression(strings.TrimSpace(match[1]), values) {
+			return true
+		}
+	}
+	return false
+}
+
+func isUnresolvedNeutronExpression(expr string, values map[string]interface{}) bool {
+	if expr == "" {
+		return false
+	}
+	if simpleIdentifierRE.MatchString(expr) {
+		return true
+	}
+	if len(common.FindExpressions("{{"+expr+"}}", common.ParenthesisOpen, common.ParenthesisClose, values)) > 0 {
+		return true
+	}
+	return false
 }
 
 //

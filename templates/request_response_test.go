@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"crypto/md5"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -57,6 +58,318 @@ http:
 	require.NotEmpty(t, result.Response)
 	require.Contains(t, result.Response, "200")
 	require.Contains(t, result.Response, "vulnerable endpoint detected")
+}
+
+func TestExecuteEvaluatesVariablesAfterTargetBuiltins(t *testing.T) {
+	const epsPath = "/eps/api/resourceOperations/uploadsecretKeyIbuilding"
+
+	var gotHost, gotPath, gotToken, expectedToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		sum := md5.Sum([]byte(fmt.Sprintf("%s://%s%s", scheme, r.Host, epsPath)))
+		expectedToken = fmt.Sprintf("%X", sum)
+		gotHost = r.Host
+		gotPath = r.URL.Path
+		gotToken = r.URL.Query().Get("token")
+		if r.URL.Path != "/eps/api/resourceOperations/upload" || r.URL.Query().Get("token") != expectedToken {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "path=%s token=%s expected=%s", r.URL.Path, r.URL.Query().Get("token"), expectedToken)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "token accepted")
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: target-builtin-variable-test
+info:
+  name: Target Builtin Variable Test
+  author: test
+  severity: info
+variables:
+  eps_path: /eps/api/resourceOperations/uploadsecretKeyIbuilding
+  host: '{{Hostname}}'
+  scheme: '{{Scheme}}'
+  url: '{{concat(concat(concat(scheme, "://"), host), eps_path)}}'
+  token: '{{to_upper(md5(url))}}'
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/eps/api/resourceOperations/upload?token={{token}}'
+    matchers:
+      - type: word
+        words:
+          - "token accepted"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result, "host=%s path=%s token=%s expected=%s", gotHost, gotPath, gotToken, expectedToken)
+	require.True(t, result.Matched)
+}
+
+func TestExecutePreEvaluatesRandomVariablesOnceAcrossHTTPBlocks(t *testing.T) {
+	var createdUser string
+	var requestedUsers []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username := r.URL.Query().Get("username")
+		requestedUsers = append(requestedUsers, username)
+		switch r.URL.Path {
+		case "/create":
+			createdUser = username
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, "created %s", username)
+		case "/list":
+			if username != "" && username == createdUser {
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprintf(w, "found %s", username)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "missing %s created %s", username, createdUser)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: random-variable-stability-test
+info:
+  name: Random Variable Stability Test
+  author: test
+  severity: info
+variables:
+  r1: '{{rand_base(16, "abcdefghijklmnopqrstuvwxyz")}}'
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/create?username={{r1}}'
+    extractors:
+      - type: regex
+        name: created_user
+        regex:
+          - "created ([a-z]+)"
+        internal: true
+
+  - method: GET
+    path:
+      - '{{BaseURL}}/list?username={{r1}}'
+    matchers:
+      - type: word
+        words:
+          - "found"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Len(t, requestedUsers, 2)
+	require.Equal(t, requestedUsers[0], requestedUsers[1])
+
+	firstRunUser := requestedUsers[0]
+	result, err = tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Len(t, requestedUsers, 4)
+	require.Equal(t, requestedUsers[2], requestedUsers[3])
+	require.NotEqual(t, firstRunUser, requestedUsers[2])
+}
+
+func TestExecuteDynamicExtractorFeedsNextHTTPBlock(t *testing.T) {
+	var requestedToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/seed":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "token=real-token")
+		case "/check":
+			requestedToken = r.URL.Query().Get("token")
+			if requestedToken == "real-token" {
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, "accepted")
+				return
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "bad token %s", requestedToken)
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: dynamic-extractor-cross-block-test
+info:
+  name: Dynamic Extractor Cross Block Test
+  author: test
+  severity: info
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/seed'
+    extractors:
+      - type: regex
+        name: token
+        regex:
+          - "token=([a-z-]+)"
+        group: 1
+        internal: true
+
+  - method: GET
+    path:
+      - '{{BaseURL}}/check?token={{token}}'
+    matchers:
+      - type: word
+        words:
+          - "accepted"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Equal(t, "real-token", requestedToken)
+}
+
+func TestExecuteFaviconContentDSL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `<html><head><link rel="icon" href="/custom.ico"></head></html>`)
+		case "/custom.ico":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "ICON-CONTENT-BYTES")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: favicon-content-dsl-test
+info:
+  name: Favicon Content DSL Test
+  author: test
+  severity: info
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/'
+    matchers:
+      - type: dsl
+        dsl:
+          - 'contains(favicon_content, "ICON-CONTENT-BYTES")'
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+}
+
+func TestExecuteUsesTargetBaseURLForRequestPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		expectedOrigin := "https://" + strings.Split(r.Host, ":")[0]
+		if r.URL.Path != "/admin/auth/reset-password" || r.Header.Get("Origin") != expectedOrigin {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "path=%s origin=%s expected=%s", r.URL.Path, r.Header.Get("Origin"), expectedOrigin)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "strapi ok")
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: builtin-baseurl-path-test
+info:
+  name: Builtin BaseURL Path Test
+  author: test
+  severity: info
+variables:
+  BaseURL: '{{Host}}'
+http:
+  - method: POST
+    path:
+      - '{{BaseURL}}/admin/auth/reset-password'
+    headers:
+      Origin: https://{{BaseURL}}
+    matchers:
+      - type: word
+        words:
+          - "strapi ok"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+}
+
+func TestExecuteAppendsRequestPathToTargetBaseURLPath(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if r.URL.Path != "/es/_count" {
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "unexpected path: %s", r.URL.Path)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "path preserved")
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: target-baseurl-path-append-test
+info:
+  name: Target BaseURL Path Append Test
+  author: test
+  severity: info
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/_count'
+    matchers:
+      - type: word
+        words:
+          - "path preserved"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL+"/es/", nil)
+	require.NoError(t, err)
+	require.NotNil(t, result, "got path %s", gotPath)
+	require.True(t, result.Matched)
 }
 
 func TestExecuteNoMatchEmptyRequestResponse(t *testing.T) {
@@ -289,6 +602,65 @@ http:
 	require.Contains(t, requested, "/dynamic-login")
 }
 
+func TestInternalMatcherEventDoesNotOverwritePreviousMatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/match":
+			w.WriteHeader(200)
+			fmt.Fprint(w, "already matched")
+		case "/extract":
+			w.WriteHeader(200)
+			fmt.Fprint(w, "token=abc123")
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: internal-matcher-no-overwrite-test
+info:
+  name: Internal Matcher No Overwrite Test
+  author: test
+  severity: info
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/match"
+    matchers:
+      - type: word
+        words:
+          - "already matched"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/extract"
+    internal-matchers: true
+    matchers:
+      - type: word
+        words:
+          - "token="
+    extractors:
+      - type: regex
+        name: token
+        regex:
+          - "token=([a-z0-9]+)"
+        group: 1
+        internal: true
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Contains(t, result.Request, "/match")
+}
+
 func TestExecuteWithEventsMultiStep(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/step1" {
@@ -360,6 +732,48 @@ http:
 	// step1 uses internal extractor so it produces a dynamic-values-only result
 	// that may or may not emit a ResultEvent — either is acceptable
 	_ = hasStep1
+}
+
+func TestExecuteStaticVariableChainWithoutPreEvaluation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/prefix-hello-suffix" {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "chain resolved")
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "unexpected path: %s", r.URL.Path)
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: static-variable-chain-test
+info:
+  name: Static Variable Chain Test
+  author: test
+  severity: info
+variables:
+  a: hello
+  b: '{{concat("prefix-", a)}}'
+  c: '{{concat(b, "-suffix")}}'
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/{{c}}'
+    matchers:
+      - type: word
+        words:
+          - "chain resolved"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
 }
 
 func containsAll(s string, substrs ...string) bool {
