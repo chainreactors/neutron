@@ -220,6 +220,205 @@ func TestGenerateNewFields(t *testing.T) {
 	}
 }
 
+func TestGenerateHeaderVariablesUseAllHeadersNeedles(t *testing.T) {
+	tests := []struct {
+		expr   string
+		fofa   string
+		hunter string
+		censys string
+	}{
+		{
+			`contains(location, "/login")`,
+			`header="location: /login"`,
+			`header="location: /login"`,
+			`services.http.response.headers: "location: /login"`,
+		},
+		{
+			`contains(set_cookie, "JSESSIONID")`,
+			`header="set_cookie: JSESSIONID"`,
+			`header="set_cookie: JSESSIONID"`,
+			`services.http.response.headers: "set_cookie: JSESSIONID"`,
+		},
+		{
+			`contains(www_authenticate, "Basic")`,
+			`header="www_authenticate: Basic"`,
+			`header="www_authenticate: Basic"`,
+			`services.http.response.headers: "www_authenticate: Basic"`,
+		},
+		{
+			`location == "/admin"`,
+			`header="location: /admin"`,
+			`header="location: /admin"`,
+			`services.http.response.headers: "location: /admin"`,
+		},
+		{
+			`contains_all(location, "/one", "/two")`,
+			`(header="location: /one" && header="location: /two")`,
+			`(header="location: /one" && header="location: /two")`,
+			`(services.http.response.headers: "location: /one" AND services.http.response.headers: "location: /two")`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			node, err := Parse(tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			expected := map[string]string{"fofa": tt.fofa, "hunter": tt.hunter, "censys": tt.censys}
+			for platform, want := range expected {
+				e, _ := GetEmitter(platform)
+				r := Generate(node, e)
+				if r.Query != want {
+					t.Errorf("[%s] got %q, want %q", platform, r.Query, want)
+				}
+				if r.HasErrors() {
+					t.Errorf("[%s] unexpected errors: %v", platform, r.Errors)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateStatusCodeStringAndWrappedComparisons(t *testing.T) {
+	tests := []struct {
+		expr string
+		want string
+	}{
+		{`status_code == "200"`, `status_code="200"`},
+		{`to_number(status_code) == "401"`, `status_code="401"`},
+		{`status_code != "404"`, `!(status_code="404")`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			node, err := Parse(tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := Generate(node, &FOFAEmitter{})
+			if r.Query != tt.want {
+				t.Errorf("got %q, want %q", r.Query, tt.want)
+			}
+			if r.HasErrors() {
+				t.Errorf("unexpected errors: %v", r.Errors)
+			}
+		})
+	}
+}
+
+func TestGenerateHistoryVariablesNormalizeForQueries(t *testing.T) {
+	tests := []struct {
+		expr   string
+		fofa   string
+		censys string
+	}{
+		{
+			`contains(body_0, "redirect")`,
+			`body="redirect"`,
+			`services.http.response.body: "redirect"`,
+		},
+		{
+			`contains(headers_0, "location: /login")`,
+			`header="location: /login"`,
+			`services.http.response.headers: "location: /login"`,
+		},
+		{
+			`status_0 == "302"`,
+			`status_code="302"`,
+			`services.http.response.status_code: 302`,
+		},
+		{
+			`contains(location_1, "/login") && status_code_1 != "404"`,
+			`header="location: /login" && !(status_code="404")`,
+			`services.http.response.headers: "location: /login" AND NOT services.http.response.status_code: 404`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			node, err := Parse(tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := Generate(node, &FOFAEmitter{}).Query; got != tt.fofa {
+				t.Errorf("[fofa] got %q, want %q", got, tt.fofa)
+			}
+			if got := Generate(node, &CensysEmitter{}).Query; got != tt.censys {
+				t.Errorf("[censys] got %q, want %q", got, tt.censys)
+			}
+		})
+	}
+}
+
+func TestIsFieldTransparentRegisteredCorrectly(t *testing.T) {
+	transparent := []string{"to_lower", "to_upper", "to_number", "to_string", "trim_space"}
+	for _, name := range transparent {
+		if !IsFieldTransparent(name) {
+			t.Errorf("%s should be field-transparent", name)
+		}
+	}
+	notTransparent := []string{"md5", "base64", "len", "concat", "reverse", "hex_encode"}
+	for _, name := range notTransparent {
+		if IsFieldTransparent(name) {
+			t.Errorf("%s should NOT be field-transparent", name)
+		}
+	}
+}
+
+func TestIsHeaderVariableUsesEmitterFieldMapping(t *testing.T) {
+	tests := []struct {
+		part     string
+		platform string
+		want     bool
+	}{
+		{"location", "fofa", true},
+		{"set_cookie", "fofa", true},
+		{"www_authenticate", "fofa", true},
+		{"x_powered_by", "fofa", true},
+		{"content_type", "fofa", true},
+		{"body", "fofa", false},
+		{"all_headers", "fofa", false},
+		{"status_code", "fofa", false},
+		{"server", "fofa", false},
+		{"title", "fofa", false},
+		// censys has a dedicated content_type field
+		{"content_type", "censys", false},
+		{"location", "censys", true},
+	}
+	for _, tt := range tests {
+		e, _ := GetEmitter(tt.platform)
+		got := isHeaderVariable(tt.part, e)
+		if got != tt.want {
+			t.Errorf("isHeaderVariable(%q, %s) = %v, want %v", tt.part, tt.platform, got, tt.want)
+		}
+	}
+}
+
+func TestGenerateUnmappedHeaderVariablesProduceNeedleQueries(t *testing.T) {
+	tests := []struct {
+		expr string
+		fofa string
+	}{
+		{`contains(content_type, "json")`, `header="content_type: json"`},
+		{`contains(x_powered_by, "PHP")`, `header="x_powered_by: PHP"`},
+		{`x_forwarded_for == "127.0.0.1"`, `header="x_forwarded_for: 127.0.0.1"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.expr, func(t *testing.T) {
+			node, err := Parse(tt.expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := Generate(node, &FOFAEmitter{})
+			if r.Query != tt.fofa {
+				t.Errorf("got %q, want %q", r.Query, tt.fofa)
+			}
+		})
+	}
+}
+
 func TestEndToEndAllEngines(t *testing.T) {
 	expr := `contains(body, "wp-content") && contains(body, "wp-includes")`
 	expected := map[string]string{

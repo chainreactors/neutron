@@ -95,3 +95,44 @@ func TestLexNot(t *testing.T) {
 		t.Errorf("expected TNot, got %d", tokens[0].Type)
 	}
 }
+
+func TestLexHexEscape(t *testing.T) {
+	tokens, err := Lex(`starts_with(body, "\x1f\x8b")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// tokens: starts_with ( body , "\x1f\x8b" ) EOF
+	strTok := tokens[4]
+	if strTok.Type != TString {
+		t.Fatalf("expected TString, got %d", strTok.Type)
+	}
+	if len(strTok.Value) != 2 {
+		t.Fatalf("expected 2 bytes, got %d bytes: %q", len(strTok.Value), strTok.Value)
+	}
+	if strTok.Value[0] != 0x1f || strTok.Value[1] != 0x8b {
+		t.Errorf("expected \\x1f\\x8b, got %x", []byte(strTok.Value))
+	}
+}
+
+func TestLexStandardEscapes(t *testing.T) {
+	tokens, err := Lex(`"\n\r\t\0"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := tokens[0].Value
+	if s != "\n\r\t\x00" {
+		t.Errorf("expected \\n\\r\\t\\0, got %q", s)
+	}
+}
+
+func TestLexHexMixedWithText(t *testing.T) {
+	tokens, err := Lex(`"PK\x03\x04"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := tokens[0].Value
+	expected := "PK\x03\x04"
+	if s != expected {
+		t.Errorf("expected %q, got %q", expected, s)
+	}
+}
