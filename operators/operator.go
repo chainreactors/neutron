@@ -159,9 +159,6 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 			matches = true
 		} else if matcherCondition == ANDCondition {
 			common.Debug("Not Matched: %+v", matcher)
-			if len(result.DynamicValues) > 0 {
-				return result, true
-			}
 			return nil, false
 		} else {
 			common.Debug("Not Matched: %+v", matcher)
@@ -175,12 +172,12 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 
 	result.Matched = matches
 	result.Extracted = len(result.OutputExtracts) > 0
-	if len(result.DynamicValues) > 0 {
-		return result, true
-	}
 	// Don't print if we have matchers and they have not matched, irregardless of extractor
 	if len(operators.Matchers) > 0 && !matches {
 		return nil, false
+	}
+	if len(result.DynamicValues) > 0 {
+		return result, true
 	}
 	// Write a final string of output if matcher type is
 	// AND or if we have extractors for the mechanism too.

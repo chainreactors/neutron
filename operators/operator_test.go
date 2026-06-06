@@ -130,4 +130,34 @@ func TestOperatorsExecute(t *testing.T) {
 		require.True(t, result.Extracted)
 		require.Contains(t, result.Extracts, "version")
 	})
+
+	t.Run("internal extractor is gated by failed matcher", func(t *testing.T) {
+		ops := &Operators{
+			Matchers: []*Matcher{
+				{Type: "word", Words: []string{"missing"}},
+			},
+			Extractors: []*Extractor{
+				{
+					Type:       "regex",
+					Regex:      []string{`next=(/[a-z-]+)`},
+					RegexGroup: 1,
+					Name:       "next_path",
+					Internal:   true,
+				},
+			},
+		}
+		err := ops.Compile()
+		require.NoError(t, err)
+
+		matchFunc := func(data map[string]interface{}, matcher *Matcher) (bool, []string) {
+			return matcher.MatchWords("next=/dynamic-login", data)
+		}
+		extractFunc := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
+			return extractor.ExtractRegex("next=/dynamic-login")
+		}
+
+		result, ok := ops.Execute(map[string]interface{}{}, matchFunc, extractFunc)
+		require.False(t, ok)
+		require.Nil(t, result)
+	})
 }

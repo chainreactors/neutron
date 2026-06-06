@@ -26,7 +26,13 @@ func (t *Template) ToQuery() *dsl.Query {
 
 	var nodes []*dsl.Node
 	for _, req := range requests {
+		if req == nil {
+			continue
+		}
 		rq := req.Operators.ToQuery()
+		if rq == nil {
+			continue
+		}
 		q.Warnings = append(q.Warnings, rq.Warnings...)
 		q.Errors = append(q.Errors, rq.Errors...)
 		if rq.Node != nil {
