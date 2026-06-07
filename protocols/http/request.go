@@ -78,9 +78,23 @@ type Request struct {
 	attackType        protocols.Type       `json:"-" yaml:"-" jsonschema:"-"`
 	totalRequests     int                  `json:"-" yaml:"-" jsonschema:"-"`
 
-	globalVars map[string]interface{}     `json:"-" yaml:"-" jsonschema:"-"`
-	options    *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
+	options *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
 	//Result            *protocols.Result
+}
+
+// PreprocessorParts returns the request strings that may carry nuclei-style
+// {{randstr}}/{{randnum}} preprocessors, scanned once per execution by FrozenFor.
+func (r *Request) PreprocessorParts() []string {
+	parts := make([]string, 0, len(r.Path)+len(r.Raw)+len(r.Headers)+1)
+	parts = append(parts, r.Path...)
+	parts = append(parts, r.Raw...)
+	if r.Body != "" {
+		parts = append(parts, r.Body)
+	}
+	for header, value := range r.Headers {
+		parts = append(parts, header, value)
+	}
+	return parts
 }
 
 // Type returns the type of the protocol request
@@ -274,8 +288,6 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		}
 	}
 
-	r.globalVars = nil
-
 	// 修改: 只编译一次Matcher
 	if len(r.Matchers) > 0 || len(r.Extractors) > 0 {
 		compiled := &r.Operators
@@ -346,7 +358,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 	for {
 		// returns two values, error and skip, which skips the execution for the request instance.
 		executeFunc := func(data string, payloads, dynamicValue map[string]interface{}) (bool, error) {
-			generatedHttpRequest, err := generator.Make(input.Input, data, payloads, dynamicValue, r.globalVars)
+			generatedHttpRequest, err := generator.Make(input.Input, data, payloads, dynamicValue)
 			if err != nil {
 				if err == io.EOF || err == errStopExecution {
 					return true, nil

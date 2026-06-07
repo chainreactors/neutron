@@ -52,9 +52,12 @@ func (e *Executer) Requests() int {
 func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, error) {
 	var result *operators.Result
 
+	// Freeze variables (StableValues) and {{randstr}}-style preprocessors once for
+	// this execution: stable across request blocks within the scan, regenerated
+	// between scans.
 	input.FrozenVariables = nil
-	if e.options != nil && e.options.Variables.Len() > 0 {
-		input.FrozenVariables = e.options.Variables.StableValues()
+	if e.options != nil {
+		input.FrozenVariables = protocols.FrozenFor(e.options.Variables, e.requests)
 	}
 
 	previous := make(map[string]interface{})

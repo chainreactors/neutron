@@ -36,8 +36,7 @@ type Request struct {
 	attackType        protocols.Type       `json:"-" yaml:"-" jsonschema:"-"`
 	// cache any variables that may be needed for operation.
 	//dialer  *fastdialer.Dialer
-	options    *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
-	globalVars map[string]interface{}     `json:"-" yaml:"-" jsonschema:"-"`
+	options *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
 }
 
 type addressKV struct {
@@ -120,7 +119,21 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		}
 		r.CompiledOperators = compiled
 	}
+
 	return nil
+}
+
+// PreprocessorParts returns the request strings that may carry nuclei-style
+// {{randstr}}/{{randnum}} preprocessors, scanned once per execution by FrozenFor.
+func (r *Request) PreprocessorParts() []string {
+	parts := make([]string, 0, len(r.Address)+len(r.Inputs))
+	parts = append(parts, r.Address...)
+	for _, input := range r.Inputs {
+		if input != nil && input.Data != "" {
+			parts = append(parts, input.Data)
+		}
+	}
+	return parts
 }
 
 // Requests returns the total number of requests the YAML rule will perform

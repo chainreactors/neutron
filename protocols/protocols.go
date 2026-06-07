@@ -1,7 +1,6 @@
 package protocols
 
 import (
-	"sync"
 	"time"
 
 	"github.com/chainreactors/neutron/operators"
@@ -12,12 +11,9 @@ type ExecuterOptions struct {
 	//TemplateID string
 	// TemplateInfo contains information block of the template request
 	//TemplateInfo map[string]interface{}
-	Variables       Variable
-	StaticVariables map[string]interface{}
-	varsPayloads    map[string]interface{}
-	Options         *Options
-
-	staticVariablesMu sync.Mutex
+	Variables    Variable
+	varsPayloads map[string]interface{}
+	Options      *Options
 }
 
 // Executer is an interface implemented any protocol based request executer.
@@ -49,6 +45,10 @@ type Request interface {
 	Extract(data map[string]interface{}, matcher *operators.Extractor) map[string]struct{}
 	// ExecuteWithResults executes the protocol requests and returns results instead of writing them.
 	ExecuteWithResults(input *ScanContext, dynamicValues, previous map[string]interface{}, callback OutputEventCallback) error
+	// PreprocessorParts returns the request strings (path/raw/body/headers, or
+	// addresses/inputs) scanned once per execution for nuclei-style {{randstr}}
+	// preprocessors. See FrozenFor.
+	PreprocessorParts() []string
 	MakeResultEventItem(wrapped *InternalWrappedEvent) *ResultEvent
 	// MakeResultEvent creates a flat list of result events from an internal wrapped event, based on successful matchers and extracted data
 	MakeResultEvent(wrapped *InternalWrappedEvent) []*ResultEvent
