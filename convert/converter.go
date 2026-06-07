@@ -313,7 +313,12 @@ func buildRepeatedRuleOrBranchBlocks(poc *XrayPOC, topExpr *TopExprNode, ctx *co
 	if poc == nil || topExpr == nil || topExpr.Type != "or" || !hasRepeatedRuleNames(topExpr) {
 		return nil
 	}
+	noSuffixVars := ctx.noSuffixVariables()
 	var out []interface{}
+	// Track the running global request index so each branch's req-condition DSL
+	// references the correct body_N for its own requests (req indices accumulate
+	// across every emitted block, mirroring the executer's requestIndexOffset).
+	requestOffset := 0
 	for _, branch := range topExpr.Children {
 		names := collectRuleNames(branch)
 		groups, ruleExprs, ok := requestGroupsForRuleNames(poc, names, ctx)
@@ -329,13 +334,17 @@ func buildRepeatedRuleOrBranchBlocks(poc *XrayPOC, topExpr *TopExprNode, ctx *co
 			}
 			applyGroupExtras(req, g)
 			out = append(out, req)
+			requestOffset += groupRequestCount(g)
 			continue
 		}
-		branchBlocks := buildBranchDynamicSequenceBlocks(groups)
+		branchBlocks := buildBranchDynamicSequenceBlocks(branch, groups, ruleExprs, requestOffset, noSuffixVars)
 		if len(branchBlocks) == 0 {
 			return nil
 		}
 		out = append(out, branchBlocks...)
+		for _, g := range groups {
+			requestOffset += groupRequestCount(g)
+		}
 	}
 	return out
 }
@@ -402,24 +411,37 @@ func requestGroupsForRuleNames(poc *XrayPOC, names []string, ctx *conversionCont
 	return groups, ruleExprs, true
 }
 
-func buildBranchDynamicSequenceBlocks(groups []*requestGroup) []interface{} {
+func buildBranchDynamicSequenceBlocks(branch *TopExprNode, groups []*requestGroup, ruleExprs map[string]string, requestOffset int, noSuffixVars map[string]bool) []interface{} {
 	if len(groups) < 2 {
 		return nil
 	}
-	var httpReqs []interface{}
+	// A dynamic sequence only makes sense when every non-final request captures a
+	// value (via an internal extractor) for a later request to consume.
 	for i, g := range groups {
-		if i == len(groups)-1 {
-			req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, g.redirectsSet, g.exprs)
-			if req == nil {
-				return nil
-			}
-			applyGroupExtras(req, g)
-			httpReqs = append(httpReqs, req)
-			continue
-		}
-		if len(g.extractors) == 0 {
+		if i != len(groups)-1 && len(g.extractors) == 0 {
 			return nil
 		}
+	}
+	// Assign each rule its global request index so the branch's final
+	// req-condition DSL can gate on earlier responses as body_N etc.
+	ruleReqIndex := map[string][]int{}
+	offset := requestOffset
+	for _, g := range groups {
+		count := groupRequestCount(g)
+		indices := make([]int, count)
+		for j := 0; j < count; j++ {
+			indices[j] = offset + j + 1
+		}
+		for _, ruleName := range g.rules {
+			ruleReqIndex[ruleName] = indices
+		}
+		offset += count
+	}
+	lastIndex := offset
+	branchDSL := buildReqConditionDSL(branch, "", buildRuleDSLExprs(ruleExprs), ruleReqIndex, lastIndex, noSuffixVars)
+
+	var httpReqs []interface{}
+	for i, g := range groups {
 		req := map[string]interface{}{
 			"method": g.method,
 			"path":   groupPathList(g),
@@ -432,9 +454,16 @@ func buildBranchDynamicSequenceBlocks(groups []*requestGroup) []interface{} {
 		}
 		applyRedirectDirective(req, g.redirects, g.redirectsSet)
 		applyGroupExtras(req, g)
-		applyInternalExtractorGate(req, g)
-		if _, ok := req["internal-matchers"]; !ok {
-			return nil
+		req["req-condition"] = true
+		// Non-final requests only run their internal extractors and record history;
+		// the final request decides the whole branch via the req-condition DSL.
+		if i == len(groups)-1 {
+			req["matchers"] = []interface{}{
+				map[string]interface{}{
+					"type": "dsl",
+					"dsl":  []string{branchDSL},
+				},
+			}
 		}
 		httpReqs = append(httpReqs, req)
 	}
