@@ -48,17 +48,26 @@ type Result struct {
 }
 
 func (r *Operators) Compile() error {
+	if r == nil {
+		return fmt.Errorf("operators is nil")
+	}
 	if r.MatchersCondition != "" {
 		r.matchersCondition = conditionTypes[r.MatchersCondition]
 	} else {
 		r.matchersCondition = ORCondition
 	}
-	for _, matcher := range r.Matchers {
+	for i, matcher := range r.Matchers {
+		if matcher == nil {
+			return fmt.Errorf("matcher at index %d is nil", i)
+		}
 		if err := matcher.CompileMatchers(); err != nil {
 			return err
 		}
 	}
-	for _, extractor := range r.Extractors {
+	for i, extractor := range r.Extractors {
+		if extractor == nil {
+			return fmt.Errorf("extractor at index %d is nil", i)
+		}
 		if err := extractor.CompileExtractors(); err != nil {
 			return err
 		}

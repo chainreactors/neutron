@@ -30,6 +30,21 @@ func TestResultRequestResponseFields(t *testing.T) {
 	})
 }
 
+func TestOperatorsCompileRejectsNilEntries(t *testing.T) {
+	err := (&Operators{Matchers: []*Matcher{nil}}).Compile()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "matcher at index 0 is nil")
+
+	err = (&Operators{Extractors: []*Extractor{nil}}).Compile()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "extractor at index 0 is nil")
+
+	var ops *Operators
+	err = ops.Compile()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "operators is nil")
+}
+
 func TestOperatorsExecute(t *testing.T) {
 	t.Run("OR condition with word matcher", func(t *testing.T) {
 		ops := &Operators{
