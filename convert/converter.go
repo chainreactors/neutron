@@ -1611,27 +1611,6 @@ func appendGeneratedQueries(yamlData []byte, tmpl map[string]interface{}) []byte
 	return yamlData
 }
 
-// pruneFaviconContentExpr drops dead favicon_content operands (see
-// PruneUnevaluableFavicon) from a combined DSL expression. It is a no-op unless
-// the expression actually mentions favicon_content, and falls back to the original
-// string if the expression cannot be re-parsed.
-func pruneFaviconContentExpr(expr string) string {
-	// Guard on both the post-parse variable (favicon_content) and the raw xray
-	// source (getIconContent), since a rule expression may reach here untranslated.
-	if !strings.Contains(expr, "favicon_content") && !strings.Contains(expr, "IconContent") {
-		return expr
-	}
-	ast, err := ParseToAST(expr)
-	if err != nil {
-		return expr
-	}
-	pruned, ok := PruneUnevaluableFavicon(ast)
-	if !ok || pruned == nil {
-		return "false"
-	}
-	return pruned.String()
-}
-
 func convertGroup(method, path string, headers map[string]string, body string, redirects bool, redirectsSet bool, exprs []string) map[string]interface{} {
 	if len(exprs) == 0 {
 		return nil
