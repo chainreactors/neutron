@@ -1288,31 +1288,6 @@ func literalFloat(node *dsl.Node) (float64, bool) {
 	}
 }
 
-func chooseNumber(op string, target int) int {
-	switch op {
-	case "==":
-		return target
-	case "!=":
-		if target == 200 {
-			return 201
-		}
-		return 200
-	case ">":
-		return target + 1
-	case ">=":
-		return target
-	case "<":
-		if target > 0 {
-			return target - 1
-		}
-		return target
-	case "<=":
-		return target
-	default:
-		return 200
-	}
-}
-
 func chooseStatusCode(op string, target int) (int, bool) {
 	const (
 		minStatus = 100
