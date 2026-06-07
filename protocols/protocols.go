@@ -1,8 +1,10 @@
 package protocols
 
 import (
-	"github.com/chainreactors/neutron/operators"
+	"sync"
 	"time"
+
+	"github.com/chainreactors/neutron/operators"
 )
 
 type ExecuterOptions struct {
@@ -10,9 +12,12 @@ type ExecuterOptions struct {
 	//TemplateID string
 	// TemplateInfo contains information block of the template request
 	//TemplateInfo map[string]interface{}
-	Variables    Variable
-	varsPayloads map[string]interface{}
-	Options      *Options
+	Variables       Variable
+	StaticVariables map[string]interface{}
+	varsPayloads    map[string]interface{}
+	Options         *Options
+
+	staticVariablesMu sync.Mutex
 }
 
 // Executer is an interface implemented any protocol based request executer.

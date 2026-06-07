@@ -116,7 +116,7 @@ http:
 	require.True(t, result.Matched)
 }
 
-func TestExecutePreEvaluatesRandomVariablesOnceAcrossHTTPBlocks(t *testing.T) {
+func TestExecuteKeepsRandomVariablesStableAcrossHTTPBlocks(t *testing.T) {
 	var createdUser string
 	var requestedUsers []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -190,6 +190,138 @@ http:
 	require.NotEqual(t, firstRunUser, requestedUsers[2])
 }
 
+func TestExecuteKeepsPreprocessorRandstrStableAcrossHTTPBlocks(t *testing.T) {
+	var createdToken string
+	var createdNamed string
+	var requestedTokens []string
+	var requestedNamed []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.URL.Query().Get("token")
+		named := r.URL.Query().Get("named")
+		requestedTokens = append(requestedTokens, token)
+		requestedNamed = append(requestedNamed, named)
+		switch r.URL.Path {
+		case "/create":
+			createdToken = token
+			createdNamed = named
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "created")
+		case "/check":
+			if token != "" && token == createdToken && named != "" && named == createdNamed {
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, "found")
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "missing token=%s named=%s", token, named)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: randstr-preprocessor-stability-test
+info:
+  name: Randstr Preprocessor Stability Test
+  author: test
+  severity: info
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/create?token={{randstr}}&named={{randstr_probe}}'
+
+  - method: GET
+    path:
+      - '{{BaseURL}}/check?token={{randstr}}&named={{randstr_probe}}'
+    matchers:
+      - type: word
+        words:
+          - "found"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Len(t, requestedTokens, 2)
+	require.Len(t, requestedNamed, 2)
+	require.Equal(t, requestedTokens[0], requestedTokens[1])
+	require.Equal(t, requestedNamed[0], requestedNamed[1])
+	require.NotEmpty(t, requestedTokens[0])
+	require.NotEmpty(t, requestedNamed[0])
+}
+
+func TestExecuteKeepsRandomVariableStableWhenLiteralMatchesUnfrozenVariableName(t *testing.T) {
+	var createdUser string
+	var requestedUsers []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username := r.URL.Query().Get("username")
+		requestedUsers = append(requestedUsers, username)
+		switch r.URL.Path {
+		case "/create":
+			createdUser = username
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, "created %s", username)
+		case "/list":
+			if username == createdUser {
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprintf(w, "found %s", username)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "missing %s created %s", username, createdUser)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: random-literal-dependency-test
+info:
+  name: Random Literal Dependency Test
+  author: test
+  severity: info
+variables:
+  token: '{{Hostname}}'
+  r1: '{{concat("token-", rand_base(8, "abc"))}}'
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/create?username={{r1}}'
+    extractors:
+      - type: regex
+        name: created_user
+        regex:
+          - "created ([a-z-]+)"
+        internal: true
+
+  - method: GET
+    path:
+      - '{{BaseURL}}/list?username={{r1}}'
+    matchers:
+      - type: word
+        words:
+          - "found"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Len(t, requestedUsers, 2)
+	require.Equal(t, requestedUsers[0], requestedUsers[1])
+}
+
 func TestExecuteDynamicExtractorFeedsNextHTTPBlock(t *testing.T) {
 	var requestedToken string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -246,6 +378,60 @@ http:
 	require.NotNil(t, result)
 	require.True(t, result.Matched)
 	require.Equal(t, "real-token", requestedToken)
+}
+
+func TestExecuteRuntimeDependentVariableFeedsDSLMatcher(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/seed":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "seed=abc")
+		case "/check":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "accepted-abc")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: runtime-variable-dsl-test
+info:
+  name: Runtime Variable DSL Test
+  author: test
+  severity: info
+variables:
+  token: '{{concat("accepted-", seed)}}'
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/seed'
+    extractors:
+      - type: regex
+        name: seed
+        regex:
+          - "seed=([a-z]+)"
+        group: 1
+        internal: true
+
+  - method: GET
+    path:
+      - '{{BaseURL}}/check'
+    matchers:
+      - type: dsl
+        dsl:
+          - 'contains(body, token)'
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
 }
 
 func TestExecuteFaviconContentDSL(t *testing.T) {

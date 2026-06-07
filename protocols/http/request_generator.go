@@ -154,14 +154,17 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(reqdata, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
+	if r.request.options != nil {
+		globalValues = r.request.options.StaticVariablesFor(r.staticVariableParts(reqdata)...)
+	}
 	targetValues := common.MergeMaps(globalValues, generateVariables(parsed, trailingSlash))
 	values := common.MergeMaps(targetValues, allVars)
 	if r.request.options != nil && r.request.options.Variables.Len() > 0 {
-		variables := r.request.options.Variables
-		if r.input != nil && r.input.HasPreEvaluatedVariables {
-			variables = r.input.PreEvaluatedVariables
+		vars := r.request.options.Variables
+		if r.input != nil {
+			vars = vars.WithFrozen(r.input.FrozenVariables)
 		}
-		variablesMap := variables.Evaluate(values)
+		variablesMap := vars.Evaluate(values)
 		if len(variablesMap) > 0 {
 			allVars = common.MergeMaps(variablesMap, allVars)
 			dynamicValues = common.MergeMaps(variablesMap, dynamicValues)
@@ -181,6 +184,20 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 	}
 
 	return r.makeHTTPRequestFromModel(reqdata, values, allVars)
+}
+
+func (r *requestGenerator) staticVariableParts(reqdata string) []string {
+	parts := []string{reqdata}
+	if r.request == nil {
+		return parts
+	}
+	if r.request.Body != "" {
+		parts = append(parts, r.request.Body)
+	}
+	for header, value := range r.request.Headers {
+		parts = append(parts, header, value)
+	}
+	return parts
 }
 
 // baseURLWithTemplatePrefs returns the url for BaseURL keeping

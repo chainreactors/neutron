@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chainreactors/neutron/common"
-	"github.com/chainreactors/neutron/common/dsl"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/spaolacci/murmur3"
@@ -275,10 +274,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		}
 	}
 
-	r.globalVars = map[string]interface{}{
-		"randstr": dsl.RandStr(8),
-		"randnum": dsl.RandNum(4),
-	}
+	r.globalVars = nil
 
 	// 修改: 只编译一次Matcher
 	if len(r.Matchers) > 0 || len(r.Extractors) > 0 {

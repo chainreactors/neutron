@@ -13,6 +13,7 @@ import (
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestResponseToDSLMap(t *testing.T) {
@@ -249,8 +250,7 @@ func TestTemplateVariableOverridesGlobalRandstrInRequestBody(t *testing.T) {
 	})
 
 	var variables protocols.Variable
-	variables.InsertionOrderedStringMap = *protocols.NewEmptyInsertionOrderedStringMap(1)
-	variables.Set("randstr", "template-randstr")
+	require.NoError(t, yaml.Unmarshal([]byte("randstr: template-randstr"), &variables))
 
 	options := &protocols.ExecuterOptions{
 		Variables: variables,
