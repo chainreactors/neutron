@@ -81,6 +81,8 @@ func main() {
 	}
 
 	matchedCount := 0
+	extractedCount := 0
+	positiveCount := 0
 	totalCount := len(yamlFiles)
 
 	for _, yamlFile := range yamlFiles {
@@ -114,10 +116,17 @@ func main() {
 		}
 		start := time.Now()
 		res, err := t.Execute(targetURL, nil)
-		if err == nil && res != nil && (res.Matched || res.Extracted) {
+		if err == nil && res != nil && res.Matched {
 			matchedCount++
+			positiveCount++
 			if !*jsonFlag {
 				fmt.Printf("Matched: %s (%s)\n", yamlFile, time.Since(start))
+			}
+		} else if err == nil && res != nil && res.Extracted {
+			extractedCount++
+			positiveCount++
+			if !*jsonFlag {
+				fmt.Printf("Extracted: %s (%s)\n", yamlFile, time.Since(start))
 			}
 		} else if err != nil {
 			if !*jsonFlag {
@@ -132,9 +141,11 @@ func main() {
 
 	if *jsonFlag {
 		out, _ := json.Marshal(map[string]interface{}{
-			"matched_count": matchedCount,
-			"total":         totalCount,
-			"target":        targetURL,
+			"matched_count":   matchedCount,
+			"extracted_count": extractedCount,
+			"positive_count":  positiveCount,
+			"total":           totalCount,
+			"target":          targetURL,
 		})
 		fmt.Println(string(out))
 	}
