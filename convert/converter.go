@@ -606,9 +606,12 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 		applyRedirectDirective(req, g.redirects, g.redirectsSet)
 		applyGroupExtras(req, g)
 		req["req-condition"] = true
-		if i != len(groups)-1 && len(g.extractors) > 0 {
-			applyInternalExtractorGate(req, g)
-		}
+		// Intermediate requests carry only their internal output extractors
+		// (already applied above): they record their response into req-condition
+		// history (body_N, status_code_N, ...) and feed extracted variables to
+		// later requests, but emit no match themselves. The final request's
+		// req-condition DSL evaluates every rule against that accumulated history,
+		// which is exactly how stock nuclei expresses cross-request matching.
 		if i == len(groups)-1 {
 			req["matchers"] = []interface{}{
 				map[string]interface{}{

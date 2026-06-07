@@ -234,8 +234,19 @@ expression: discover() && fetch_asset()
 	if err != nil {
 		t.Fatalf("convert: %v", err)
 	}
-	if !strings.Contains(string(out), "internal-matchers: true") {
-		t.Fatalf("expected converted output extractor to be locally gated:\n%s", string(out))
+	s := string(out)
+	// The output must be a stock-nuclei-runnable template: the source rule's
+	// output is captured by an internal extractor (no private internal-matchers
+	// field), and the cross-request decision lives in the final req-condition
+	// DSL referencing the discover response as body_1.
+	if strings.Contains(s, "internal-matchers") {
+		t.Fatalf("converted output must not emit the non-standard internal-matchers field:\n%s", s)
+	}
+	if !strings.Contains(s, "internal: true") {
+		t.Fatalf("expected the output variable to be captured by an internal extractor:\n%s", s)
+	}
+	if !strings.Contains(s, "req-condition: true") || !strings.Contains(s, "_1") {
+		t.Fatalf("expected a final req-condition matcher gating on the discover response (body_1):\n%s", s)
 	}
 
 	var tmpl templates.Template
@@ -243,19 +254,18 @@ expression: discover() && fetch_asset()
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if err := tmpl.Compile(nil); err != nil {
-		t.Fatalf("compile: %v\n%s", err, string(out))
+		t.Fatalf("compile: %v\n%s", err, s)
 	}
 	result, err := tmpl.Execute(server.URL, nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
+	// discover's "required marker" is absent, so the final req-condition DSL must
+	// not match. Stock nuclei has no per-request short-circuit: the internal
+	// extractor still captures asset_path and fetch_asset may be sent, but that
+	// only costs an extra probe — it must never produce a false positive.
 	if result != nil && result.Matched {
-		t.Fatalf("expected no match when output source rule fails, got %#v\n%s", result, string(out))
-	}
-	for _, path := range requested {
-		if path == "/static/app.abc123.js" {
-			t.Fatalf("dynamic path was requested even though discover rule failed: %#v\n%s", requested, string(out))
-		}
+		t.Fatalf("expected no match when output source rule fails, got %#v\n%s", result, s)
 	}
 }
 
