@@ -52,9 +52,9 @@ func (e *Executer) Requests() int {
 func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, error) {
 	var result *operators.Result
 
+	input.FrozenVariables = nil
 	if e.options != nil && e.options.Variables.Len() > 0 {
-		input.PreEvaluatedVariables = e.options.Variables.PreEvaluate(map[string]interface{}{})
-		input.HasPreEvaluatedVariables = true
+		input.FrozenVariables = e.options.Variables.StableValues()
 	}
 
 	previous := make(map[string]interface{})

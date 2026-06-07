@@ -22,11 +22,10 @@ type ScanContext struct {
 	OnError  func(error)
 	OnResult func(e *InternalWrappedEvent)
 	TraceAll bool
-	// PreEvaluatedVariables stores template variables resolved once for this
-	// execution. Pure random/time expressions stay stable across request blocks,
-	// while target/runtime-dependent expressions are still resolved per request.
-	PreEvaluatedVariables    Variable
-	HasPreEvaluatedVariables bool
+	// FrozenVariables holds template variables resolved once for this execution.
+	// Random/time/static chains stay stable across request blocks while target or
+	// runtime dependent variables are still resolved per request.
+	FrozenVariables map[string]interface{}
 
 	// unexported state fields
 	errors   []error
