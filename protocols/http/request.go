@@ -68,10 +68,6 @@ type Request struct {
 	// their history for being matched at the end.
 	// Currently only works with sequential http requests.
 	ReqCondition bool `json:"req-condition,omitempty" yaml:"req-condition,omitempty"`
-	// InternalMatchers gates internal extractors without emitting a match for the
-	// request itself. This is used by converted xray output rules whose final
-	// decision is evaluated by a later req-condition matcher.
-	InternalMatchers bool `json:"internal-matchers,omitempty" yaml:"internal-matchers,omitempty"`
 	//   StopAtFirstMatch stops the execution of the requests and template as soon as a match is found.
 	StopAtFirstMatch bool `json:"stop-at-first-match,omitempty" yaml:"stop-at-first-match,omitempty"`
 
@@ -198,9 +194,6 @@ func (r *Request) GetCompiledOperators() []*operators.Operators {
 // )
 // MakeResultEvent creates a result event from internal wrapped event
 func (r *Request) MakeResultEvent(wrapped *protocols.InternalWrappedEvent) []*protocols.ResultEvent {
-	if r.InternalMatchers {
-		return nil
-	}
 	if len(wrapped.OperatorsResult.DynamicValues) > 0 && !wrapped.OperatorsResult.Matched {
 		return nil
 	}
@@ -494,10 +487,6 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 		var ok bool
 		event.OperatorsResult, ok = r.CompiledOperators.Execute(finalEvent, r.Match, r.Extract)
 		if ok && event.OperatorsResult != nil {
-			if r.InternalMatchers {
-				event.OperatorsResult.Matched = false
-				event.OperatorsResult.Matches = make(map[string][]string)
-			}
 			event.OperatorsResult.PayloadValues = request.dynamicValues
 			event.OperatorsResult.Request = common.ToString(finalEvent["request"])
 			event.OperatorsResult.Response = common.ToString(finalEvent["response"])

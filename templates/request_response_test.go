@@ -602,7 +602,7 @@ http:
 	require.Contains(t, requested, "/dynamic-login")
 }
 
-func TestInternalMatcherEventDoesNotOverwritePreviousMatch(t *testing.T) {
+func TestInternalExtractorEventDoesNotOverwritePreviousMatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/match":
@@ -617,10 +617,13 @@ func TestInternalMatcherEventDoesNotOverwritePreviousMatch(t *testing.T) {
 	}))
 	defer server.Close()
 
+	// Stock-nuclei shape: the first request matches and emits a result; the
+	// second request only runs an internal extractor (no matchers), so its event
+	// carries dynamic values but no match and must not overwrite the first match.
 	yamlContent := `
-id: internal-matcher-no-overwrite-test
+id: internal-extractor-no-overwrite-test
 info:
-  name: Internal Matcher No Overwrite Test
+  name: Internal Extractor No Overwrite Test
   author: test
   severity: info
 
@@ -636,11 +639,6 @@ http:
   - method: GET
     path:
       - "{{BaseURL}}/extract"
-    internal-matchers: true
-    matchers:
-      - type: word
-        words:
-          - "token="
     extractors:
       - type: regex
         name: token

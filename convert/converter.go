@@ -668,23 +668,6 @@ func buildRuleDSLExprs(ruleExprs map[string]string) map[string]string {
 	return ruleDSLExprs
 }
 
-func applyInternalExtractorGate(req map[string]interface{}, g *requestGroup) {
-	if req == nil || g == nil || len(g.exprs) == 0 {
-		return
-	}
-	gate := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, g.redirectsSet, g.exprs)
-	if gate == nil {
-		return
-	}
-	if matchers, ok := gate["matchers"]; ok {
-		req["matchers"] = matchers
-		req["internal-matchers"] = true
-	}
-	if condition, ok := gate["matchers-condition"]; ok {
-		req["matchers-condition"] = condition
-	}
-}
-
 func groupRequestCount(g *requestGroup) int {
 	if g == nil {
 		return 1
