@@ -155,10 +155,6 @@ type requestGroup struct {
 	exprs        []string
 	extractors   []interface{}
 	payloads     map[string]interface{}
-	// expandedPaths, when non-nil, holds concrete {{BaseURL}}-prefixed paths that
-	// replace a single templated path whose only payload variable(s) were used
-	// purely for path enumeration with literal values. See expandPathOnlyPayloads.
-	expandedPaths []string
 }
 
 type conversionContext struct {
@@ -308,7 +304,6 @@ func buildSingleRequestOrBranchBlocks(poc *XrayPOC, topExpr *TopExprNode, ruleEx
 			continue
 		}
 		applyGroupExtras(req, g)
-		applyGroupPaths(req, g)
 		out = append(out, req)
 	}
 	return out
@@ -333,7 +328,6 @@ func buildRepeatedRuleOrBranchBlocks(poc *XrayPOC, topExpr *TopExprNode, ctx *co
 				continue
 			}
 			applyGroupExtras(req, g)
-			applyGroupPaths(req, g)
 			out = append(out, req)
 			continue
 		}
@@ -420,7 +414,6 @@ func buildBranchDynamicSequenceBlocks(groups []*requestGroup) []interface{} {
 				return nil
 			}
 			applyGroupExtras(req, g)
-			applyGroupPaths(req, g)
 			httpReqs = append(httpReqs, req)
 			continue
 		}
@@ -554,7 +547,6 @@ func buildSingleGroupBlocks(g *requestGroup, topExprRaw string, topExpr *TopExpr
 		return nil
 	}
 	applyGroupExtras(req, g)
-	applyGroupPaths(req, g)
 	return []interface{}{req}
 }
 
@@ -574,7 +566,6 @@ func buildIndependentBlocks(groups []*requestGroup) []interface{} {
 		req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, g.redirectsSet, []string{combined})
 		if req != nil {
 			applyGroupExtras(req, g)
-			applyGroupPaths(req, g)
 			httpReqs = append(httpReqs, req)
 		}
 	}
@@ -666,13 +657,6 @@ func groupRequestCount(g *requestGroup) int {
 	if g == nil {
 		return 1
 	}
-	// expandPathOnlyPayloads clears payloads and stores concrete paths instead;
-	// each emitted path is a separate request at runtime, so req-condition _N
-	// indexing must count them (else a later block's body_N indices shift and the
-	// rule's own paths past the first are never OR'd into the matcher).
-	if len(g.expandedPaths) > 0 {
-		return len(g.expandedPaths)
-	}
 	if len(g.payloads) == 0 {
 		return 1
 	}
@@ -723,235 +707,9 @@ func applyGroupExtras(req map[string]interface{}, g *requestGroup) {
 	}
 }
 
-// groupPathList returns the {{BaseURL}}-prefixed path list for a group, honoring
-// path-only payload expansion when present.
+// groupPathList returns the {{BaseURL}}-prefixed path list for a group.
 func groupPathList(g *requestGroup) []string {
-	if len(g.expandedPaths) > 0 {
-		return g.expandedPaths
-	}
 	return []string{xrayTemplatePath(g.path)}
-}
-
-// applyGroupPaths overrides a built request's path with the expanded concrete
-// paths when the group's path-only payloads were enumerated.
-func applyGroupPaths(req map[string]interface{}, g *requestGroup) {
-	if len(g.expandedPaths) > 0 {
-		req["path"] = g.expandedPaths
-	}
-}
-
-// expandPathOnlyPayloads rewrites a group whose payload variable(s) are used
-// solely to enumerate the request path with literal values into a set of
-// concrete paths, dropping the payload (and any extractor that referenced the
-// enumerated variable). This is only applied when it is provably semantics-
-// preserving:
-//   - every payload variable appears in the path,
-//   - no payload variable is used in body/headers/rule-expressions,
-//   - every path placeholder is a payload variable (no leftover runtime var),
-//   - all payload values are literals (after unwrapping xray string("...")).
-//
-// xray evaluates each payload row as an independent request instance and the
-// rule matches if any instance matches (OR across rows); multiple neutron paths
-// are OR-combined per response, so the rewrite preserves the original meaning.
-func expandPathOnlyPayloads(g *requestGroup) {
-	if len(g.payloads) == 0 {
-		return
-	}
-	pathVars := map[string]bool{}
-	collectPlaceholders(g.path, pathVars)
-	if len(pathVars) == 0 {
-		return
-	}
-	for name := range g.payloads {
-		if !pathVars[name] || usedOutsidePath(g, name) {
-			return
-		}
-	}
-	for name := range pathVars {
-		if _, ok := g.payloads[name]; !ok {
-			return
-		}
-	}
-	names := make([]string, 0, len(g.payloads))
-	for name := range g.payloads {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	lit := map[string][]string{}
-	rows := -1
-	for _, name := range names {
-		vals := toStringSlice(g.payloads[name])
-		clean := make([]string, 0, len(vals))
-		for _, v := range vals {
-			u, ok := literalPayloadValue(v)
-			if !ok {
-				return
-			}
-			clean = append(clean, u)
-		}
-		if rows == -1 {
-			rows = len(clean)
-		} else if len(clean) != rows {
-			return
-		}
-		lit[name] = clean
-	}
-	if rows <= 0 {
-		return
-	}
-	var paths []string
-	seen := map[string]bool{}
-	for i := 0; i < rows; i++ {
-		p := g.path
-		for _, name := range names {
-			p = replacePlaceholderValue(p, name, lit[name][i])
-		}
-		full := xrayTemplatePath(p)
-		if !seen[full] {
-			seen[full] = true
-			paths = append(paths, full)
-		}
-	}
-	g.expandedPaths = paths
-	g.payloads = nil
-	g.extractors = dropExtractorsReferencing(g.extractors, names)
-}
-
-func usedOutsidePath(g *requestGroup, name string) bool {
-	if placeholderOrWord(g.body, name) {
-		return true
-	}
-	for k, v := range g.headers {
-		if placeholderOrWord(k, name) || placeholderOrWord(v, name) {
-			return true
-		}
-	}
-	for _, e := range g.exprs {
-		if placeholderOrWord(e, name) {
-			return true
-		}
-	}
-	return false
-}
-
-func placeholderOrWord(s, name string) bool {
-	if s == "" {
-		return false
-	}
-	if strings.Contains(s, "{{"+name+"}}") {
-		return true
-	}
-	return wordRE(name).MatchString(s)
-}
-
-func wordRE(name string) *regexp.Regexp {
-	return regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`)
-}
-
-func toStringSlice(v interface{}) []string {
-	switch s := v.(type) {
-	case []string:
-		return s
-	case []interface{}:
-		out := make([]string, 0, len(s))
-		for _, x := range s {
-			out = append(out, fmt.Sprint(x))
-		}
-		return out
-	}
-	return nil
-}
-
-// literalPayloadValue unwraps an xray payload scalar to a literal string, or
-// reports ok=false when the value is not a static literal (contains a template
-// placeholder or is a non-string() function call).
-func literalPayloadValue(v string) (string, bool) {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return "", false
-	}
-	if strings.HasPrefix(v, "string(") && strings.HasSuffix(v, ")") {
-		inner := strings.TrimSpace(v[len("string(") : len(v)-1])
-		if len(inner) >= 2 && inner[0] == '"' && inner[len(inner)-1] == '"' {
-			s := inner[1 : len(inner)-1]
-			if !strings.Contains(s, "{{") {
-				return s, true
-			}
-		}
-		return "", false
-	}
-	if len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"' {
-		s := v[1 : len(v)-1]
-		if !strings.Contains(s, "{{") {
-			return s, true
-		}
-		return "", false
-	}
-	if !strings.Contains(v, "{{") && !strings.ContainsAny(v, "()") {
-		return v, true
-	}
-	return "", false
-}
-
-func replacePlaceholderValue(s, name, val string) string {
-	return placeholderRE.ReplaceAllStringFunc(s, func(m string) string {
-		parts := placeholderRE.FindStringSubmatch(m)
-		if len(parts) > 1 && parts[1] == name {
-			return val
-		}
-		return m
-	})
-}
-
-func dropExtractorsReferencing(extractors []interface{}, names []string) []interface{} {
-	if len(extractors) == 0 {
-		return extractors
-	}
-	out := make([]interface{}, 0, len(extractors))
-	for _, e := range extractors {
-		if extractorReferencesAny(e, names) {
-			continue
-		}
-		out = append(out, e)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func extractorReferencesAny(e interface{}, names []string) bool {
-	m, ok := e.(map[string]interface{})
-	if !ok {
-		return false
-	}
-	dsl, ok := m["dsl"]
-	if !ok {
-		return false
-	}
-	check := func(s string) bool {
-		for _, n := range names {
-			if wordRE(n).MatchString(s) {
-				return true
-			}
-		}
-		return false
-	}
-	switch v := dsl.(type) {
-	case []string:
-		for _, s := range v {
-			if check(s) {
-				return true
-			}
-		}
-	case []interface{}:
-		for _, s := range v {
-			if check(fmt.Sprint(s)) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func mergePayloads(dst, src map[string]interface{}) {
