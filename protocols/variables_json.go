@@ -31,28 +31,8 @@ func (variables *Variable) Evaluate(values map[string]interface{}) map[string]in
 	return result
 }
 
-// WithFrozen returns a copy whose target-independent keys (as resolved by
-// StableValues for one execution) have their definitions replaced by the frozen
-// literal value. Evaluating the copy each request block then yields the same
-// value, which is how random/static variables stay stable across blocks without
-// any special handling inside Evaluate. Returns the receiver unchanged when
-// there is nothing to freeze.
-func (variables Variable) WithFrozen(frozen map[string]interface{}) Variable {
-	if len(frozen) == 0 {
-		return variables
-	}
-	result := make(Variable, len(variables))
-	for key, value := range variables {
-		if frozenValue, ok := frozen[key]; ok {
-			result[key] = frozenValue
-			continue
-		}
-		result[key] = value
-	}
-	return result
-}
-
-// StableValues freezes target-independent template variables for one execution.
+// StableValues evaluates variables against an empty context and returns only
+// those whose value is fully resolved and whose dependencies are all resolved.
 func (variables *Variable) StableValues() map[string]interface{} {
 	processing := make(map[string]interface{}, len(*variables))
 	frozen := make(map[string]interface{}, len(*variables))
@@ -63,7 +43,7 @@ func (variables *Variable) StableValues() map[string]interface{} {
 		expr := common.ToString((*variables)[key])
 		resolved, ok := preEvaluateVariableValue(expr, empty, processing)
 		processing[key] = resolved
-		if ok && isFrozenValue(resolved) {
+		if ok && !strings.Contains(common.ToString(resolved), common.ParenthesisOpen) {
 			frozen[key] = resolved
 		}
 	}
@@ -111,11 +91,6 @@ func hasUnresolvedVariableDependency(expression string, values map[string]interf
 		}
 	}
 	return false
-}
-
-func isFrozenValue(value interface{}) bool {
-	data := common.ToString(value)
-	return !strings.Contains(data, common.ParenthesisOpen)
 }
 
 func expressionDependencies(expression string) []string {

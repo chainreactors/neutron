@@ -226,14 +226,16 @@ info:
   name: Randstr Preprocessor Stability Test
   author: test
   severity: info
+variables:
+  named: '{{rand_base(8)}}'
 http:
   - method: GET
     path:
-      - '{{BaseURL}}/create?token={{randstr}}&named={{randstr_probe}}'
+      - '{{BaseURL}}/create?token={{randstr}}&named={{named}}'
 
   - method: GET
     path:
-      - '{{BaseURL}}/check?token={{randstr}}&named={{randstr_probe}}'
+      - '{{BaseURL}}/check?token={{randstr}}&named={{named}}'
     matchers:
       - type: word
         words:
@@ -254,6 +256,69 @@ http:
 	require.Equal(t, requestedNamed[0], requestedNamed[1])
 	require.NotEmpty(t, requestedTokens[0])
 	require.NotEmpty(t, requestedNamed[0])
+}
+
+func TestExecuteKeepsRandnumStableAcrossHTTPBlocks(t *testing.T) {
+	var requestedCodes []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		code := r.URL.Query().Get("code")
+		requestedCodes = append(requestedCodes, code)
+		switch r.URL.Path {
+		case "/create":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, "created %s", code)
+		case "/check":
+			if code != "" && len(requestedCodes) >= 2 && code == requestedCodes[0] {
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, "found")
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	yamlContent := `
+id: randnum-stability-test
+info:
+  name: Randnum Stability Test
+  author: test
+  severity: info
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/create?code={{randnum}}'
+
+  - method: GET
+    path:
+      - '{{BaseURL}}/check?code={{randnum}}'
+    matchers:
+      - type: word
+        words:
+          - "found"
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.NoError(t, tmpl.Compile(nil))
+
+	result, err := tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+	require.Len(t, requestedCodes, 2)
+	require.Equal(t, requestedCodes[0], requestedCodes[1])
+	require.NotEmpty(t, requestedCodes[0])
+
+	firstCode := requestedCodes[0]
+	requestedCodes = nil
+	_, err = tmpl.Execute(server.URL, nil)
+	require.NoError(t, err)
+	require.Len(t, requestedCodes, 2)
+	require.Equal(t, requestedCodes[0], requestedCodes[1])
+	require.NotEqual(t, firstCode, requestedCodes[0], "randnum must regenerate between scans")
 }
 
 func TestExecuteKeepsRandomVariableStableWhenLiteralMatchesUnfrozenVariableName(t *testing.T) {

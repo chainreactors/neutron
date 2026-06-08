@@ -22,12 +22,11 @@ type ScanContext struct {
 	OnError  func(error)
 	OnResult func(e *InternalWrappedEvent)
 	TraceAll bool
-	// FrozenVariables holds the values frozen once for this execution: the
-	// variables block's static/random results (e.g. rand_base()) and any
-	// {{randstr}}-style preprocessors from the variables and request parts. They
-	// stay stable across request blocks within one scan and are regenerated
-	// between scans. Built by protocols.FrozenFor in executer.Execute.
-	FrozenVariables map[string]interface{}
+	// GlobalVars holds pre-computed stable variable values for this execution.
+	// Random/static variables (e.g. rand_base()) and bare {{randstr}}/{{randnum}}
+	// are evaluated once here so they stay identical across request blocks within
+	// one scan, yet are regenerated between scans.
+	GlobalVars map[string]interface{}
 
 	// unexported state fields
 	errors   []error

@@ -83,39 +83,6 @@ func TestStableValuesFreezesResolvedValueContainingParenthesis(t *testing.T) {
 	require.Equal(t, "(", common.ToString(frozen["r1"]))
 }
 
-// WithFrozen pins the frozen keys to their literal value so re-evaluating the
-// view across request blocks yields the same value, while unfrozen keys keep
-// their original definition and are re-evaluated per call.
-func TestWithFrozenPinsFrozenKeysAndReevaluatesOthers(t *testing.T) {
-	vars := mustVariable(t, `
-token: '{{Hostname}}'
-r1: '{{concat("token-", rand_base(8, "abc"))}}'
-`)
-	frozen := vars.StableValues()
-	baked := vars.WithFrozen(frozen)
-
-	first := baked.Evaluate(map[string]interface{}{"Hostname": "host-a"})
-	second := baked.Evaluate(map[string]interface{}{"Hostname": "host-b"})
-
-	// frozen r1 is identical across blocks
-	require.Equal(t, first["r1"], second["r1"])
-	require.Equal(t, common.ToString(frozen["r1"]), common.ToString(first["r1"]))
-	// unfrozen token still tracks the per-request target value
-	require.Equal(t, "host-a", first["token"])
-	require.Equal(t, "host-b", second["token"])
-}
-
-// WithFrozen with nothing to freeze is an identity: the random variable is
-// re-evaluated on every call.
-func TestWithFrozenEmptyReevaluatesRandom(t *testing.T) {
-	vars := mustVariable(t, `r1: '{{rand_base(10, "abcdefghij")}}'`)
-
-	baked := vars.WithFrozen(nil)
-	a := baked.Evaluate(map[string]interface{}{})
-	b := baked.Evaluate(map[string]interface{}{})
-	require.NotEqual(t, a["r1"], b["r1"], "without freezing, random re-rolls each call")
-}
-
 // Evaluate evaluates each variable's own definition, so a template variable
 // shadows a builtin/runtime value of the same name. This is the guard that the
 // magic-key and naive-layering approaches both broke.

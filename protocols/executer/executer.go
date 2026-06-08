@@ -2,6 +2,7 @@ package executer
 
 import (
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/common/dsl"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 )
@@ -52,13 +53,9 @@ func (e *Executer) Requests() int {
 func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, error) {
 	var result *operators.Result
 
-	// Freeze variables (StableValues) and {{randstr}}-style preprocessors once for
-	// this execution: stable across request blocks within the scan, regenerated
-	// between scans.
-	input.FrozenVariables = nil
-	if e.options != nil {
-		input.FrozenVariables = protocols.FrozenFor(e.options.Variables, e.requests)
-	}
+	// Compute stable global variables once per execution: random/static values
+	// stay identical across request blocks within a scan, regenerated between scans.
+	input.GlobalVars = computeGlobalVars(e.options)
 
 	previous := make(map[string]interface{})
 	dynamicValues := common.MergeMaps(make(map[string]interface{}), input.Payloads)
@@ -87,4 +84,18 @@ func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, err
 		requestIndexOffset += req.Requests()
 	}
 	return result, nil
+}
+
+func computeGlobalVars(options *protocols.ExecuterOptions) map[string]interface{} {
+	globalVars := map[string]interface{}{
+		"randstr": dsl.RandStr(8),
+		"randnum": dsl.RandNum(4),
+	}
+	if options == nil || options.Variables.Len() == 0 {
+		return globalVars
+	}
+	for k, v := range options.Variables.StableValues() {
+		globalVars[k] = v
+	}
+	return globalVars
 }

@@ -82,21 +82,6 @@ type Request struct {
 	//Result            *protocols.Result
 }
 
-// PreprocessorParts returns the request strings that may carry nuclei-style
-// {{randstr}}/{{randnum}} preprocessors, scanned once per execution by FrozenFor.
-func (r *Request) PreprocessorParts() []string {
-	parts := make([]string, 0, len(r.Path)+len(r.Raw)+len(r.Headers)+1)
-	parts = append(parts, r.Path...)
-	parts = append(parts, r.Raw...)
-	if r.Body != "" {
-		parts = append(parts, r.Body)
-	}
-	for header, value := range r.Headers {
-		parts = append(parts, header, value)
-	}
-	return parts
-}
-
 // Type returns the type of the protocol request
 func (r *Request) Type() protocols.ProtocolType {
 	return protocols.HTTPProtocol

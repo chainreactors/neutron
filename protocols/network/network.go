@@ -123,19 +123,6 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 	return nil
 }
 
-// PreprocessorParts returns the request strings that may carry nuclei-style
-// {{randstr}}/{{randnum}} preprocessors, scanned once per execution by FrozenFor.
-func (r *Request) PreprocessorParts() []string {
-	parts := make([]string, 0, len(r.Address)+len(r.Inputs))
-	parts = append(parts, r.Address...)
-	for _, input := range r.Inputs {
-		if input != nil && input.Data != "" {
-			parts = append(parts, input.Data)
-		}
-	}
-	return parts
-}
-
 // Requests returns the total number of requests the YAML rule will perform
 func (r *Request) Requests() int {
 	return len(r.Address)

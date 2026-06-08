@@ -83,33 +83,10 @@ func (variables *Variable) Evaluate(values map[string]interface{}) map[string]in
 	return result
 }
 
-// WithFrozen returns a copy whose target-independent keys (as resolved by
-// StableValues for one execution) have their definitions replaced by the frozen
-// literal value. Evaluating the copy each request block then yields the same
-// value, which is how random/static variables stay stable across blocks without
-// any special handling inside Evaluate. Returns the receiver unchanged when
-// there is nothing to freeze.
-func (variables *Variable) WithFrozen(frozen map[string]interface{}) Variable {
-	if len(frozen) == 0 {
-		return *variables
-	}
-	result := Variable{InsertionOrderedStringMap: *NewEmptyInsertionOrderedStringMap(variables.Len())}
-	variables.ForEach(func(key string, value interface{}) {
-		if frozenValue, ok := frozen[key]; ok {
-			result.Set(key, frozenValue)
-			return
-		}
-		result.Set(key, value)
-	})
-	return result
-}
-
-func (variables *Variable) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	variables.InsertionOrderedStringMap = InsertionOrderedStringMap{}
-	return unmarshal(&variables.InsertionOrderedStringMap)
-}
-
-// StableValues freezes target-independent template variables for one execution.
+// StableValues evaluates variables against an empty context and returns only
+// those whose value is fully resolved (no remaining {{...}} templates) and
+// whose dependencies are all themselves resolved. Used by the executer to
+// pre-compute random/static values once per scan execution.
 func (variables *Variable) StableValues() map[string]interface{} {
 	processing := make(map[string]interface{}, variables.Len())
 	frozen := make(map[string]interface{}, variables.Len())
@@ -119,11 +96,16 @@ func (variables *Variable) StableValues() map[string]interface{} {
 		expr := common.ToString(value)
 		resolved, ok := preEvaluateVariableValue(expr, empty, processing)
 		processing[key] = resolved
-		if ok && isFrozenValue(resolved) {
+		if ok && !strings.Contains(common.ToString(resolved), common.ParenthesisOpen) {
 			frozen[key] = resolved
 		}
 	})
 	return frozen
+}
+
+func (variables *Variable) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	variables.InsertionOrderedStringMap = InsertionOrderedStringMap{}
+	return unmarshal(&variables.InsertionOrderedStringMap)
 }
 
 func evaluateVariableValue(expression string, values map[string]interface{}) string {
@@ -158,11 +140,6 @@ func hasUnresolvedVariableDependency(expression string, values map[string]interf
 		}
 	}
 	return false
-}
-
-func isFrozenValue(value interface{}) bool {
-	data := common.ToString(value)
-	return !strings.Contains(data, common.ParenthesisOpen)
 }
 
 func expressionDependencies(expression string) []string {

@@ -155,19 +155,22 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 		trailingSlash = true
 	}
 	targetValues := generateVariables(parsed, trailingSlash)
-	if r.input != nil && len(r.input.FrozenVariables) > 0 {
-		// Per-execution frozen values feed both bare {{randstr}} in path/body/header
-		// and variable definitions that reference a preprocessor; target variables
-		// still override on collision.
-		targetValues = common.MergeMaps(r.input.FrozenVariables, targetValues)
+	var globalVars map[string]interface{}
+	if r.input != nil {
+		globalVars = r.input.GlobalVars
+	}
+	if len(globalVars) > 0 {
+		targetValues = common.MergeMaps(globalVars, targetValues)
 	}
 	values := common.MergeMaps(targetValues, allVars)
 	if r.request.options != nil && r.request.options.Variables.Len() > 0 {
-		vars := r.request.options.Variables
-		if r.input != nil {
-			vars = vars.WithFrozen(r.input.FrozenVariables)
+		variablesMap := r.request.options.Variables.Evaluate(values)
+		// Override re-evaluated random/static variables with stable globalVars
+		for k, v := range globalVars {
+			if _, defined := variablesMap[k]; defined {
+				variablesMap[k] = v
+			}
 		}
-		variablesMap := vars.Evaluate(values)
 		if len(variablesMap) > 0 {
 			allVars = common.MergeMaps(variablesMap, allVars)
 			dynamicValues = common.MergeMaps(variablesMap, dynamicValues)

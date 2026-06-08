@@ -80,15 +80,18 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 		return err
 	}
 	targetValues := generateNetworkVariables(address)
-	var frozen map[string]interface{}
-	vars := r.options.Variables
+	var globalVars map[string]interface{}
 	if input != nil {
-		frozen = input.FrozenVariables
-		vars = vars.WithFrozen(frozen)
+		globalVars = input.GlobalVars
 	}
-	values := common.MergeMaps(common.MergeMaps(common.MergeMaps(frozen, dynamicValues), previous), targetValues)
-	variablesMap := vars.Evaluate(values)
-	dynamicValues = common.MergeMaps(frozen, dynamicValues)
+	values := common.MergeMaps(common.MergeMaps(common.MergeMaps(globalVars, dynamicValues), previous), targetValues)
+	variablesMap := r.options.Variables.Evaluate(values)
+	for k, v := range globalVars {
+		if _, defined := variablesMap[k]; defined {
+			variablesMap[k] = v
+		}
+	}
+	dynamicValues = common.MergeMaps(globalVars, dynamicValues)
 	dynamicValues = common.MergeMaps(variablesMap, dynamicValues)
 	dynamicValues = common.MergeMaps(dynamicValues, targetValues)
 	for _, kv := range r.addresses {
