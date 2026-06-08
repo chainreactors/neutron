@@ -23,6 +23,7 @@ import (
 )
 
 var errStopExecution = errors.New("stop execution due to unresolved variables")
+
 var _ protocols.Request = &Request{}
 
 type Request struct {
@@ -422,11 +423,22 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 	}
 
 	timeStart := time.Now()
-	// Per-execution client override (ScanContext.Client) takes precedence over the
-	// shared compiled client, so callers never mutate the shared template at runtime.
+	// Per-execution overrides: Transport takes precedence over Client.
+	// Transport-only override shallow-clones r.httpClient so CheckRedirect, Jar,
+	// and Timeout from the template's Compile() are preserved — only the
+	// RoundTripper is swapped (e.g. for active-match caching transports).
+	// Client override remains for back-compat but replaces the whole client
+	// (drops redirect policy) — see ScanContext docs.
 	client := r.httpClient
-	if input != nil && input.Client != nil {
-		client = input.Client
+	if input != nil {
+		switch {
+		case input.Transport != nil:
+			c := *r.httpClient
+			c.Transport = input.Transport
+			client = &c
+		case input.Client != nil:
+			client = input.Client
+		}
 	}
 	resp, err := client.Do(request.request)
 	common.Debug("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)

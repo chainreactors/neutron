@@ -13,10 +13,23 @@ type ScanContext struct {
 	// exported / configurable fields
 	Input    string
 	Payloads map[string]interface{}
+	// Transport, when non-nil, overrides the per-request HTTP transport for this
+	// execution only. The request's compiled http.Client (CheckRedirect, Jar,
+	// Timeout, ...) is preserved via a shallow clone; only the RoundTripper is
+	// swapped. Active-match engines should prefer this over Client — replacing
+	// the whole client drops the template's `redirects:` policy and silently
+	// turns `redirects: false` templates into follow-302 templates.
+	Transport http.RoundTripper
 	// Client, when non-nil, overrides the per-request default HTTP client for
 	// this execution only. It lets active-match engines inject a client/transport
 	// without mutating the shared, compiled template (which is concurrency-unsafe).
 	// nil = use the request's own compiled client.
+	//
+	// Deprecated: prefer Transport. Setting Client wholesale replaces the
+	// compiled http.Client and discards CheckRedirect/Jar/Timeout — templates
+	// with `redirects: false` then silently follow 302s and lose Location-header
+	// matches. Retained only for backward compatibility; Transport takes
+	// precedence when both are set.
 	Client *http.Client
 	// callbacks or hooks
 	OnError  func(error)
