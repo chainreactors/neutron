@@ -49,7 +49,7 @@ type XrayRule struct {
 		Path            string            `yaml:"path"`
 		Headers         map[string]string `yaml:"headers"`
 		Body            string            `yaml:"body"`
-		FollowRedirects *bool             `yaml:"follow_redirects"`
+		FollowRedirects bool              `yaml:"follow_redirects"`
 		Cache           bool              `yaml:"cache"`
 	} `yaml:"request"`
 	Expression string                 `yaml:"expression"`
@@ -71,7 +71,7 @@ type ConvertedHTTPReq struct {
 	Body              string                   `yaml:"body,omitempty"`
 	MatchersCondition string                   `yaml:"matchers-condition,omitempty"`
 	Matchers          []map[string]interface{} `yaml:"matchers,omitempty"`
-	Redirects         *bool                    `yaml:"redirects,omitempty"`
+	Redirects         bool                     `yaml:"redirects,omitempty"`
 }
 
 // Convert converts an xray POC YAML to a neutron template YAML.
@@ -145,16 +145,15 @@ func ConvertPOC(poc *XrayPOC) ([]byte, error) {
 }
 
 type requestGroup struct {
-	method       string
-	path         string
-	headers      map[string]string
-	body         string
-	redirects    bool
-	redirectsSet bool
-	rules        []string
-	exprs        []string
-	extractors   []interface{}
-	payloads     map[string]interface{}
+	method     string
+	path       string
+	headers    map[string]string
+	body       string
+	redirects  bool
+	rules      []string
+	exprs      []string
+	extractors []interface{}
+	payloads   map[string]interface{}
 }
 
 type conversionContext struct {
@@ -163,29 +162,6 @@ type conversionContext struct {
 	variableAlias map[string]string
 	payloads      map[string][]string
 	runtimeVars   map[string]bool
-}
-
-func xrayRedirectState(value *bool) (bool, bool) {
-	if value == nil {
-		return false, false
-	}
-	return *value, true
-}
-
-func redirectStateKey(redirects bool, redirectsSet bool) string {
-	if !redirectsSet {
-		return "redirects=unset"
-	}
-	if redirects {
-		return "redirects=true"
-	}
-	return "redirects=false"
-}
-
-func applyRedirectDirective(req map[string]interface{}, redirects bool, redirectsSet bool) {
-	if redirectsSet {
-		req["redirects"] = redirects
-	}
 }
 
 func newConversionContext(poc *XrayPOC) *conversionContext {
@@ -251,9 +227,6 @@ func buildHTTPBlocks(poc *XrayPOC, ctx *conversionContext) []interface{} {
 	if branchBlocks := buildSingleRequestOrBranchBlocks(poc, topExpr, ruleExprs, groups); len(branchBlocks) > 0 {
 		return branchBlocks
 	}
-	if branchBlocks := buildRepeatedRuleOrBranchBlocks(poc, topExpr, ctx); len(branchBlocks) > 0 {
-		return branchBlocks
-	}
 
 	// Use req-condition when the top-level has any AND and there are
 	// multiple groups. Handles both cross-group AND and within-group AND.
@@ -299,7 +272,7 @@ func buildSingleRequestOrBranchBlocks(poc *XrayPOC, topExpr *TopExprNode, ruleEx
 			return nil
 		}
 		combined := substituteRuleExprs(branch, ruleExprs)
-		req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, g.redirectsSet, []string{combined})
+		req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, []string{combined})
 		if req == nil {
 			continue
 		}
@@ -307,167 +280,6 @@ func buildSingleRequestOrBranchBlocks(poc *XrayPOC, topExpr *TopExprNode, ruleEx
 		out = append(out, req)
 	}
 	return out
-}
-
-func buildRepeatedRuleOrBranchBlocks(poc *XrayPOC, topExpr *TopExprNode, ctx *conversionContext) []interface{} {
-	if poc == nil || topExpr == nil || topExpr.Type != "or" || !hasRepeatedRuleNames(topExpr) {
-		return nil
-	}
-	noSuffixVars := ctx.noSuffixVariables()
-	var out []interface{}
-	// Track the running global request index so each branch's req-condition DSL
-	// references the correct body_N for its own requests (req indices accumulate
-	// across every emitted block, mirroring the executer's requestIndexOffset).
-	requestOffset := 0
-	for _, branch := range topExpr.Children {
-		names := collectRuleNames(branch)
-		groups, ruleExprs, ok := requestGroupsForRuleNames(poc, names, ctx)
-		if !ok || len(groups) == 0 {
-			return nil
-		}
-		if len(groups) == 1 {
-			g := groups[0]
-			combined := substituteRuleExprs(branch, ruleExprs)
-			req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, g.redirectsSet, []string{combined})
-			if req == nil {
-				continue
-			}
-			applyGroupExtras(req, g)
-			out = append(out, req)
-			requestOffset += groupRequestCount(g)
-			continue
-		}
-		branchBlocks := buildBranchDynamicSequenceBlocks(branch, groups, ruleExprs, requestOffset, noSuffixVars)
-		if len(branchBlocks) == 0 {
-			return nil
-		}
-		out = append(out, branchBlocks...)
-		for _, g := range groups {
-			requestOffset += groupRequestCount(g)
-		}
-	}
-	return out
-}
-
-func hasRepeatedRuleNames(node *TopExprNode) bool {
-	seen := map[string]bool{}
-	for _, name := range collectRuleNames(node) {
-		if seen[name] {
-			return true
-		}
-		seen[name] = true
-	}
-	return false
-}
-
-func requestGroupsForRuleNames(poc *XrayPOC, names []string, ctx *conversionContext) ([]*requestGroup, map[string]string, bool) {
-	var groups []*requestGroup
-	ruleExprs := map[string]string{}
-	for _, ruleName := range names {
-		rule, ok := poc.Rules[ruleName]
-		if !ok {
-			return nil, nil, false
-		}
-		rawExpr := strings.TrimSpace(rule.Expression)
-		if rawExpr == "" {
-			continue
-		}
-		expr := rawExpr
-		if len(ctx.variableAlias) > 0 {
-			expr = translateXrayExpression(rawExpr, ctx.variableAlias)
-		}
-		ruleExprs[ruleName] = expr
-		if !hasXrayRequest(rule, rawExpr) {
-			continue
-		}
-		method := rule.Request.Method
-		if method == "" {
-			method = "GET"
-		}
-		path := rule.Request.Path
-		if path == "" {
-			path = "/"
-		}
-		path = rewriteTemplatePlaceholders(path, ctx.variableAlias)
-		path = normalizeRequestPath(path, ctx)
-		headers := rewriteHeaderPlaceholders(rule.Request.Headers, ctx.variableAlias)
-		body := rewriteTemplatePlaceholders(rule.Request.Body, ctx.variableAlias)
-		redirects, redirectsSet := xrayRedirectState(rule.Request.FollowRedirects)
-		extractors := outputExtractors(rule.Output, ctx)
-		payloads := payloadsForRequest(path, headers, body, ctx.payloads)
-		groups = append(groups, &requestGroup{
-			method:       method,
-			path:         path,
-			headers:      headers,
-			body:         body,
-			redirects:    redirects,
-			redirectsSet: redirectsSet,
-			rules:        []string{ruleName},
-			exprs:        []string{expr},
-			extractors:   extractors,
-			payloads:     payloads,
-		})
-	}
-	return groups, ruleExprs, true
-}
-
-func buildBranchDynamicSequenceBlocks(branch *TopExprNode, groups []*requestGroup, ruleExprs map[string]string, requestOffset int, noSuffixVars map[string]bool) []interface{} {
-	if len(groups) < 2 {
-		return nil
-	}
-	// A dynamic sequence only makes sense when every non-final request captures a
-	// value (via an internal extractor) for a later request to consume.
-	for i, g := range groups {
-		if i != len(groups)-1 && len(g.extractors) == 0 {
-			return nil
-		}
-	}
-	// Assign each rule its global request index so the branch's final
-	// req-condition DSL can gate on earlier responses as body_N etc.
-	ruleReqIndex := map[string][]int{}
-	offset := requestOffset
-	for _, g := range groups {
-		count := groupRequestCount(g)
-		indices := make([]int, count)
-		for j := 0; j < count; j++ {
-			indices[j] = offset + j + 1
-		}
-		for _, ruleName := range g.rules {
-			ruleReqIndex[ruleName] = indices
-		}
-		offset += count
-	}
-	lastIndex := offset
-	branchDSL := buildReqConditionDSL(branch, "", buildRuleDSLExprs(ruleExprs), ruleReqIndex, lastIndex, noSuffixVars)
-
-	var httpReqs []interface{}
-	for i, g := range groups {
-		req := map[string]interface{}{
-			"method": g.method,
-			"path":   groupPathList(g),
-		}
-		if len(g.headers) > 0 {
-			req["headers"] = g.headers
-		}
-		if g.body != "" {
-			req["body"] = g.body
-		}
-		applyRedirectDirective(req, g.redirects, g.redirectsSet)
-		applyGroupExtras(req, g)
-		req["req-condition"] = true
-		// Non-final requests only run their internal extractors and record history;
-		// the final request decides the whole branch via the req-condition DSL.
-		if i == len(groups)-1 {
-			req["matchers"] = []interface{}{
-				map[string]interface{}{
-					"type": "dsl",
-					"dsl":  []string{branchDSL},
-				},
-			}
-		}
-		httpReqs = append(httpReqs, req)
-	}
-	return httpReqs
 }
 
 func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRuleOrder bool) ([]*requestGroup, map[string]string, map[string]string) {
@@ -502,9 +314,8 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 		path = normalizeRequestPath(path, ctx)
 		headers := rewriteHeaderPlaceholders(rule.Request.Headers, ctx.variableAlias)
 		body := rewriteTemplatePlaceholders(rule.Request.Body, ctx.variableAlias)
-		redirects, redirectsSet := xrayRedirectState(rule.Request.FollowRedirects)
 
-		key := method + ":" + path + ":" + headersKey(headers) + ":" + body + ":" + redirectStateKey(redirects, redirectsSet)
+		key := method + ":" + path + ":" + headersKey(headers) + ":" + body
 		if preserveRuleOrder {
 			key = key + ":" + ruleName
 		}
@@ -523,16 +334,15 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 		} else {
 			groupIndex[key] = len(groups)
 			groups = append(groups, &requestGroup{
-				method:       method,
-				path:         path,
-				headers:      headers,
-				body:         body,
-				redirects:    redirects,
-				redirectsSet: redirectsSet,
-				rules:        []string{ruleName},
-				exprs:        []string{expr},
-				extractors:   extractors,
-				payloads:     payloads,
+				method:     method,
+				path:       path,
+				headers:    headers,
+				body:       body,
+				redirects:  rule.Request.FollowRedirects,
+				rules:      []string{ruleName},
+				exprs:      []string{expr},
+				extractors: extractors,
+				payloads:   payloads,
 			})
 		}
 	}
@@ -571,7 +381,7 @@ func buildSingleGroupBlocks(g *requestGroup, topExprRaw string, topExpr *TopExpr
 		}
 	}
 
-	req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, g.redirectsSet, []string{combined})
+	req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, []string{combined})
 	if req == nil {
 		return nil
 	}
@@ -592,7 +402,7 @@ func buildIndependentBlocks(groups []*requestGroup) []interface{} {
 			}
 			combined = strings.Join(parts, " || ")
 		}
-		req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, g.redirectsSet, []string{combined})
+		req := convertGroup(g.method, g.path, g.headers, g.body, g.redirects, []string{combined})
 		if req != nil {
 			applyGroupExtras(req, g)
 			httpReqs = append(httpReqs, req)
@@ -617,14 +427,24 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 	}
 	lastIndex := requestOffset
 
-	ruleDSLExprs := buildRuleDSLExprs(ruleExprs)
+	ruleDSLExprs := map[string]string{}
+	for ruleName, expr := range ruleExprs {
+		ast, err := ParseToAST(expr)
+		if err != nil {
+			ruleDSLExprs[ruleName] = expr
+			continue
+		}
+		ast = TransformTitleToBodyRegex(ast)
+		ruleDSLExprs[ruleName] = ast.String()
+	}
+
 	topDSL := buildReqConditionDSL(topExpr, poc.Expression, ruleDSLExprs, ruleReqIndex, lastIndex, noSuffixVars)
 
 	var httpReqs []interface{}
 	for i, g := range groups {
 		req := map[string]interface{}{
 			"method": g.method,
-			"path":   groupPathList(g),
+			"path":   []string{xrayTemplatePath(g.path)},
 		}
 		if len(g.headers) > 0 {
 			req["headers"] = g.headers
@@ -632,15 +452,11 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 		if g.body != "" {
 			req["body"] = g.body
 		}
-		applyRedirectDirective(req, g.redirects, g.redirectsSet)
+		if g.redirects {
+			req["redirects"] = true
+		}
 		applyGroupExtras(req, g)
 		req["req-condition"] = true
-		// Intermediate requests carry only their internal output extractors
-		// (already applied above): they record their response into req-condition
-		// history (body_N, status_code_N, ...) and feed extracted variables to
-		// later requests, but emit no match themselves. The final request's
-		// req-condition DSL evaluates every rule against that accumulated history,
-		// which is exactly how stock nuclei expresses cross-request matching.
 		if i == len(groups)-1 {
 			req["matchers"] = []interface{}{
 				map[string]interface{}{
@@ -654,25 +470,8 @@ func buildReqConditionBlocks(poc *XrayPOC, groups []*requestGroup, topExpr *TopE
 	return httpReqs
 }
 
-func buildRuleDSLExprs(ruleExprs map[string]string) map[string]string {
-	ruleDSLExprs := map[string]string{}
-	for ruleName, expr := range ruleExprs {
-		ast, err := ParseToAST(expr)
-		if err != nil {
-			ruleDSLExprs[ruleName] = expr
-			continue
-		}
-		ast = TransformTitleToBodyRegex(ast)
-		ruleDSLExprs[ruleName] = ast.String()
-	}
-	return ruleDSLExprs
-}
-
 func groupRequestCount(g *requestGroup) int {
-	if g == nil {
-		return 1
-	}
-	if len(g.payloads) == 0 {
+	if g == nil || len(g.payloads) == 0 {
 		return 1
 	}
 	max := 1
@@ -720,11 +519,6 @@ func applyGroupExtras(req map[string]interface{}, g *requestGroup) {
 		req["payloads"] = g.payloads
 		req["attack"] = "pitchfork"
 	}
-}
-
-// groupPathList returns the {{BaseURL}}-prefixed path list for a group.
-func groupPathList(g *requestGroup) []string {
-	return []string{xrayTemplatePath(g.path)}
 }
 
 func mergePayloads(dst, src map[string]interface{}) {
@@ -797,7 +591,14 @@ func rewriteTemplatePlaceholders(value string, aliases map[string]string) string
 }
 
 // xrayTemplatePath returns the full path expression for a converted xray template.
+// xray POC paths are always absolute (relative to host root), so we use RootURL
+// instead of BaseURL. This avoids doubled path segments when the scan target
+// includes a path (e.g. http://host/app/) — BaseURL would include /app/ and the
+// template path /app/login would produce /app/app/login.
 func xrayTemplatePath(path string) string {
+	if strings.HasPrefix(path, "/") {
+		return "{{RootURL}}" + path
+	}
 	return "{{BaseURL}}" + path
 }
 
@@ -1173,14 +974,6 @@ func normalizeXrayScalar(value string) string {
 	if err == nil && len(tokens) >= 2 && tokens[0].Type == xTString && tokens[1].Type == xTEOF {
 		return strings.TrimSpace(tokens[0].Val)
 	}
-	if err == nil && len(tokens) == 5 &&
-		tokens[0].Type == xTIdent && tokens[0].Val == "string" &&
-		tokens[1].Type == xTLParen &&
-		tokens[2].Type == xTString &&
-		tokens[3].Type == xTRParen &&
-		tokens[4].Type == xTEOF {
-		return strings.TrimSpace(tokens[2].Val)
-	}
 	return value
 }
 
@@ -1277,6 +1070,15 @@ func outputExtractors(output map[string]interface{}, ctx *conversionContext) []i
 				extractor["part"] = spec.Part
 			}
 			extractors = append(extractors, extractor)
+
+			if fallback, ok := outputFallbackLiteral(expr); ok {
+				if ctx.variables == nil {
+					ctx.variables = map[string]interface{}{}
+				}
+				if _, exists := ctx.variables[outName]; !exists {
+					ctx.variables[outName] = normalizeXrayScalar(fallback)
+				}
+			}
 			continue
 		}
 
@@ -1538,6 +1340,34 @@ func outputSourceReference(expr string) (string, string, bool) {
 	return "", "", false
 }
 
+func outputFallbackLiteral(expr string) (string, bool) {
+	tokens, err := xrayLex(expr)
+	if err != nil {
+		return "", false
+	}
+	hasQuestion := false
+	depth := 0
+	for i, tok := range tokens {
+		switch tok.Type {
+		case xTLParen, xTLBracket:
+			depth++
+		case xTRParen, xTRBracket:
+			if depth > 0 {
+				depth--
+			}
+		case xTQuestion:
+			if depth == 0 {
+				hasQuestion = true
+			}
+		case xTColon:
+			if hasQuestion && depth == 0 && i+1 < len(tokens) && tokens[i+1].Type == xTString {
+				return tokens[i+1].Val, true
+			}
+		}
+	}
+	return "", false
+}
+
 func regexGroupIndex(pattern, groupName string) int {
 	if groupName == "" {
 		return 1
@@ -1626,7 +1456,7 @@ func appendGeneratedQueries(yamlData []byte, tmpl map[string]interface{}) []byte
 	return yamlData
 }
 
-func convertGroup(method, path string, headers map[string]string, body string, redirects bool, redirectsSet bool, exprs []string) map[string]interface{} {
+func convertGroup(method, path string, headers map[string]string, body string, redirects bool, exprs []string) map[string]interface{} {
 	if len(exprs) == 0 {
 		return nil
 	}
@@ -1641,7 +1471,9 @@ func convertGroup(method, path string, headers map[string]string, body string, r
 	if body != "" {
 		req["body"] = body
 	}
-	applyRedirectDirective(req, redirects, redirectsSet)
+	if redirects {
+		req["redirects"] = true
+	}
 
 	// Merge all expressions with OR to form a single combined expression.
 	// This preserves the xray top-level "r0() || r1() || ..." semantics
@@ -1821,7 +1653,7 @@ func hasXrayRequest(rule XrayRule, expr string) bool {
 		rule.Request.Path != "" ||
 		rule.Request.Body != "" ||
 		len(rule.Request.Headers) > 0 ||
-		rule.Request.FollowRedirects != nil ||
+		rule.Request.FollowRedirects ||
 		rule.Request.Cache {
 		return true
 	}

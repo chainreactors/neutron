@@ -388,7 +388,7 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 				p.next()
 			}
 		}
-		return p.maybeMethodCall(dsl.Variable("favicon_content"))
+		return dsl.Variable("favicon_content"), nil
 
 	case "icon":
 		if p.peek().Type == xTLParen {
@@ -397,7 +397,7 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 				p.next()
 			}
 		}
-		return p.maybeMethodCall(dsl.Variable("favicon_content"))
+		return dsl.Variable("favicon_content"), nil
 
 	default:
 		return p.maybeMethodCall(dsl.Variable(field))
@@ -738,14 +738,6 @@ func convertFunctionCall(name string, args []*dsl.Node) *dsl.Node {
 		return dsl.Call("time_convert", args...)
 	case "replaceAll":
 		return dsl.Call("replace", args...)
-	case "dir":
-		// xray dir(p) returns the directory part of a path (strips the last
-		// segment, keeps the trailing slash). neutron has no dir(); emulate with
-		// replace_regex so the template still compiles — an unmapped dir() makes
-		// the whole template fail to compile, killing every branch.
-		if len(args) == 1 {
-			return dsl.Call("replace_regex", args[0], dsl.Literal("[^/]*$"), dsl.Literal(""))
-		}
 	case "string":
 		if len(args) == 1 {
 			if args[0].Type == dsl.NodeLiteral {
@@ -937,12 +929,6 @@ func faviconHashPart(node *dsl.Node) (string, bool) {
 			case "favicon_content":
 				return "favicon_hash", true
 			}
-		}
-	}
-	if node.FuncName == "md5" && len(node.Children) == 1 {
-		child := node.Children[0]
-		if child.Type == dsl.NodeVariable && child.Value.(string) == "favicon_content" {
-			return "favicon_hash", true
 		}
 	}
 	return "", false

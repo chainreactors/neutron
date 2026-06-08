@@ -25,7 +25,7 @@ expression: r0()
 	if strings.Contains(converted, "{{RootURL}}^/admin") {
 		t.Fatalf("path anchor was not stripped:\n%s", converted)
 	}
-	if !strings.Contains(converted, "{{BaseURL}}/admin") {
+	if !strings.Contains(converted, "{{RootURL}}/admin") {
 		t.Fatalf("normalized path missing:\n%s", converted)
 	}
 }

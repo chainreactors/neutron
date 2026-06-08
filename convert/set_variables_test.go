@@ -103,8 +103,8 @@ expression: r0()
 	if !strings.Contains(converted, "Origin: https://{{xray_BaseURL}}") {
 		t.Fatalf("expected original header placeholder to use renamed variable:\n%s", converted)
 	}
-	if !strings.Contains(converted, "{{BaseURL}}/admin/auth/reset-password") {
-		t.Fatalf("expected converted request path to use BaseURL:\n%s", converted)
+	if !strings.Contains(converted, "{{RootURL}}/admin/auth/reset-password") {
+		t.Fatalf("expected converted request path to use RootURL:\n%s", converted)
 	}
 }
 

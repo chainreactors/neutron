@@ -106,7 +106,7 @@ expression: discover() && fetch_asset()
 	if err != nil {
 		t.Fatalf("convert: %v", err)
 	}
-	if strings.Contains(string(out), "{{BaseURL}}/{{asset_path}}") {
+	if strings.Contains(string(out), "{{RootURL}}/{{asset_path}}") {
 		t.Fatalf("dynamic path with leading-slash extractor should not keep an extra slash:\n%s", string(out))
 	}
 
@@ -127,232 +127,6 @@ expression: discover() && fetch_asset()
 	if !strings.Contains(result.Request, "/static/app.abc123.js") {
 		t.Fatalf("second request did not use extracted path:\n%s", result.Request)
 	}
-}
-
-func TestEndToEnd_PathOnlyPayloadsRunThroughGenerator(t *testing.T) {
-	var requested []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requested = append(requested, r.URL.Path)
-		switch r.URL.Path {
-		case "/nacos/":
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, "nacos console")
-		default:
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprint(w, "miss")
-		}
-	}))
-	defer server.Close()
-
-	xrayYAML := `
-name: fingerprint-test--path-payload-runtime
-detail:
-  fingerprint:
-    name: Path Payload Runtime
-transport: http
-payloads:
-  payloads:
-    p0:
-      entry: string("/")
-    p1:
-      entry: string("/nacos/")
-rules:
-  r0:
-    request:
-      method: GET
-      path: "{{entry}}"
-    expression: response.body_string.contains("nacos console")
-expression: r0()
-`
-	out, err := Convert([]byte(xrayYAML))
-	if err != nil {
-		t.Fatalf("convert: %v", err)
-	}
-	if strings.Contains(string(out), "{{BaseURL}}/nacos/") {
-		t.Fatalf("converter should preserve payloads instead of expanding paths:\n%s", string(out))
-	}
-
-	var tmpl templates.Template
-	if err := yaml.Unmarshal(out, &tmpl); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if err := tmpl.Compile(nil); err != nil {
-		t.Fatalf("compile: %v\n%s", err, string(out))
-	}
-	result, err := tmpl.Execute(server.URL, nil)
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if result == nil || !result.Matched {
-		t.Fatalf("expected payload-generated /nacos/ request to match, got %#v\n%s", result, string(out))
-	}
-	if !strings.Contains(strings.Join(requested, ","), "/nacos/") {
-		t.Fatalf("runtime did not request /nacos/: %#v\n%s", requested, string(out))
-	}
-}
-
-func TestEndToEnd_OutputVariableRequiresSourceRuleMatch(t *testing.T) {
-	var requested []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requested = append(requested, r.URL.Path)
-		switch r.URL.Path {
-		case "/":
-			w.WriteHeader(200)
-			fmt.Fprint(w, `<script src="/static/app.abc123.js"></script>`)
-		case "/static/app.abc123.js":
-			w.WriteHeader(200)
-			fmt.Fprint(w, "boot complete")
-		default:
-			w.WriteHeader(404)
-		}
-	}))
-	defer server.Close()
-
-	xrayYAML := `
-name: fingerprint-test--dynamic-output-gated
-detail:
-  fingerprint:
-    name: Dynamic Output Gated
-transport: http
-rules:
-  discover:
-    request:
-      method: GET
-      path: /
-    expression: response.body_string.contains("required marker")
-    output:
-      search: '"src=\"(?P<asset>/static/app\.[a-z0-9]+\.js)\"".submatch(response.body_string)'
-      asset_path: search["asset"]
-  fetch_asset:
-    request:
-      method: GET
-      path: /{{asset_path}}
-    expression: response.body_string.contains("boot complete")
-expression: discover() && fetch_asset()
-`
-	out, err := Convert([]byte(xrayYAML))
-	if err != nil {
-		t.Fatalf("convert: %v", err)
-	}
-	s := string(out)
-	// The output must be a stock-nuclei-runnable template: the source rule's
-	// output is captured by an internal extractor (no private internal-matchers
-	// field), and the cross-request decision lives in the final req-condition
-	// DSL referencing the discover response as body_1.
-	if strings.Contains(s, "internal-matchers") {
-		t.Fatalf("converted output must not emit the non-standard internal-matchers field:\n%s", s)
-	}
-	if !strings.Contains(s, "internal: true") {
-		t.Fatalf("expected the output variable to be captured by an internal extractor:\n%s", s)
-	}
-	if !strings.Contains(s, "req-condition: true") || !strings.Contains(s, "_1") {
-		t.Fatalf("expected a final req-condition matcher gating on the discover response (body_1):\n%s", s)
-	}
-
-	var tmpl templates.Template
-	if err := yaml.Unmarshal(out, &tmpl); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if err := tmpl.Compile(nil); err != nil {
-		t.Fatalf("compile: %v\n%s", err, s)
-	}
-	result, err := tmpl.Execute(server.URL, nil)
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	// discover's "required marker" is absent, so the final req-condition DSL must
-	// not match. Stock nuclei has no per-request short-circuit: the internal
-	// extractor still captures asset_path and fetch_asset may be sent, but that
-	// only costs an extra probe — it must never produce a false positive.
-	if result != nil && result.Matched {
-		t.Fatalf("expected no match when output source rule fails, got %#v\n%s", result, s)
-	}
-}
-
-func TestEndToEnd_RepeatedConsumerRunsPerOrBranch(t *testing.T) {
-	var requested []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requested = append(requested, r.URL.Path)
-		switch r.URL.Path {
-		case "/":
-			w.WriteHeader(200)
-			fmt.Fprintf(w, `<script>window.location.href="%s/K3cloud"</script>`, serverURL(r))
-		case "/K3cloud/":
-			w.WriteHeader(200)
-			fmt.Fprint(w, `class="kd-div-loading-ct"`)
-		default:
-			w.WriteHeader(404)
-		}
-	}))
-	defer server.Close()
-
-	xrayYAML := `
-name: fingerprint-test--repeated-consumer
-detail:
-  fingerprint:
-    name: Repeated Consumer
-transport: http
-rules:
-  js1:
-    request:
-      method: GET
-      path: /
-      follow_redirects: true
-    expression: response.body_string.icontains("URL=")
-    output:
-      search: '"url=(?P<urlpath>.*?)\"".bsubmatch(response.body)'
-      urlpath: search["urlpath"]
-  js4:
-    request:
-      method: GET
-      path: /
-      follow_redirects: true
-    expression: response.body_string.icontains("/k3cloud") && response.body_string.icontains("location.href")
-    output:
-      search: '"location.href(\\s*)=(\\s*)\"(https|http)(://.*?)/(?P<urlpath>.*?)\"".bsubmatch(response.body)'
-      urlpath: search["urlpath"]
-  kw1:
-    request:
-      method: GET
-      path: /{{urlpath}}/
-      follow_redirects: true
-    expression: response.body_string.icontains("class=\"kd-div-loading-ct\"")
-expression: (js1() && kw1()) || (js4() && kw1())
-`
-	out, err := Convert([]byte(xrayYAML))
-	if err != nil {
-		t.Fatalf("convert: %v", err)
-	}
-	s := string(out)
-	if strings.Count(s, `{{BaseURL}}/{{trim_prefix(urlpath, "/")}}/`) != 2 {
-		t.Fatalf("expected the shared consumer to be emitted once per OR branch:\n%s", s)
-	}
-
-	var tmpl templates.Template
-	if err := yaml.Unmarshal(out, &tmpl); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if err := tmpl.Compile(nil); err != nil {
-		t.Fatalf("compile: %v\n%s", err, s)
-	}
-	result, err := tmpl.Execute(server.URL, nil)
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if result == nil || !result.Matched {
-		t.Fatalf("expected repeated consumer branch to match, got %#v\n%s", result, s)
-	}
-	if !strings.Contains(result.Request, "/K3cloud/") {
-		t.Fatalf("matched request did not use extracted branch path:\n%s\nrequested=%#v", result.Request, requested)
-	}
-}
-
-func serverURL(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	return scheme + "://" + r.Host
 }
 
 func TestEndToEnd_HunterQuery(t *testing.T) {
@@ -558,16 +332,71 @@ func TestXrayTemplatePath(t *testing.T) {
 		path string
 		want string
 	}{
-		{"/admin", "{{BaseURL}}/admin"},
-		{"/", "{{BaseURL}}/"},
-		{"/druid/index.html", "{{BaseURL}}/druid/index.html"},
+		{"/admin", "{{RootURL}}/admin"},
+		{"/", "{{RootURL}}/"},
+		{"/druid/index.html", "{{RootURL}}/druid/index.html"},
 		{"", "{{BaseURL}}"},
-		{"/{{trim_prefix(path, \"/\")}}", "{{BaseURL}}/{{trim_prefix(path, \"/\")}}"},
+		{"/{{trim_prefix(path, \"/\")}}", "{{RootURL}}/{{trim_prefix(path, \"/\")}}"},
 	}
 	for _, tt := range tests {
 		got := xrayTemplatePath(tt.path)
 		if got != tt.want {
 			t.Errorf("xrayTemplatePath(%q) = %q, want %q", tt.path, got, tt.want)
 		}
+	}
+}
+
+func TestEndToEnd_RootURLPreventsDoubledPath(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--rooturl-path
+detail:
+  fingerprint:
+    name: RootURL Path Test
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: /druid/index.html
+    expression: response.status == 200 && response.body_string.contains("druid")
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "{{RootURL}}/druid/index.html") {
+		t.Fatalf("expected RootURL in converted path:\n%s", s)
+	}
+	if strings.Contains(s, "{{BaseURL}}/druid") {
+		t.Fatalf("should not use BaseURL for absolute xray path:\n%s", s)
+	}
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	tmpl.Compile(nil)
+
+	// Simulate target with path: http://host/druid/
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/druid/index.html" {
+			w.WriteHeader(200)
+			fmt.Fprint(w, "druid dashboard")
+			return
+		}
+		w.WriteHeader(404)
+		fmt.Fprintf(w, "not found: %s", r.URL.Path)
+	}))
+	defer server.Close()
+
+	// Pass target WITH path — RootURL strips it, so template hits /druid/index.html not /druid/druid/index.html
+	result, err := tmpl.Execute(server.URL+"/druid/", nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result == nil || !result.Matched {
+		t.Fatalf("expected match — RootURL should prevent /druid/druid/ doubling")
 	}
 }

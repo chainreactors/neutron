@@ -96,38 +96,42 @@ func TestLexNot(t *testing.T) {
 	}
 }
 
-func TestLexDoesNotDecodeHexEscape(t *testing.T) {
+func TestLexHexEscape(t *testing.T) {
 	tokens, err := Lex(`starts_with(body, "\x1f\x8b")`)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// tokens: starts_with ( body , "\x1f\x8b" ) EOF
 	strTok := tokens[4]
 	if strTok.Type != TString {
 		t.Fatalf("expected TString, got %d", strTok.Type)
 	}
-	if strTok.Value != "x1fx8b" {
-		t.Errorf("expected common DSL lexer to keep legacy escape behavior, got %q", strTok.Value)
+	if len(strTok.Value) != 2 {
+		t.Fatalf("expected 2 bytes, got %d bytes: %q", len(strTok.Value), strTok.Value)
+	}
+	if strTok.Value[0] != 0x1f || strTok.Value[1] != 0x8b {
+		t.Errorf("expected \\x1f\\x8b, got %x", []byte(strTok.Value))
 	}
 }
 
-func TestLexDoesNotDecodeStandardEscapes(t *testing.T) {
+func TestLexStandardEscapes(t *testing.T) {
 	tokens, err := Lex(`"\n\r\t\0"`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := tokens[0].Value
-	if s != "nrt0" {
-		t.Errorf("expected common DSL lexer to keep legacy escape behavior, got %q", s)
+	if s != "\n\r\t\x00" {
+		t.Errorf("expected \\n\\r\\t\\0, got %q", s)
 	}
 }
 
-func TestLexDoesNotDecodeHexMixedWithText(t *testing.T) {
+func TestLexHexMixedWithText(t *testing.T) {
 	tokens, err := Lex(`"PK\x03\x04"`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := tokens[0].Value
-	expected := "PKx03x04"
+	expected := "PK\x03\x04"
 	if s != expected {
 		t.Errorf("expected %q, got %q", expected, s)
 	}

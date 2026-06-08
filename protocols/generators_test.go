@@ -97,20 +97,3 @@ func TestClusterBombValues(t *testing.T) {
 		t.Fatalf("expected total 4, got %d", iter.Total())
 	}
 }
-
-func TestGeneratorPreservesStringFunctionPayloadLiteral(t *testing.T) {
-	gen, err := NewGenerator(map[string]interface{}{
-		"entry": []string{`string("/nacos/")`},
-	}, PitchFork)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	value, ok := gen.NewIterator().Value()
-	if !ok {
-		t.Fatal("expected payload value")
-	}
-	if value["entry"] != `string("/nacos/")` {
-		t.Fatalf("generator should not interpret xray string() literals, got %q", value["entry"])
-	}
-}
