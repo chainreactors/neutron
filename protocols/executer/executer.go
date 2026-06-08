@@ -2,6 +2,7 @@ package executer
 
 import (
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/common/dsl"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 )
@@ -52,6 +53,10 @@ func (e *Executer) Requests() int {
 func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, error) {
 	var result *operators.Result
 
+	// Compute stable global variables once per execution: random/static values
+	// stay identical across request blocks within a scan, regenerated between scans.
+	input.GlobalVars = computeGlobalVars(e.options)
+
 	previous := make(map[string]interface{})
 	dynamicValues := common.MergeMaps(make(map[string]interface{}), input.Payloads)
 	requestIndexOffset := 0
@@ -64,9 +69,11 @@ func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, err
 						dynamicValues[key] = values[0]
 					}
 				}
-				result = event.OperatorsResult
-				if len(event.Results) == 0 {
-					event.Results = []*protocols.ResultEvent{req.MakeResultEventItem(event)}
+				if event.OperatorsResult.Matched || event.OperatorsResult.Extracted || len(event.Results) > 0 {
+					result = event.OperatorsResult
+					if len(event.Results) == 0 {
+						event.Results = []*protocols.ResultEvent{req.MakeResultEventItem(event)}
+					}
 				}
 			}
 			input.LogEvent(event)
@@ -77,4 +84,18 @@ func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, err
 		requestIndexOffset += req.Requests()
 	}
 	return result, nil
+}
+
+func computeGlobalVars(options *protocols.ExecuterOptions) map[string]interface{} {
+	globalVars := map[string]interface{}{
+		"randstr": dsl.RandStr(8),
+		"randnum": dsl.RandNum(4),
+	}
+	if options == nil || options.Variables.Len() == 0 {
+		return globalVars
+	}
+	for k, v := range options.Variables.StableValues() {
+		globalVars[k] = v
+	}
+	return globalVars
 }

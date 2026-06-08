@@ -36,8 +36,7 @@ type Request struct {
 	attackType        protocols.Type       `json:"-" yaml:"-" jsonschema:"-"`
 	// cache any variables that may be needed for operation.
 	//dialer  *fastdialer.Dialer
-	options    *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
-	globalVars map[string]interface{}     `json:"-" yaml:"-" jsonschema:"-"`
+	options *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
 }
 
 type addressKV struct {
@@ -120,6 +119,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		}
 		r.CompiledOperators = compiled
 	}
+
 	return nil
 }
 

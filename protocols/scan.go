@@ -22,6 +22,11 @@ type ScanContext struct {
 	OnError  func(error)
 	OnResult func(e *InternalWrappedEvent)
 	TraceAll bool
+	// GlobalVars holds pre-computed stable variable values for this execution.
+	// Random/static variables (e.g. rand_base()) and bare {{randstr}}/{{randnum}}
+	// are evaluated once here so they stay identical across request blocks within
+	// one scan, yet are regenerated between scans.
+	GlobalVars map[string]interface{}
 
 	// unexported state fields
 	errors   []error

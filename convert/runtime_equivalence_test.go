@@ -589,9 +589,6 @@ func applyXrayRuntimeOutput(output map[string]interface{}, resp mockResponse, va
 			}
 			continue
 		}
-		if fallback, ok := outputFallbackLiteral(expr); ok {
-			vars[name] = normalizeXrayScalar(fallback)
-		}
 	}
 }
 

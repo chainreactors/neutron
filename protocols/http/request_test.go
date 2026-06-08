@@ -13,6 +13,7 @@ import (
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestResponseToDSLMap(t *testing.T) {
@@ -31,7 +32,7 @@ func TestResponseToDSLMap(t *testing.T) {
 	require.NoError(t, err)
 
 	r := &Request{}
-	event := r.responseToDSLMap(req, resp, server.URL, server.URL+"/path", 100*time.Millisecond, nil, nil)
+	event := r.responseToDSLMap(req, resp, server.URL, server.URL+"/path", 100*time.Millisecond, nil, nil, nil)
 
 	require.Equal(t, 200, event["status_code"])
 	require.Equal(t, "test body", event["body"])
@@ -66,7 +67,7 @@ func TestResponseToDSLMapWithRequestBody(t *testing.T) {
 	require.NoError(t, err)
 
 	r := &Request{}
-	event := r.responseToDSLMap(req, resp, server.URL, server.URL+"/api", 100*time.Millisecond, nil, reqBody)
+	event := r.responseToDSLMap(req, resp, server.URL, server.URL+"/api", 100*time.Millisecond, nil, reqBody, nil)
 
 	// Verify request string includes the body
 	reqStr := common.ToString(event["request"])
@@ -127,6 +128,70 @@ func TestExecuteRequestWithRequestResponse(t *testing.T) {
 	require.NotEmpty(t, capturedEvent.Results[0].Response)
 }
 
+func TestExecuteSkipsUnresolvedDynamicPath(t *testing.T) {
+	var requested []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.EscapedPath())
+		w.WriteHeader(200)
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:   []string{`{{BaseURL}}/{{trim_prefix(urlpath, "/")}}/`},
+		Method: "GET",
+	}
+
+	options := &protocols.ExecuterOptions{
+		Options: &protocols.Options{Timeout: 5},
+	}
+	err := r.Compile(options)
+	require.NoError(t, err)
+
+	input := protocols.NewScanContext(server.URL, nil)
+	err = r.ExecuteWithResults(input, make(map[string]interface{}), make(map[string]interface{}), func(event *protocols.InternalWrappedEvent) {
+		t.Fatalf("unresolved dynamic path should not emit events: %#v", event)
+	})
+	require.NoError(t, err)
+	require.Empty(t, requested)
+}
+
+func TestExecuteKeepsLiteralDoubleBracePayload(t *testing.T) {
+	var receivedBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		receivedBody = string(body)
+		w.WriteHeader(200)
+		fmt.Fprint(w, receivedBody)
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:   []string{"{{BaseURL}}"},
+		Method: "POST",
+		Body:   "{{7*7}}",
+	}
+	r.Matchers = append(r.Matchers, &operators.Matcher{
+		Type:  "word",
+		Words: []string{"{{7*7}}"},
+	})
+
+	options := &protocols.ExecuterOptions{
+		Options: &protocols.Options{Timeout: 5},
+	}
+	require.NoError(t, r.Compile(options))
+
+	input := protocols.NewScanContext(server.URL, nil)
+	var matched bool
+	err := r.ExecuteWithResults(input, make(map[string]interface{}), make(map[string]interface{}), func(event *protocols.InternalWrappedEvent) {
+		if event.OperatorsResult != nil {
+			matched = event.OperatorsResult.Matched
+		}
+	})
+	require.NoError(t, err)
+	require.Equal(t, "{{7*7}}", receivedBody)
+	require.True(t, matched)
+}
+
 func TestExecuteRequestWithPOSTBody(t *testing.T) {
 	var receivedBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -185,8 +250,7 @@ func TestTemplateVariableOverridesGlobalRandstrInRequestBody(t *testing.T) {
 	})
 
 	var variables protocols.Variable
-	variables.InsertionOrderedStringMap = *protocols.NewEmptyInsertionOrderedStringMap(1)
-	variables.Set("randstr", "template-randstr")
+	require.NoError(t, yaml.Unmarshal([]byte("randstr: template-randstr"), &variables))
 
 	options := &protocols.ExecuterOptions{
 		Variables: variables,
@@ -229,15 +293,17 @@ func TestPayloadPathRequestsUseSequentialRequestConditionIndexes(t *testing.T) {
 	require.NoError(t, r.Compile(options))
 	require.Equal(t, 2, r.Requests())
 
-	input := protocols.NewScanContext(server.URL, nil)
-	var matched bool
-	err := r.ExecuteWithResults(input, make(map[string]interface{}), make(map[string]interface{}), func(event *protocols.InternalWrappedEvent) {
-		if event.OperatorsResult != nil {
-			matched = event.OperatorsResult.Matched
-		}
-	})
-	require.NoError(t, err)
-	require.True(t, matched)
+	for _, payloads := range []map[string]interface{}{nil, {}} {
+		input := protocols.NewScanContext(server.URL, payloads)
+		var matched bool
+		err := r.ExecuteWithResults(input, make(map[string]interface{}), make(map[string]interface{}), func(event *protocols.InternalWrappedEvent) {
+			if event.OperatorsResult != nil {
+				matched = event.OperatorsResult.Matched
+			}
+		})
+		require.NoError(t, err)
+		require.True(t, matched)
+	}
 }
 
 func TestMatcherTypes(t *testing.T) {

@@ -1,8 +1,9 @@
 package protocols
 
 import (
-	"github.com/chainreactors/neutron/operators"
 	"time"
+
+	"github.com/chainreactors/neutron/operators"
 )
 
 type ExecuterOptions struct {

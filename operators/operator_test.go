@@ -30,6 +30,21 @@ func TestResultRequestResponseFields(t *testing.T) {
 	})
 }
 
+func TestOperatorsCompileRejectsNilEntries(t *testing.T) {
+	err := (&Operators{Matchers: []*Matcher{nil}}).Compile()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "matcher at index 0 is nil")
+
+	err = (&Operators{Extractors: []*Extractor{nil}}).Compile()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "extractor at index 0 is nil")
+
+	var ops *Operators
+	err = ops.Compile()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "operators is nil")
+}
+
 func TestOperatorsExecute(t *testing.T) {
 	t.Run("OR condition with word matcher", func(t *testing.T) {
 		ops := &Operators{
@@ -129,5 +144,35 @@ func TestOperatorsExecute(t *testing.T) {
 		require.NotNil(t, result)
 		require.True(t, result.Extracted)
 		require.Contains(t, result.Extracts, "version")
+	})
+
+	t.Run("internal extractor is gated by failed matcher", func(t *testing.T) {
+		ops := &Operators{
+			Matchers: []*Matcher{
+				{Type: "word", Words: []string{"missing"}},
+			},
+			Extractors: []*Extractor{
+				{
+					Type:       "regex",
+					Regex:      []string{`next=(/[a-z-]+)`},
+					RegexGroup: 1,
+					Name:       "next_path",
+					Internal:   true,
+				},
+			},
+		}
+		err := ops.Compile()
+		require.NoError(t, err)
+
+		matchFunc := func(data map[string]interface{}, matcher *Matcher) (bool, []string) {
+			return matcher.MatchWords("next=/dynamic-login", data)
+		}
+		extractFunc := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
+			return extractor.ExtractRegex("next=/dynamic-login")
+		}
+
+		result, ok := ops.Execute(map[string]interface{}{}, matchFunc, extractFunc)
+		require.False(t, ok)
+		require.Nil(t, result)
 	})
 }

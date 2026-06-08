@@ -29,6 +29,13 @@ func (r *Result) HasErrors() bool { return len(r.Errors) > 0 }
 
 func Generate(node *Node, emitter Emitter) *Result {
 	r := &Result{}
+	if node == nil {
+		return r
+	}
+	if emitter == nil {
+		r.Errors = append(r.Errors, "nil query emitter")
+		return r
+	}
 	r.Query = generate(node, emitter, r)
 	return r
 }

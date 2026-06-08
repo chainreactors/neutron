@@ -21,6 +21,9 @@ func (t *Template) GetTags() []string {
 }
 
 func (t *Template) Compile(options *protocols.ExecuterOptions) error {
+	if t == nil {
+		return errors.New("template is nil")
+	}
 	var requests []protocols.Request
 	var err error
 	if options == nil {
@@ -45,7 +48,10 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 	}
 
 	if requestHTTP := t.GetRequests(); len(requestHTTP) > 0 {
-		for _, req := range requestHTTP {
+		for i, req := range requestHTTP {
+			if req == nil {
+				return fmt.Errorf("http request at index %d is nil", i)
+			}
 			if req.Unsafe {
 				return fmt.Errorf("not impl unsafe request %s", req.Name)
 			}
@@ -54,7 +60,10 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 		t.Executor = executer.NewExecuter(requests, options)
 	}
 	if len(t.RequestsNetwork) > 0 {
-		for _, req := range t.RequestsNetwork {
+		for i, req := range t.RequestsNetwork {
+			if req == nil {
+				return fmt.Errorf("network request at index %d is nil", i)
+			}
 			requests = append(requests, req)
 		}
 		t.Executor = executer.NewExecuter(requests, options)
