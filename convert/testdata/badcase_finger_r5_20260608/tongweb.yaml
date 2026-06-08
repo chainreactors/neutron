@@ -1,0 +1,61 @@
+name: fingerprint-tongtech--tongweb
+detail:
+  vendor: 12ae734d-d3de-4fe1-8141-2bfbc1e0d363
+  product: 8c075dcf-6870-4b00-ad3d-97a0558a9b6a
+  fingerprint:
+    name: TongWeb-东方通应用服务器
+    cpe: tongtech:tongweb
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+set:
+  rStr3: randomLowercase(8)
+
+rules:
+  kw_in_header_without_dereict:
+    request:
+      cache: true
+      follow_redirects: false
+      method: GET
+      path: /
+    expression: response.headers["Server"].icontains("TongWeb Server")
+  kw_in_header:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: response.headers["Server"].icontains("TongWeb Server")
+  kw_in_header1:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: response.headers["Server"].icontains("webserver")
+  kw_in_body:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /console/
+    expression: |-
+      response.title_string == "TongWeb"
+      || (
+      response.body_string.contains("/console/rest/i18n?locale=")
+      && response.body_string.contains("/console/notinrealm/rest/commons")
+      )
+  ejb_ok:
+    request:
+      method: GET
+      path: /ejbserver/ejb
+    expression: |-
+      size(response.body_string) == 0 && response.status ==200 
+
+  ejb_not_ok:
+    request:
+      method: GET
+      path: /ejbserver/{{rStr3}}
+    expression: |-
+      response.status == 404
+expression: kw_in_header_without_dereict() || kw_in_header() || (kw_in_header1() &&  kw_in_body()) || (ejb_ok() && ejb_not_ok())

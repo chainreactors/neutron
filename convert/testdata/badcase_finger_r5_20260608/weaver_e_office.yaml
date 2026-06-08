@@ -1,0 +1,52 @@
+name: fingerprint-weaver--weaver_e_office
+detail:
+  vendor: cc897b2c-6849-4975-a405-9c1ec3659f32
+  product: 820c16ef-5084-47cf-a1ba-d201bfa79631
+  fingerprint:
+    name: 泛微-EOffice
+    cpe: weaver:weaver_e_office
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  r1:
+    request:
+      cache: true
+      follow_redirects: false
+      method: GET
+      path: /
+    expression: |-
+      (
+      response.headers["Location"].contains("/general/login/index.php")
+      || response.body_string.contains('redirectUrl = "login.php"')
+      )
+      && response.body_string.contains('window.opener="eoffice";')
+  r2:
+    request:
+      cache: true
+      follow_redirects: false
+      method: GET
+      path: /
+    expression: response.headers["location"].contains("/eoffice10/client/web/login")
+
+
+  r3:
+    request:
+      cache: true
+      method: GET
+      path: /
+    expression: 
+      response.body_string.contains("/eoffice10/client/web/")  && response.body_string.contains("eoffice_loading_tip")
+      || ( 
+      response.body_string.contains("clsid:FB4EE423-43A4-4AA9-BDE9-4335A6D3C74E")
+      && response.body_string.contains("/general/login/index.php?c=Login&a=updateSystem")
+      )
+
+
+expression: r1() || r2() || r3() 
+
+# FOFA QUERY
+# app="泛微-EOffice"
+# /eoffice10/client/web/ 是e-office10
+# /general/login/index.php 是e-office9

@@ -1,0 +1,46 @@
+name: fingerprint-qianxin--ssl_vpn
+detail:
+  vendor: 9b68d62b-c577-45d4-af14-0086eb7ae796
+  product: d4468d1e-14a9-468e-a5cb-eee589fc4b98
+  fingerprint:
+    name: 奇安信-SSLVPN
+    cpe: qianxin:ssl_vpn
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  basic0_7175:
+    expression: |-
+      response.body_string.contains("1=@@=本地认证=@@=1=@@=本地认证=@@=0=@@=0=@@=0=@@=0") ||
+      response.body_string.contains("<title>奇安信VPN") ||
+      (response.body_string.contains("请使用手机奇安信ID扫码登录") && response.body_string.contains("VPN"))
+      || response.body_string.contains('<a href="sslvpn://" target="_blank">启动MAC客户端登录</a>')
+  
+  kw_download_page:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: response.body_string.contains("client.href='itms-services://?action=download-manifest&url='")
+
+  kw_in_vpn_gateway:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: |- 
+      response.body_string.contains('网神VPN安全网关系统')
+      || (response.body_string.contains('var __httpsVerify') && response.body_string.contains("Public/resources/mPlugin/mToken.js"))
+  kw_in_cookies:
+      request:
+        method: GET
+        path: /
+      expression: response.headers['set-cookie'].contains('mod_pass_param=') && response.headers['set-cookie'].contains('portal_param=') && response.headers['set-cookie'].contains('client_style=')
+
+expression: basic0_7175() || kw_download_page() || kw_in_vpn_gateway() || kw_in_cookies()
+
+# FOFA QUERY
+# body="1=@@=本地认证=@@=1=@@=本地认证=@@=0=@@=0=@@=0=@@=0" || (body="var client = document.getElementById(\"ios_dropdown_client\")" && icon_hash="634255230")

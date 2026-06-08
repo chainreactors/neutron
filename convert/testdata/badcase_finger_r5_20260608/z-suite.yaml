@@ -1,0 +1,69 @@
+name: fingerprint-yonghongtech--z-suite
+detail:
+  vendor: c9f14b8e-4402-49ea-aed1-7d832f98acd8
+  product: 60ea6420-f4af-4bc5-a943-3957e2b4db8f
+  fingerprint:
+    name: 永洪-BI
+    cpe: yonghongtech:z-suite
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  kw_in_body:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: |-
+      response.body_string.contains("/bi/?proc=2&action=loadFavicon")
+      && response.body_string.contains("/bi/?proc=2&locale=")
+
+  index_contains:
+    request:
+      method: GET
+      path: /
+    expression: |-
+      response.body_string.icontains('yonghong') 
+      && (response.body_string.icontains('contentdiv imgposition desw')
+      || response.body_string.icontains('YH_CONFIG')
+      )
+
+  kw_in_body1:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: |-
+      response.body_string.contains("background:url(404.jpg)")
+
+  kw_in_body2:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /404.jpg
+    expression: |-
+      md5(response.body) == '77154f3efafe5b68423507a6658a636a'
+
+  favicon_hash:
+    request:
+      cache: true
+      method: GET
+      path: /
+    expression: faviconHash(response.getIconContent()) == 398162124
+
+  kw_in_proc:
+    request:
+      method: GET
+      path: /bi/?proc=1
+    expression: |-
+      response.body_string.icontains('yonghong') 
+      && (response.body_string.icontains('contentdiv imgposition desw')
+      || response.body_string.icontains('YH_CONFIG')
+      )
+
+      
+expression: kw_in_body() || index_contains() || (kw_in_body1() && kw_in_body2()) || favicon_hash() || kw_in_proc()

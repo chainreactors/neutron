@@ -1,0 +1,19 @@
+name: fingerprint-arraynetworks--sslvpn
+detail:
+  vendor: 907f72f7-8f03-4dfa-982b-a799a7577452
+  product: 899aafaf-592e-4c5a-9578-88545d9e08a4
+  fingerprint:
+    name: Array-SSL-VPN
+    cpe: arraynetworks:sslvpn
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  r0:
+    expression: response.body_string.contains('/prx/000/http/')
+expression: r0()
+
+# Fofa Query
+# app="Array-VPN"
+# https://ysdceshi.jlpay.com:8081/

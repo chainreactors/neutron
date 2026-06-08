@@ -1,0 +1,62 @@
+name: fingerprint-vmware--springboot
+detail:
+  vendor: de453d0e-be1e-4d4d-93ff-84804145dd9d
+  product: 4ac41fba-5f47-43c5-b7a0-31f4737047c8
+  fingerprint:
+    name: SpringBoot
+    cpe: vmware:springboot
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+set:
+  404Path: get404Path()
+
+rules:
+  kw_in_404_body:
+    request:
+      cache: true
+      method: GET
+      path: /{{404Path}}
+      headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+    expression: response.body_string.contains("<h1>Whitelabel Error Page</h1>")
+  favicon_hash:
+    request:
+      cache: true
+      method: GET
+      path: /
+    expression: md5(response.getIconContent()) == "0488faca4c19046b94d07c3ee83cf9d6" || faviconHash(response.getIconContent()) == 116323821
+  kw_in_cookie:
+    request:
+      cache: true
+      method: GET
+      path: /
+    expression: "\"set-cookie\" in response.headers 
+&& response.headers[\"set-cookie\"].contains(\"org.springframework.web.servlet.i18n.CookieLocaleResolver\")"
+
+  kw_in_actuator:
+    request:
+      cache: true
+      method: GET
+      path: /
+    expression: 
+      response.body_string.contains('/actuator/info') && response.body_string.contains('target="_blank">')
+
+  kw_in_eureka:
+    request:
+      cache: true
+      method: GET
+      path: /
+    expression: |-
+      response.body_string.contains('eureka/css/')
+      || response.body_string.contains('src="eureka/js/')
+
+  kw_in_eureka1:
+    request:
+      cache: true
+      method: GET
+      path: /eureka/css/wro.css
+    expression: response.body_string.contains('spring-logo-eureka')
+expression: |-
+  favicon_hash() || kw_in_404_body() || kw_in_cookie()
+  || kw_in_actuator() || (kw_in_eureka() && kw_in_eureka1())

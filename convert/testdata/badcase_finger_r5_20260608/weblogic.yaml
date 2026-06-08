@@ -1,0 +1,48 @@
+name: fingerprint-oracle--weblogic
+detail:
+  vendor: d9fb7791-36cd-4672-8c42-c086b2e09e50
+  product: d5d65242-0f32-4b41-8d9d-3ca1f4c7979c
+  fingerprint:
+    name: WebLogic-Server
+    cpe: oracle:weblogic
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+set:
+  pathname: get404Path()
+
+rules:
+  index_contains:
+    expression: response.headers['Server'].contains('WebLogic')
+                || response.status == 200 && response.body_string.contains("/console/framework/skins/wlsconsole/images/Branding_Login_WeblogicConsole.gif")
+                || response.body_string.contains('Welcome to Weblogic Application Server')
+                || response.body_string.contains("The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent.")
+
+  kw_in_404_body:
+    request:
+      method: GET
+      path: /{{pathname}}
+    expression: response.body_string.contains("The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent.")
+
+  version:
+    request:
+      method: GET
+      path: /console/login/LoginForm.jsp
+    expression: response.body_string.contains("WebLogic Server")
+    output:
+      search: |-
+        r"WebLogic Server (.*?: )?(?P<version>\d+\.\d+\.\d+\.\d+(\.\d+)?)".submatch(response.body_string)
+      version: search["version"]
+
+  version_in_header:
+    expression: response.headers['Server'].contains("WebLogic Server")
+    output:
+      search: |-
+        r"WebLogic Server (.*?: )?(?P<version>\d+\.\d+\.\d+\.\d+(\.\d+)?)".submatch(response.headers['Server'])
+      version: search["version"]
+
+expression: (index_contains() || kw_in_404_body()) && (version_in_header() || version() || true)
+
+# Fofa Query
+# app="BEA-WebLogic-Server"
+# http://129.213.197.42:8000/

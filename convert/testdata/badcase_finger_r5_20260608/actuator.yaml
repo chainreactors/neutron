@@ -1,0 +1,111 @@
+name: fingerprint-spring--actuator
+detail:
+  vendor: 144794ab-0ef7-434f-98ad-6499189d28de
+  product: 61eebc5f-eefe-4fe8-81f3-4c9deb456b86
+  fingerprint:
+    name: SpringBoot Actuator
+    cpe: spring:actuator
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+set:
+  404Path: get404Path()
+
+rules:
+
+  kw_in_index:
+    request:
+      cache: true
+      method: GET
+      path: /
+      follow_redirects: false
+      headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+    expression: |-
+      response.body_string.contains("<h1>Whitelabel Error Page</h1>")
+      || (
+      response.body_string.contains("assets/js/vue.min.js")
+      && response.body_string.contains("assets/js/element.js")
+      )
+      || response.body_string.contains('"msg":"404 NOT_FOUND"')
+      || response.body_string.contains("Full authentication is required to access this resource")
+      || response.headers['content-type'].contains("application/json")
+
+  kw_in_404_body:
+    request:
+      cache: true
+      method: GET
+      path: /{{404Path}}
+      follow_redirects: false
+      headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+    expression: |-
+      response.body_string.contains("<h1>Whitelabel Error Page</h1>")
+      || (
+      response.body_string.contains("assets/js/vue.min.js")
+      && response.body_string.contains("assets/js/element.js")
+      )
+      || response.body_string.contains('"msg":"404 NOT_FOUND"')
+      || response.body_string.contains("Full authentication is required to access this resource")
+      || response.headers['content-type'].contains("application/json")
+  kw_in_actuator:
+    request:
+      cache: true
+      method: GET
+      path: /actuator
+      follow_redirects: false
+    expression: |-
+      response.body_string.contains("/actuator")
+      && response.body_string.contains('"_links":{')
+      && (response.body_string.contains('"env":{') || response.headers['content-type'].contains("spring-boot.actuator"))
+
+  kw_in_health_body:
+    request:
+      cache: true
+      method: GET
+      path: /health
+      follow_redirects: false
+      headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+    expression: |-
+      response.status == 200 &&
+      response.headers['content-type'].contains("spring-boot.actuator")
+      || ( response.body_string.startsWith('{"code":')
+      && response.body_string.contains('"status":')
+      && response.body_string.contains('"ping":')
+      )
+  kw_in_actuator_health_body:
+    request:
+      cache: true
+      method: GET
+      path: /actuator/health
+      follow_redirects: false
+      headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+    expression: |-
+      response.status == 200 &&
+      response.headers['content-type'].contains("spring-boot.actuator")
+      || ( response.body_string.startsWith('{"code":')
+      && response.body_string.contains('"status":')
+      && response.body_string.contains('"ping":')
+      )
+      
+  favicon_hash:
+    request:
+      cache: true
+      method: GET
+      path: /
+      follow_redirects: false
+    expression: faviconHash(response.getIconContent()) == 116323821
+
+expression: |-
+    (
+    favicon_hash() || kw_in_index() || kw_in_404_body()
+    ) && (
+    kw_in_actuator()
+    || kw_in_actuator_health_body() 
+    || kw_in_health_body() 
+    )
+
+
+# http://218.95.166.97:8000/;/env/

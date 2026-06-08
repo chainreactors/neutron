@@ -1,0 +1,222 @@
+# 字段:yaml_file<TAB>product<TAB>url<TAB>r5_sdk_match<TAB>r5_sdk_fingerprints
+# 来源:reports/focus-validate/finger-compare-r5/sdk-out.json.shard{0,1}
+# 数据时间:2026-06-08;wufeng_product 是抓取源的标注,r5_sdk_match 是 v0.2.4 batch_compare 的实测
+aisite.yaml	中科汇联-AiSite	https://111.23.154.184/nxyx/sy2023/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-AiSite	https://111.23.154.184/nxyx/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-AiSite	https://58.20.91.124/nxyx/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-AiSite	https://58.20.91.124/nxyx/sy2023/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-AiSite	https://www.nxyqszx.cn/nxyx/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-AiSite	https://111.23.154.184/nxyx/ztpd/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-AiSite	https://111.23.154.184/nxyx/_nongxy915379933/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-AiSite	https://58.20.91.124/nxyx/_nongxy915379933/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-AiSite	https://58.20.91.124/nxyx/ztpd/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-AiSite	https://www.nxyqszx.cn/nxyx/ztpd/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-aisite	http://zjt.ln.gov.cn/zjt/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-aisite	http://slt.ln.gov.cn/slt/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-aisite	http://jgsw.ln.gov.cn/index/	False	
+aisite.yaml	中科汇联-aisite	http://yjgl.ln.gov.cn/yjgl/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-aisite	http://gzw.ln.gov.cn/gzw/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-aisite	http://zjt.ln.gov.cn/index/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-aisite	http://slt.ln.gov.cn/index/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-aisite	http://mzw.ln.gov.cn/mzw/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-aisite	http://jgsw.ln.gov.cn/jgsw/	False	easysite-内容管理平台,中科汇联-aisearch
+aisite.yaml	中科汇联-aisite	http://yjgl.ln.gov.cn/index/	False	easysite-内容管理平台,中科汇联-aisearch
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://113.230.75.34:6100/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://hanwang.haoyehuagong.com:6100/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://120.198.121.118:1000/View/UserReserved/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://120.198.121.118:1000/ASHXRequest/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://120.198.121.118:1000/View/SystemMng/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://oa.haoyehuagong.com:6100/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://120.198.121.118:1000/View/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://120.198.121.118:1000/scripts/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://120.198.121.118:1000/ASHXRequest/SystemIndex/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+facial_love_cloud_platform.yaml	脸爱云一脸通智慧管理平台	http://120.198.121.118:1000/UserSite/	True	脸爱云一脸通智慧管理平台,脸爱云一脸通智慧管理平台
+wordpress.yaml	WordPress	https://42.193.123.102/	True	wordpress
+wordpress.yaml	WordPress	https://8.148.213.166/	True	wordpress
+wordpress.yaml	WordPress	http://www.wangshifu.net/	False	
+wordpress.yaml	WordPress	https://www.uut8.com/	True	wordpress
+wordpress.yaml	WordPress	https://www.mxj-xb.online/	True	wordpress,wordpress
+wordpress.yaml	WordPress	http://42.193.123.102/	True	wordpress
+wordpress.yaml	WordPress	https://175.178.80.135/	True	wordpress,wordpress
+wordpress.yaml	WordPress	http://8.148.213.166/	True	wordpress
+wordpress.yaml	WordPress	https://www.wangshifu.net/	False	
+wordpress.yaml	WordPress	http://www.uut8.com/	True	wordpress
+tongweb.yaml	TongWeb-东方通应用服务器	https://118.213.241.130/	True	jeecms,springboot,tongweb-东方通应用服务器
+tongweb.yaml	TongWeb-东方通应用服务器	http://www.shputuo.jcy.gov.cn/	False	jeecms
+tongweb.yaml	TongWeb-东方通应用服务器	http://www.shminhang.jcy.gov.cn/	False	jeecms
+tongweb.yaml	TongWeb-东方通应用服务器	https://www.qh.jcy.cn/	True	jeecms,springboot,tongweb-东方通应用服务器
+tongweb.yaml	TongWeb-东方通应用服务器	http://221.7.197.159:8090/	True	tongweb-东方通应用服务器
+tongweb.yaml	TongWeb-东方通应用服务器	https://www.wasx.qh.jcy.gov.cn/	True	jeecms,springboot,tongweb-东方通应用服务器
+tongweb.yaml	TongWeb-东方通应用服务器	http://www.shpudong.jcy.gov.cn/	False	jeecms
+tongweb.yaml	TongWeb-东方通应用服务器	https://www.qh.jcy.gov.cn/	True	jeecms,springboot,tongweb-东方通应用服务器
+tongweb.yaml	TongWeb-东方通应用服务器	http://218.60.145.11:9060/console/	True	tongweb-东方通应用服务器
+tongweb.yaml	TongWeb-东方通应用服务器	http://219.232.86.56:8183/	True	tongweb-东方通应用服务器
+geoserver.yaml	GeoServer	http://big-data.gxota.com:8080/geoserver/	False	
+geoserver.yaml	GeoServer	http://gxlwlc.com:7006/geoserver/	True	geoserver
+geoserver.yaml	GeoServer	http://sjcj.zhpt.yjglt.gxzf.gov.cn:8040/geoserver/	False	
+geoserver.yaml	GeoServer	https://zh.gflc.cn:18080/geoserver/	True	geoserver
+geoserver.yaml	GeoServer	https://www.gfslgy.com:18080/geoserver/	True	geoserver
+geoserver.yaml	GeoServer	http://219.159.80.180:7006/geoserver/	True	geoserver
+geoserver.yaml	GeoServer	http://116.252.25.47:8040/geoserver/	False	
+geoserver.yaml	GeoServer	https://219.159.80.130:18080/geoserver/	True	geoserver
+geoserver.yaml	GeoServer	https://xctd.gflc.cn:18080/geoserver/	True	geoserver
+geoserver.yaml	GeoServer	https://gflc.cn:18080/geoserver/	True	geoserver
+ezoffice.yaml	万户-OA	https://oanew.gxmuyfy.cn/	False	
+ezoffice.yaml	万户-OA	http://wbb.czsrmyy.com:7001/	True	万户-oa
+ezoffice.yaml	万户-OA	http://jktj.czsrmyy.com:7001/	True	万户-oa
+ezoffice.yaml	万户-OA	http://113.140.33.16:29093/	True	万户-oa
+ezoffice.yaml	万户-OA	http://oa.glwyy.org.cn:7001/	True	万户-oa
+ezoffice.yaml	万户-OA	http://222.216.107.200:7001/	True	万户-oa
+ezoffice.yaml	万户-OA	http://tijian.czsrmyy.com:7001/	True	万户-oa
+ezoffice.yaml	万户-OA	http://113.140.33.16:29093/defaultroot/	True	万户-oa
+ezoffice.yaml	万户-OA	http://119.97.207.194:7001/	True	万户-oa
+weaver_e_office.yaml	泛微-EOffice	http://hcsfby.com:8010/	False	
+weaver_e_office.yaml	泛微-EOffice	http://tjxt.hcsfby.com:8010/	False	
+weaver_e_office.yaml	泛微-EOffice	http://oa.hcsfby.com:8010/	False	
+weaver_e_office.yaml	泛微-EOffice	http://cjgtest.gljiatianxia.com:8010/	False	
+weaver_e_office.yaml	泛微-EOffice	http://www.qzzyyy.com:8010/	False	
+weaver_e_office.yaml	泛微-EOffice	http://222.218.124.28:8010/	False	
+weaver_e_office.yaml	泛微-EOffice	http://weixin.hcsfby.com:8010/	False	
+weaver_e_office.yaml	泛微-EOffice	http://tjwc.hcsfby.com:8010/	False	
+weaver_e_office.yaml	泛微-EOffice	http://111.59.121.238:8010/	False	
+weaver_e_office.yaml	泛微-EOffice	http://116.9.163.83:8010/	False	
+yonyou_u8_oa.yaml	用友-OA	http://210.36.247.224:6901/	False	
+yonyou_u8_oa.yaml	用友-OA	http://202.199.32.60:8080/	False	apache axis,用友 grp-u8
+yonyou_u8_oa.yaml	用友-OA	http://cw.syu.edu.cn:8080/	False	apache axis,用友 grp-u8
+yonyou_u8_oa.yaml	用友-OA	http://47.108.25.40:8089/	True	用友-u8-cloud,用友-oa
+yonyou_u8_oa.yaml	用友-OA	http://yqss.51vj.net:8088/	True	用友-u8-cloud,用友-oa
+yonyou_u8_oa.yaml	用友-OA	http://cwcapp.ylu.cn:6901/	False	
+yonyou_u8_oa.yaml	用友-OA	http://caiwu.syu.edu.cn:8080/	False	apache axis,用友 grp-u8
+yonyou_u8_oa.yaml	用友-OA	http://183.215.22.206:8088/	True	用友-u8-cloud,用友-oa
+yonyou_u8_oa.yaml	用友-OA	http://121.40.95.47:8088/	True	用友-u8-cloud,用友-oa
+yonyou_u8_oa.yaml	用友-OA	https://193.226.247.99/	False	
+igi.yaml	拓尔思-IGI	http://sti.xizang.gov.cn/hdjl/ldxx/	True	拓尔思-igi
+igi.yaml	拓尔思-IGI	http://cx.guizhou.gov.cn/view/	True	拓尔思-igi
+igi.yaml	拓尔思-IGI	http://yjj.guizhou.gov.cn/gzcy/	True	拓尔思-igi
+igi.yaml	拓尔思-IGI	http://rfb.guizhou.gov.cn/gzcy/	True	拓尔思-igi
+igi.yaml	拓尔思-IGI	http://mzw.guizhou.gov.cn/hdjl/	True	拓尔思-igi
+igi.yaml	拓尔思-IGI	https://dsj.hainan.gov.cn/jysj/	True	拓尔思-igi
+igi.yaml	拓尔思-IGI	https://cx.guizhou.gov.cn/view/	True	拓尔思-igi
+igi.yaml	拓尔思-IGI	https://whhly.guizhou.gov.cn/hdjl/	True	拓尔思-igi
+igi.yaml	拓尔思-IGI	https://mzw.guizhou.gov.cn/hdjl/	True	拓尔思-igi
+igi.yaml	拓尔思-IGI	https://fgw.guizhou.gov.cn/hdjl/	True	拓尔思-igi
+weblogic.yaml	WebLogic-Server	http://zp.gxjsxy.cn/	False	
+weblogic.yaml	WebLogic-Server	http://presolvemaps.app.yuchai.com/sso/	False	oracle-oam,oracle-oam
+weblogic.yaml	WebLogic-Server	http://precbschicago.sso.app.yuchai.com/sso/	False	oracle-oam,oracle-oam
+weblogic.yaml	WebLogic-Server	http://preapi.pay.app.yuchai.com/sso/	False	oracle-oam,oracle-oam
+weblogic.yaml	WebLogic-Server	http://preaomenduchangmeinvheguanguoye.analytics.app.yuchai.com/sso/	False	oracle-oam,oracle-oam
+weblogic.yaml	WebLogic-Server	http://thoby.uat.app.yuchai.com/sso/	False	oracle-oam,oracle-oam
+weblogic.yaml	WebLogic-Server	http://preonestdv.app.yuchai.com/sso/	False	oracle-oam,oracle-oam
+weblogic.yaml	WebLogic-Server	http://prebet365aomen.vdi.app.yuchai.com/sso/	False	oracle-oam,oracle-oam
+weblogic.yaml	WebLogic-Server	http://prebaijialekaihuhuangguantouzhuwanfa.report.app.yuchai.com/sso/	False	oracle-oam,oracle-oam
+weblogic.yaml	WebLogic-Server	http://pre.somali.app.yuchai.com/sso/	False	oracle-oam,oracle-oam
+ssl_vpn.yaml	奇安信-SSLVPN	https://oa.bsdw.com.cn:4433/	False	
+ssl_vpn.yaml	奇安信-SSLVPN	https://116.1.145.28:4430/	False	
+ssl_vpn.yaml	奇安信-SSLVPN	https://oa.glwyy.org.cn:4430/	False	
+ssl_vpn.yaml	奇安信-SSLVPN	https://shitang.zglzyc.com:64443/	False	
+ssl_vpn.yaml	奇安信-SSLVPN	https://210.36.136.52/	False	
+ssl_vpn.yaml	奇安信-SSLVPN	https://bkjr.bsnyjt.com:4433/	False	
+ssl_vpn.yaml	奇安信-SSLVPN	https://wbb.glwyy.org.cn:4430/	False	
+ssl_vpn.yaml	奇安信-SSLVPN	https://111.59.69.185:64443/	True	奇安信-sslvpn
+ssl_vpn.yaml	奇安信-SSLVPN	https://qyh.zglzyc.com:64443/	False	
+ssl_vpn.yaml	奇安信-SSLVPN	https://vpn.gxufe.edu.cn/	False	
+z-suite.yaml	永洪-BI	https://lqdm-scrm.dflzm.com/bi/	True	永洪-bi
+z-suite.yaml	永洪-BI	http://lqdm-scrm.dflzm.com/bi/	False	
+z-suite.yaml	永洪-BI	http://go.dflzm.com/bi/	False	
+z-suite.yaml	永洪-BI	https://xtbg.cptc56.com:9004/bi/	False	
+z-suite.yaml	永洪-BI	https://14.103.114.176/bi/	False	
+z-suite.yaml	永洪-BI	https://lqdm-scrm-uat.dflzm.com/bi/	True	永洪-bi
+z-suite.yaml	永洪-BI	http://lqdm-scrm-uat.dflzm.com/bi/	False	
+z-suite.yaml	永洪-BI	https://go.dflzm.com/bi/	True	永洪-bi
+z-suite.yaml	永洪-BI	https://114.255.212.50:9004/bi/	False	
+z-suite.yaml	永洪-BI	https://bi.cptc56.com:9004/bi/	False	
+empirecms.yaml	帝国CMS	http://www.gxwzgh.cn/search/	True	帝国cms
+empirecms.yaml	帝国CMS	http://www.haxuchang.jcy.gov.cn/search/	True	帝国cms
+empirecms.yaml	帝国CMS	http://www.wzhh120.com/search/	True	帝国cms
+empirecms.yaml	帝国CMS	http://36.138.164.218/mobile/news/	True	帝国cms
+empirecms.yaml	帝国CMS	https://www.bjsubway.com/mobile/news/	False	
+empirecms.yaml	帝国CMS	http://gxwzgh.cn/search/	True	帝国cms
+empirecms.yaml	帝国CMS	http://wzhh120.com/search/	True	帝国cms
+empirecms.yaml	帝国CMS	http://116.9.123.153/search/	True	帝国cms
+empirecms.yaml	帝国CMS	http://36.138.164.218/news/	True	帝国cms
+empirecms.yaml	帝国CMS	https://bjsubway.com/mobile/news/	False	
+wcm.yaml	拓尔思-WCM	http://hycloudtest.trscd.com.cn/gov/app/	False	
+wcm.yaml	拓尔思-WCM	http://hycloudtest.trscd.com.cn/gov/	False	
+wcm.yaml	拓尔思-WCM	http://xf.tmuyun.com/wcm/app/	True	拓尔思-wcm
+wcm.yaml	拓尔思-WCM	https://xf.tmuyun.com/wcm/	True	拓尔思-wcm
+wcm.yaml	拓尔思-WCM	http://qlzj.tmuyun.com/wcm/	True	拓尔思-wcm
+wcm.yaml	拓尔思-WCM	https://hycloudtest.trscd.com.cn/gov/app/	False	
+wcm.yaml	拓尔思-WCM	https://hycloudtest.trscd.com.cn/gov/	False	
+wcm.yaml	拓尔思-WCM	http://xf.tmuyun.com/wcm/	True	拓尔思-wcm
+wcm.yaml	拓尔思-WCM	https://xf.tmuyun.com/wcm/app/	True	拓尔思-wcm
+wcm.yaml	拓尔思-WCM	https://i.tmuyun.com/wcm/	True	拓尔思-wcm
+erds.yaml	讯投-ERDS	https://xuntou.net:8688/api/login/	True	讯投-erds
+erds.yaml	讯投-ERDS	https://119.147.202.16:7007/dict/login/	True	讯投-erds
+erds.yaml	讯投-ERDS	https://101.200.85.37:8688/api/login/	True	讯投-erds
+erds.yaml	讯投-ERDS	https://dict.thinktrader.net/api/login/	True	讯投-erds
+erds.yaml	讯投-ERDS	http://119.147.202.20/api/login/	True	讯投-erds
+erds.yaml	讯投-ERDS	https://xuntou.net:7007/dict/login/	True	讯投-erds
+erds.yaml	讯投-ERDS	https://101.200.85.37:7007/dict/login/	True	讯投-erds
+erds.yaml	讯投-ERDS	https://218.16.123.137:7007/dict/login/	True	讯投-erds
+erds.yaml	讯投-ERDS	https://218.16.123.137:8688/api/login/	True	讯投-erds
+erds.yaml	讯投-ERDS	https://code.xuntou.net/api/login/	True	讯投-erds
+sslvpn_4.yaml	Array-SSL-VPN	https://121.36.107.210/prx/000/	False	
+sslvpn_4.yaml	Array-SSL-VPN	https://rtc-stream-demo.meeting.shine.com.cn/prx/	False	
+sslvpn_4.yaml	Array-SSL-VPN	https://220.249.41.23/prx/000/	False	
+sslvpn_4.yaml	Array-SSL-VPN	https://ssh.hljgd.net/prod-api/	False	
+sslvpn_4.yaml	Array-SSL-VPN	https://ssh.hljgd.net/register/	False	
+sslvpn_4.yaml	Array-SSL-VPN	https://121.36.107.210/prx/	False	
+sslvpn_4.yaml	Array-SSL-VPN	https://rtc-stream-demo.meeting.shine.com.cn/prx/000/	False	
+sslvpn_4.yaml	Array-SSL-VPN	https://220.249.41.23:9443/prx/000/	False	
+sslvpn_4.yaml	Array-SSL-VPN	https://avpn.unicompayment.com/prx/000/	False	
+sslvpn_4.yaml	Array-SSL-VPN	https://ssh.hljgd.net/docs/	False	
+iam.yaml	竹云-IAM	http://cmp.cctv.com/apis/	False	
+iam.yaml	竹云-IAM	https://101.129.23.55/portal/	False	
+iam.yaml	竹云-IAM	http://cms-auth.cctvnews.cctv.com/login/	False	
+iam.yaml	竹云-IAM	http://101.129.23.74/	False	
+iam.yaml	竹云-IAM	https://pan.cctv.cn/	False	
+iam.yaml	竹云-IAM	https://cmp.cctv.cn/portal/	False	
+iam.yaml	竹云-IAM	https://cmp.cctv.cn/api/	False	
+iam.yaml	竹云-IAM	https://101.129.23.55/api/	False	
+iam.yaml	竹云-IAM	http://cmp.cctv.com/portal/	False	
+iam.yaml	竹云-IAM	https://101.129.23.74/	False	
+goahead.yaml	Embedthis GoAhead	https://42.180.254.142:40443/	False	
+goahead.yaml	Embedthis GoAhead	https://50.234.151.72/help/En/	False	
+goahead.yaml	Embedthis GoAhead	https://12.7.30.110/help/	False	
+goahead.yaml	Embedthis GoAhead	https://204.133.175.230/help/	False	
+goahead.yaml	Embedthis GoAhead	https://128.92.162.180/help/	False	
+goahead.yaml	Embedthis GoAhead	http://42.180.254.142:40080/	False	
+goahead.yaml	Embedthis GoAhead	https://12.153.246.86/help/En/	False	
+goahead.yaml	Embedthis GoAhead	https://12.155.60.9/help/En/	False	
+goahead.yaml	Embedthis GoAhead	https://24.153.202.13/help/	False	
+goahead.yaml	Embedthis GoAhead	https://12.148.90.238/help/	False	
+haiyun.yaml	拓尔思-政府网站集约化	https://zwgk.guizhou.gov.cn/IGI/nbhd/register/	False	
+haiyun.yaml	拓尔思-政府网站集约化	https://jkj.guizhou.gov.cn/IGI/nbhd/	False	
+haiyun.yaml	拓尔思-政府网站集约化	https://whhly.guizhou.gov.cn/IGI/nbhd/	False	
+haiyun.yaml	拓尔思-政府网站集约化	https://wsg.guizhou.gov.cn/IGI/opinion/	False	
+haiyun.yaml	拓尔思-政府网站集约化	http://jyglj.guizhou.gov.cn/IGI/nbhd/	False	
+haiyun.yaml	拓尔思-政府网站集约化	https://zwgk.guizhou.gov.cn/IGI/nbhd/solr/	False	
+haiyun.yaml	拓尔思-政府网站集约化	http://yjj.guizhou.gov.cn/IGI/nbhd/	False	
+haiyun.yaml	拓尔思-政府网站集约化	https://nyj.guizhou.gov.cn/IGI/nbhd/	False	
+haiyun.yaml	拓尔思-政府网站集约化	https://wsg.guizhou.gov.cn/IGI/nbhd/	False	
+haiyun.yaml	拓尔思-政府网站集约化	https://jr.guizhou.gov.cn/IGI/nbhd/	False	
+springboot.yaml	SpringBoot	https://110.72.47.44:8000/view/	False	
+springboot.yaml	SpringBoot	https://222.84.136.178:24001/portal/	True	springboot,springboot actuator
+springboot.yaml	SpringBoot	http://www.glzyjn.com/gateway/	True	springboot actuator
+springboot.yaml	SpringBoot	http://221.7.197.180:8060/api/	False	
+springboot.yaml	SpringBoot	https://plat.sgmwsales.com/plat/	False	
+springboot.yaml	SpringBoot	https://222.84.136.178/portal/	False	
+springboot.yaml	SpringBoot	https://www.glzyjn.com/gateway/	True	springboot,springboot actuator
+springboot.yaml	SpringBoot	http://wstzfw.swt.gxzf.gov.cn:8060/api/	False	
+springboot.yaml	SpringBoot	http://219.159.80.134:9000/app/	False	
+springboot.yaml	SpringBoot	https://219.159.80.134:9443/app/	True	springboot
+actuator.yaml	SpringBoot Actuator	http://apollo.miaowatech.cn:8083/	True	springboot,springboot actuator
+actuator.yaml	SpringBoot Actuator	http://jpom.miaowatech.cn:8180/	False	
+actuator.yaml	SpringBoot Actuator	http://mq.miaowatech.cn:8082/	True	springboot,springboot actuator
+actuator.yaml	SpringBoot Actuator	http://apollo.miaowatech.cn:8082/	True	springboot,springboot actuator
+actuator.yaml	SpringBoot Actuator	http://claw.gp88.top:3048/	True	springboot actuator
+actuator.yaml	SpringBoot Actuator	http://jpom.miaowatech.cn:8083/	True	springboot,springboot actuator
+actuator.yaml	SpringBoot Actuator	http://apollo.miaowatech.cn:8180/	False	
+actuator.yaml	SpringBoot Actuator	http://xjob.miaowatech.cn:8082/	True	springboot,springboot actuator
+actuator.yaml	SpringBoot Actuator	http://jpom.miaowatech.cn:8082/	True	springboot,springboot actuator
+actuator.yaml	SpringBoot Actuator	http://117.72.28.68:8083/	True	springboot,springboot actuator

@@ -1,0 +1,31 @@
+name: fingerprint-wanhusoft--ezoffice
+detail:
+  vendor: 477674ab-9fed-4276-9d32-cca15e093053
+  product: 3629efbd-1fa8-4313-b6e4-9800c46a1bbb
+  fingerprint:
+    name: 万户-OA
+    cpe: wanhusoft:ezoffice
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  kw_in_body_00:
+    request:
+      method: GET
+      path: /
+    expression: |-
+      (response.body_string.contains('defaultroot/themes') && response.body_string.contains("defaultroot/scripts")) ||
+      (response.headers['Set-Cookie'].contains('OASESSIONID') && response.body_string.contains('defaultroot'))
+
+  kw_in_body_01:
+    request:
+      method: GET
+      path: /
+    expression: |-
+      response.body_string.contains('window.location') && response.body_string.contains('/defaultroot/login.jsp')
+expression: kw_in_body_00() || kw_in_body_01()
+
+# FOFA QUERY
+# app="万户网络-ezOFFICE"
+# http://oa.cctaa.cn/

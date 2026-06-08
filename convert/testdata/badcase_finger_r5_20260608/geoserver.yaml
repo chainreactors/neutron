@@ -1,0 +1,42 @@
+name: fingerprint-geoserver--geoserver
+detail:
+  vendor: 82f90937-b012-4914-b366-3737673c7f4e
+  product: ff1d4c5b-dcc1-4e55-af49-3e31536b1735
+  fingerprint:
+    name: GeoServer
+    cpe: geoserver:geoserver
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+payloads:
+  payloads:
+    web:
+      entry: r"/"
+    server:
+      entry: r"/geoserver/"
+
+rules:
+  kw_in_body:
+    request:
+      method: GET
+      path: "{{entry}}web/"
+    expression: |
+      response.body_string.contains('org.geoserver.web')
+    output:
+      # TODO: 兼容云图
+      path: entry
+  version_detect:
+    request:
+      method: GET
+      path: "{{entry}}web/"
+    expression: |
+      '<strong>(?P<version>[0-9\\.]+)'.matches(response.body_string)
+    output:
+      search: |
+        '<strong>(?P<version>[0-9\\.]+)'.submatch(response.body_string)
+      version: search['version']
+expression: kw_in_body() && (version_detect() || true)
+
+# Fofa Query
+# app="GeoServer"
+# http://82.76.36.89:30047/

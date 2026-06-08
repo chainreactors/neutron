@@ -1,0 +1,30 @@
+name: fingerprint-szjocat--facial_love_cloud_platform
+detail:
+  vendor: a395af0a-c174-4508-9ab0-4978757942c6
+  product: 7a3f7086-b9d5-464c-b031-305dcb3aeb4a
+  fingerprint:
+    name: 脸爱云一脸通智慧管理平台
+    cpe: szjocat:facial_love_cloud_platform
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  kw_in_body:
+    request:
+      method: GET
+      path: /
+    expression: |-
+      response.body_string.contains("脸爱云")
+  kw_in_body1:
+    request:
+      method: GET
+      path: /
+    expression: |-
+      response.body_string.contains("View/SystemMng/PwdChanges.aspx")
+  
+expression:  (kw_in_body() || kw_in_body1())
+
+# Fofa Query
+# body='View/UserReserved/UserReservedTest.aspx'
+# http://113.96.110.33:1000/

@@ -1,0 +1,18 @@
+name: fingerprint-embedthis--goahead
+detail:
+  vendor: f28ec7e6-62c7-4e0c-9897-04922ca64470
+  product: 13691e5c-73ed-40e8-8d3b-4b22734423d6
+  fingerprint:
+    name: Embedthis GoAhead
+    cpe: embedthis:goahead
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  kw_in_server:
+    request:
+      method: GET
+      path: /
+    expression: response.headers['server'].icontains('GoAhead')
+expression: kw_in_server()

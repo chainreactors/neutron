@@ -1,0 +1,33 @@
+name: fingerprint-thinktrader--erds
+detail:
+  vendor: ee169a72-d89d-4907-8bb2-890a801aaa9b
+  product: ef80fbc9-5494-4695-8ae7-97b2229eeb73
+  fingerprint:
+    name: 讯投-ERDS
+    cpe: thinktrader:erds
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  kw_in_body:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: response.body_string.contains("<p>4.成功登陆ERDS系统。</p>")
+expression: kw_in_body()
+
+# FOFA QUERY
+# body="<p>4.成功登陆ERDS系统。</p>"
+# https://114.245.241.82:8088/
+# http://175.25.41.229:9001/
+# https://qmt-level2.ciccwm.com/
+# http://175.25.41.71:9001/
+# https://175.25.41.71:8088/
+# https://175.25.41.229:8000/
+# https://175.25.41.221:8812/
+# https://210.14.143.251:8853/
+# https://175.25.41.217:8088/
+# https://175.25.41.251:8855/

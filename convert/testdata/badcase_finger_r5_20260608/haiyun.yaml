@@ -1,0 +1,23 @@
+name: fingerprint-trs--haiyun
+detail:
+  vendor: 8202a756-24a6-476c-aa74-1b6ead3618a1
+  product: 8778a35a-150e-428e-9752-55ed761c1f46
+  fingerprint:
+    name: 拓尔思-政府网站集约化
+    cpe: trs:haiyun
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  igi_contains:
+    request:
+      method: GET
+      path: /IGI/
+      follow_redirects: false
+    expression: |
+            response.raw_header.bcontains(b'/ids/LoginServlet')
+expression: igi_contains()
+
+# FOFA QUERY
+# https://www.hubei.gov.cn

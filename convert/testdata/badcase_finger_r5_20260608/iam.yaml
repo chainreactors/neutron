@@ -1,0 +1,37 @@
+name: fingerprint-bamboocloud--iam
+detail:
+  vendor: 303c8811-8dfc-40d7-9dad-f4caddb7490e
+  product: 68927fcc-43ca-4a78-bf94-77c2fd30e259
+  fingerprint:
+    name: 竹云-IAM
+    cpe: bamboocloud:iam
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  r0:
+    expression: response.body_string.contains('/idp/AuthnEngine')
+
+  kw_in_body:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: |-
+      response.body_string.contains("./static/config.js")
+
+  kw_in_config:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /static/config.js
+    expression: |-
+      response.body_string.contains("idpUrl") && response.body_string.contains("authCenter")
+expression: r0() || ( kw_in_body() && kw_in_config() )
+
+# Fofa Query
+# body="/idp/AuthnEngine"
+# https://iam.hnchasing.com/

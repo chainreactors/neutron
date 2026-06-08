@@ -1,0 +1,88 @@
+name: fingerprint-yonyou--yonyou_u8_oa
+detail:
+  vendor: 72c31530-a847-40bc-be70-8753373ce523
+  product: 679bd016-4ef6-4949-a850-c6e08778c25d
+  fingerprint:
+    name: 用友-OA
+    cpe: yonyou:yonyou_u8_oa
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  basic0_6976:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: "response.title_string.icontains(\"\u7528\u53CBGRP-U8 \u9AD8\u6821\
+      \u5185\u63A7\u7BA1\u7406\u8F6F\u4EF6\")"
+  basic10_3736:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: "response.title_string.icontains(\"\u7528\u53CBgrp-u8\")"
+  basic1_6975:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: response.body_string.icontains("logo/images/ufida_")
+  basic2_6974:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: response.body_string.icontains("/ext-js/images/usg")
+  basic3_3767:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: '"(?i)window.location.replace(\"login.jsp?up=1\")".matches(response.body_string)'
+  basic4_3765:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: response.body_string.icontains("javascript/bw8.js")
+  basic5_3764:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: response.body_string.icontains("var servervendor = 'yonyouupcn")
+  basic6_3763:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: "response.body_string.icontains(\"\u5F00\u542Fu8 cloud\u4E91\u7AEF\
+      \u4E4B\u65C5\")"
+  basic8_3761:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: "response.body_string.icontains(\"\u7528\u53CBGRP-U8\u884C\u653F\u4E8B\
+      \u4E1A\u5185\u63A7\u7BA1\u7406\u8F6F\u4EF6\")"
+  basic9_3748:
+    request:
+      cache: true
+      follow_redirects: true
+      method: GET
+      path: /
+    expression: response.body_string.icontains("getFirstU8Accid")
+expression: (basic0_6976()) || (basic1_6975()) || (basic2_6974()) || (basic3_3767())
+  || (basic4_3765()) || (basic5_3764()) || (basic6_3763()) || (basic8_3761())
+  || (basic9_3748()) || (basic10_3736())

@@ -1,0 +1,38 @@
+name: fingerprint-empiresoft--empirecms
+detail:
+  vendor: a64063fe-62aa-4170-94d7-630d5350bbfe
+  product: 075e6881-faa2-492c-b696-4b848918c3cb
+  fingerprint:
+    name: 帝国CMS
+    cpe: empiresoft:empirecms
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  index_contains:
+    expression: response.title_string.contains('EmpireCMS') ||
+                response.body_string.contains('EmpireCMS</a></strong>')
+  get_version:
+    request:
+      cache: true
+      method: GET
+      path: /
+    expression: response.status == 200 && response.body_string.contains("EmpireCMS</a></strong>") && response.body_string.contains("</font></strong>&nbsp; &copy;")
+    output:
+      search: |
+        r'">(?P<version>.+?)</font></strong>&nbsp; &copy;'.submatch(response.body_string)
+      version: search['version']
+  get_version2:
+    request:
+      method: GET
+      path: /e/admin/adminstyle/1/page/about.htm
+    expression: response.status == 200 && response.body_string.contains("&nbsp;Version ")
+    output:
+      search: |
+        r'nbsp;Version (?P<version>.+?)</font>'.submatch(response.body_string)
+      version: search['version']
+expression: index_contains() && (get_version() || get_version2() || true)
+
+# Fofa Query
+# app="帝国软件-EmpireCMS"

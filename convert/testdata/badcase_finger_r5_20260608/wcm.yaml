@@ -1,0 +1,31 @@
+name: fingerprint-trs--wcm
+detail:
+  vendor: 8202a756-24a6-476c-aa74-1b6ead3618a1
+  product: 81cb92ce-0af5-463f-9a90-c953e7c9a276
+  fingerprint:
+    name: 拓尔思-WCM
+    cpe: trs:wcm
+    version: '{{version}}'
+  path: '{{path}}'
+transport: http
+
+rules:
+  index_contains:
+    expression: response.body_string.contains('WCMAnt:param=') ||
+                response.body_string.contains('URL=/wcm') ||
+                response.body_string.icontains('window.location.href = /wcm;') ||
+                response.raw_header.ibcontains(b"com.trs.idm.coSessionId")
+  version_detect:
+    request:
+      method: GET
+      path: /wcm/app/js/source/wcmlib/WCMConstants.js
+    expression: true
+    output:
+      search: |
+          "WCM v(?P<version>[0-9\\.]+)'".submatch(response.body_string)
+      version: search['version']
+expression: index_contains() && version_detect()
+
+# FOFA QUERY
+# app="拓尔思-WCM"
+# http://27.17.40.76/
