@@ -18,6 +18,8 @@ const (
 	FileProtocol
 	// name:http
 	HTTPProtocol
+	// name:ssl
+	SSLProtocol
 	InvalidProtocol
 )
 
@@ -27,6 +29,7 @@ var protocolMappings = map[ProtocolType]string{
 	FileProtocol:    "file",
 	HTTPProtocol:    "http",
 	NetworkProtocol: "network",
+	SSLProtocol:     "ssl",
 }
 
 func (t ProtocolType) String() string {
