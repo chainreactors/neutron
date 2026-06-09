@@ -80,6 +80,15 @@ func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extr
 
 // ExecuteWithResults connects to each target, performs the TLS handshake and
 // runs the operators against the certificate data.
+//
+// Handshake/dial errors are deliberately swallowed: each ssl request block is
+// an independent probe (TLS templates routinely fan out across tls10/tls11/
+// tls12/tls13 sub-requests, where 3 out of 4 are expected to fail on any
+// given server). Propagating the error would abort the remaining sub-requests
+// inside the same executer loop, defeating templates like nuclei's
+// deprecated-tls / weak-cipher-suites / insecure-cipher-suite-detect. The
+// probe is still observable: a synthetic event with probe_status=false is
+// emitted so DSL matchers and the caller's LogEvent see the miss.
 func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues, previous map[string]interface{}, callback protocols.OutputEventCallback) error {
 	var globalVars map[string]interface{}
 	var scanInput string
@@ -89,7 +98,26 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 	}
 
 	target := r.resolveTarget(scanInput, common.MergeMaps(globalVars, dynamicValues))
-	return r.executeTarget(input, target, dynamicValues, previous, callback)
+	if err := r.executeTarget(input, target, dynamicValues, previous, callback); err != nil {
+		// Emit a probe_status=false event so the executer sees something for
+		// this sub-request — matchers/extractors that key off probe_status
+		// can still fire, and the next sub-request gets a chance to run.
+		data := map[string]interface{}{
+			"host":         target,
+			"matched":      target,
+			"type":         r.Type().String(),
+			"probe_status": false,
+			"error":        err.Error(),
+		}
+		for k, v := range previous {
+			data[k] = v
+		}
+		for k, v := range dynamicValues {
+			data[k] = v
+		}
+		callback(&protocols.InternalWrappedEvent{InternalEvent: data})
+	}
+	return nil
 }
 
 func (r *Request) resolveTarget(input string, vars map[string]interface{}) string {
@@ -127,6 +155,27 @@ func (r *Request) executeTarget(input *protocols.ScanContext, target string, dyn
 	}
 	if v := tlsVersionValue(r.MaxVersion); v != 0 {
 		cfg.MaxVersion = v
+	}
+	// When the template explicitly pins a TLS version, widen the cipher list.
+	// Two distinct reasons:
+	//   - TLS 1.1 and below: Go 1.22+ removed most CBC/3DES/RC4 suites from
+	//     `tls.CipherSuites()`. Without `InsecureCipherSuites()` we can't even
+	//     finish a handshake against legacy servers, defeating deprecated-tls
+	//     and weak-cipher-suites templates.
+	//   - TLS 1.2 pinned: the insecure-cipher-suite-detect template enumerates
+	//     RC4/NULL/EXPORT suites on 1.2 servers — we need the same widening
+	//     so we can actually negotiate them when the target offers them.
+	// We DON'T widen when no version is pinned at all (default modern probe):
+	// the default behavior should match a normal HTTPS client.
+	if cfg.MinVersion != 0 || cfg.MaxVersion != 0 {
+		all := cfg.CipherSuites
+		for _, c := range tls.CipherSuites() {
+			all = append(all, c.ID)
+		}
+		for _, c := range tls.InsecureCipherSuites() {
+			all = append(all, c.ID)
+		}
+		cfg.CipherSuites = all
 	}
 
 	conn, err := r.dialTLS(target, cfg)
