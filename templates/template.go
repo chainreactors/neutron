@@ -1,10 +1,12 @@
 package templates
 
 import (
+	"fmt"
+
+	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/neutron/protocols/executer"
-	"github.com/chainreactors/neutron/protocols/http"
-	"github.com/chainreactors/neutron/protocols/network"
+	"gopkg.in/yaml.v3"
 )
 
 // Classification contains the vulnerability classification data for a template.
@@ -51,18 +53,22 @@ type Info struct {
 	Zombie string `json:"zombie,omitempty" yaml:"zombie,omitempty"`
 }
 
+type rawProtocolEntry struct {
+	key  string
+	node *yaml.Node
+}
+
 type Template struct {
 	// ID is the unique id for the template.
-	// A good ID uniquely identifies what the requests in the template are doing.
 	Id string `json:"id" yaml:"id"`
 
-	// Fingers contains fingerprinting rules for the template (neutron internal field)
+	// Fingers contains fingerprinting rules for the template
 	Fingers []string `json:"finger,omitempty" yaml:"finger,omitempty"`
 
-	// Chains contains chaining rules for the template (neutron internal field)
+	// Chains contains chaining rules for the template
 	Chains []string `json:"chain,omitempty" yaml:"chain,omitempty"`
 
-	// Opsec specifies if the template should be executed in opsec mode (neutron internal field)
+	// Opsec specifies if the template should be executed in opsec mode
 	Opsec bool `json:"opsec,omitempty" yaml:"opsec,omitempty"`
 
 	// Info contains metadata information about the template
@@ -71,21 +77,13 @@ type Template struct {
 	// Variables contains any variables for the current template
 	Variables protocols.Variable `yaml:"variables,omitempty" json:"variables,omitempty"`
 
-	// HTTP contains the http request to make in the template
-	RequestsHTTP []*http.Request `json:"http,omitempty" yaml:"http,omitempty"`
+	// rawProtocols stores unparsed YAML nodes for registered protocol keys,
+	// preserving YAML key order for deterministic request sequencing.
+	rawProtocols []rawProtocolEntry
 
-	// Requests contains the http request to make in the template (legacy compatibility)
-	// WARNING: 'requests' will be deprecated and will be removed in a future release. Please use 'http' instead.
-	Requests []*http.Request `json:"requests,omitempty" yaml:"requests,omitempty"`
-
-	// Network contains the network request to make in the template
-	RequestsNetwork []*network.Request `json:"network,omitempty" yaml:"network,omitempty"`
-
-	// TCP contains the TCP network request to make in the template (alias for network)
-	RequestsTCP []*network.Request `json:"tcp,omitempty" yaml:"tcp,omitempty"`
-
-	// UDP contains the UDP network request to make in the template (alias for network)
-	RequestsUDP []*network.Request `json:"udp,omitempty" yaml:"udp,omitempty"`
+	// parsedRequests holds the deserialized protocol requests, populated by
+	// Parse() or Compile(). Accessible via GetRequests().
+	parsedRequests []protocols.Request
 
 	// TotalRequests is the total number of requests for the template.
 	TotalRequests int `yaml:"-" json:"-"`
@@ -93,12 +91,68 @@ type Template struct {
 	Executor *executer.Executer `yaml:"-" json:"-"`
 }
 
-func (t *Template) GetRequests() []*http.Request {
-	if len(t.RequestsHTTP) > 0 {
-		return t.RequestsHTTP
+// knownFields lists Template field YAML keys that are NOT protocol blocks.
+var knownFields = map[string]bool{
+	"id": true, "finger": true, "chain": true, "opsec": true,
+	"info": true, "variables": true,
+}
+
+func (t *Template) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping node for template")
 	}
-	if len(t.Requests) > 0 {
-		return t.Requests
+
+	t.rawProtocols = nil
+
+	// Split YAML content into known fields and protocol blocks.
+	filteredContent := make([]*yaml.Node, 0, len(value.Content))
+	for i := 0; i < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		val := value.Content[i+1]
+		if protocols.IsRegisteredProtocol(key) {
+			t.rawProtocols = append(t.rawProtocols, rawProtocolEntry{key: key, node: val})
+		} else {
+			filteredContent = append(filteredContent, value.Content[i], val)
+		}
+	}
+
+	filtered := *value
+	filtered.Content = filteredContent
+
+	type templateAlias Template
+	return filtered.Decode((*templateAlias)(t))
+}
+
+// Parse deserializes the raw protocol YAML blocks into Request objects without
+// compiling them. Compile() calls Parse() internally; call Parse() directly
+// only when you need access to requests before compilation.
+func (t *Template) Parse() error {
+	t.parsedRequests = nil
+	for _, entry := range t.rawProtocols {
+		parsed, err := protocols.ParseProtocolRequests(entry.key, entry.node)
+		if err != nil {
+			return fmt.Errorf("parse %s protocol: %w", entry.key, err)
+		}
+		for i, req := range parsed {
+			if req == nil {
+				return fmt.Errorf("%s request at index %d is nil", entry.key, i)
+			}
+		}
+		t.parsedRequests = append(t.parsedRequests, parsed...)
 	}
 	return nil
+}
+
+// GetRequests returns the parsed protocol requests. Available after Parse() or
+// Compile(). The concrete types depend on which protocol packages are imported.
+func (t *Template) GetRequests() []protocols.Request {
+	return t.parsedRequests
+}
+
+// GetOperators returns the compiled operators from all protocol requests.
+func (t *Template) GetOperators() []*operators.Operators {
+	if t.Executor == nil {
+		return nil
+	}
+	return t.Executor.GetCompiledOperators()
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/chainreactors/neutron/protocols/http"
+
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )

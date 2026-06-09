@@ -3,6 +3,7 @@ package convert
 import (
 	"testing"
 
+	nhttp "github.com/chainreactors/neutron/protocols/http"
 	"github.com/chainreactors/neutron/templates"
 )
 
@@ -77,11 +78,12 @@ func TestTemplatesLoadConvertsXray(t *testing.T) {
 	}
 	if err := tmpl.Compile(nil); err != nil {
 		for _, req := range tmpl.GetRequests() {
-			(&req.Operators).Compile()
-			req.CompiledOperators = &req.Operators
+			req.CompileOperators()
 		}
 	}
-	if len(reqs[0].Matchers) == 0 {
+	if httpReq, ok := reqs[0].(*nhttp.Request); !ok {
+		t.Fatalf("expected HTTP request type")
+	} else if len(httpReq.Matchers) == 0 {
 		t.Errorf("expected converted request to have matchers")
 	}
 }

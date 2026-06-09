@@ -40,6 +40,15 @@ func (e *Executer) Options() *protocols.ExecuterOptions {
 	return e.options
 }
 
+// GetCompiledOperators returns compiled operators from all requests.
+func (e *Executer) GetCompiledOperators() []*operators.Operators {
+	var result []*operators.Operators
+	for _, req := range e.requests {
+		result = append(result, req.GetCompiledOperators()...)
+	}
+	return result
+}
+
 // Requests returns the total number of requests the rule will perform
 func (e *Executer) Requests() int {
 	var count int

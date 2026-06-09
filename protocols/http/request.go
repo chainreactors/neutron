@@ -88,6 +88,15 @@ func (r *Request) Type() protocols.ProtocolType {
 	return protocols.HTTPProtocol
 }
 
+func (r *Request) CompileOperators() error {
+	compiled := &r.Operators
+	if err := compiled.Compile(); err != nil {
+		return err
+	}
+	r.CompiledOperators = compiled
+	return nil
+}
+
 // Match matches a generic data response again a given matcher
 func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []string) {
 	item, ok := r.getMatchPart(matcher.Part, data)

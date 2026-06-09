@@ -2,7 +2,6 @@ package templates
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -24,50 +23,20 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 	if t == nil {
 		return errors.New("template is nil")
 	}
-	var requests []protocols.Request
-	var err error
 	options = templateExecuterOptions(options, t.Variables)
 
-	// Merge tcp and udp fields into RequestsNetwork (aliases support)
-	// FingerprintHub and other tools may use 'tcp' or 'udp' instead of 'network'
-	if len(t.RequestsTCP) > 0 {
-		t.RequestsNetwork = append(t.RequestsNetwork, t.RequestsTCP...)
+	if err := t.Parse(); err != nil {
+		return err
 	}
-	if len(t.RequestsUDP) > 0 {
-		t.RequestsNetwork = append(t.RequestsNetwork, t.RequestsUDP...)
-	}
-
-	if requestHTTP := t.GetRequests(); len(requestHTTP) > 0 {
-		for i, req := range requestHTTP {
-			if req == nil {
-				return fmt.Errorf("http request at index %d is nil", i)
-			}
-			if req.Unsafe {
-				return fmt.Errorf("not impl unsafe request %s", req.Name)
-			}
-			requests = append(requests, req)
-		}
-		t.Executor = executer.NewExecuter(requests, options)
-	}
-	if len(t.RequestsNetwork) > 0 {
-		for i, req := range t.RequestsNetwork {
-			if req == nil {
-				return fmt.Errorf("network request at index %d is nil", i)
-			}
-			requests = append(requests, req)
-		}
-		t.Executor = executer.NewExecuter(requests, options)
-	}
-
-	if t.Executor != nil {
-		err = t.Executor.Compile()
-		if err != nil {
-			return err
-		}
-		t.TotalRequests += t.Executor.Requests()
-	} else {
+	if len(t.parsedRequests) == 0 {
 		return errors.New("cannot compiled any executor")
 	}
+
+	t.Executor = executer.NewExecuter(t.parsedRequests, options)
+	if err := t.Executor.Compile(); err != nil {
+		return err
+	}
+	t.TotalRequests = t.Executor.Requests()
 	return nil
 }
 
