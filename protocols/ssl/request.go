@@ -98,8 +98,10 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 		// Emit a probe_status=false event so the executer sees something for
 		// this sub-request — matchers/extractors that key off probe_status
 		// can still fire, and the next sub-request gets a chance to run.
+		host, port := splitHostPort(target)
 		data := map[string]interface{}{
-			"host":         target,
+			"host":         host,
+			"port":         port,
 			"matched":      target,
 			"type":         r.Type().String(),
 			"probe_status": false,
@@ -111,7 +113,25 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 		for k, v := range dynamicValues {
 			data[k] = v
 		}
-		callback(&protocols.InternalWrappedEvent{InternalEvent: data})
+		if encoded, marshalErr := json.Marshal(map[string]interface{}{
+			"host":         host,
+			"port":         port,
+			"matched":      target,
+			"probe_status": false,
+			"error":        err.Error(),
+		}); marshalErr == nil {
+			data["response"] = string(encoded)
+		}
+		event := &protocols.InternalWrappedEvent{InternalEvent: data}
+		if r.CompiledOperators != nil {
+			result, ok := r.CompiledOperators.Execute(data, r.Match, r.Extract)
+			if ok && result != nil {
+				result.PayloadValues = dynamicValues
+				event.OperatorsResult = result
+				event.Results = r.MakeResultEvent(event)
+			}
+		}
+		callback(event)
 	}
 	return nil
 }

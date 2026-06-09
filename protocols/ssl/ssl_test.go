@@ -6,6 +6,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -225,6 +226,35 @@ func TestSSLExpiredDoesNotMatchNotYetValid(t *testing.T) {
 
 	if data["expired"] != false {
 		t.Fatalf("not-yet-valid certificate should not be marked expired: %+v", data)
+	}
+}
+
+func TestSSLProbeFailureMatchesProbeStatusFalse(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		_, _ = conn.Write([]byte("not tls\r\n"))
+		_ = conn.Close()
+	}()
+	defer func() {
+		_ = ln.Close()
+		<-done
+	}()
+
+	r := newTestRequest(t, []*operators.Matcher{
+		{Type: "dsl", DSL: []string{`probe_status == false`}},
+	})
+	result := runAgainst(t, r, ln.Addr().String())
+	if result == nil || !result.Matched {
+		t.Fatalf("expected probe_status=false matcher to fire, got %+v", result)
 	}
 }
 
