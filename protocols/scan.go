@@ -13,6 +13,13 @@ type ScanContext struct {
 	// exported / configurable fields
 	Input    string
 	Payloads map[string]interface{}
+	// PathPrefix is an optional mount-path prefix applied only to the generated
+	// RootURL variable for this scan (BaseURL stays untouched, so existing
+	// templates that key off BaseURL keep their semantics). Empty leaves
+	// RootURL as scheme://host. Use this when the target host serves the
+	// application under a sub-path (e.g. https://gw/apis/) and templates need
+	// to compute paths relative to that mount point instead of host root.
+	PathPrefix string
 	// Transport, when non-nil, overrides the per-request HTTP transport for this
 	// execution only. The request's compiled http.Client (CheckRedirect, Jar,
 	// Timeout, ...) is preserved via a shallow clone; only the RoundTripper is

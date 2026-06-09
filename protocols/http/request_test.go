@@ -128,6 +128,92 @@ func TestExecuteRequestWithRequestResponse(t *testing.T) {
 	require.NotEmpty(t, capturedEvent.Results[0].Response)
 }
 
+func TestExecuteRootURLUsesScanContextPathPrefix(t *testing.T) {
+	// When the caller sets PathPrefix on the ScanContext, RootURL should expand
+	// to scheme://host + prefix (not the literal scan input). Templates that
+	// compute paths relative to the app's mount point land where the caller
+	// expects, without having to change the template or the scan target.
+	var requested []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		switch r.URL.Path {
+		case "/apis/IGI/":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "mounted-rooturl-match")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "miss: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:   []string{"{{RootURL}}/IGI/"},
+		Method: "GET",
+	}
+	r.Matchers = append(r.Matchers, &operators.Matcher{
+		Type:  "word",
+		Words: []string{"mounted-rooturl-match"},
+	})
+	err := r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}})
+	require.NoError(t, err)
+
+	input := protocols.NewScanContext(server.URL+"/entry/", nil)
+	input.PathPrefix = "/apis/"
+
+	var capturedEvent *protocols.InternalWrappedEvent
+	err = r.ExecuteWithResults(input, map[string]interface{}{}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
+		capturedEvent = event
+	})
+	require.NoError(t, err)
+	require.NotNil(t, capturedEvent)
+	require.True(t, capturedEvent.OperatorsResult.Matched)
+	require.Contains(t, strings.Join(requested, ","), "/apis/IGI/")
+}
+
+func TestExecutePathPrefixDoesNotChangeBaseURL(t *testing.T) {
+	// BaseURL must stay the literal scan input even when PathPrefix is set.
+	// Templates that use {{BaseURL}} (e.g. the standard nuclei vuln idiom)
+	// must keep behaving exactly as before — only RootURL is affected.
+	var requested []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		switch r.URL.Path {
+		case "/entry/IGI/":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "baseurl-match")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "miss: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:   []string{"{{BaseURL}}/IGI/"},
+		Method: "GET",
+	}
+	r.Matchers = append(r.Matchers, &operators.Matcher{
+		Type:  "word",
+		Words: []string{"baseurl-match"},
+	})
+	err := r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}})
+	require.NoError(t, err)
+
+	input := protocols.NewScanContext(server.URL+"/entry/", nil)
+	input.PathPrefix = "/apis/"
+
+	var capturedEvent *protocols.InternalWrappedEvent
+	err = r.ExecuteWithResults(input, map[string]interface{}{}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
+		capturedEvent = event
+	})
+	require.NoError(t, err)
+	require.NotNil(t, capturedEvent)
+	require.True(t, capturedEvent.OperatorsResult.Matched)
+	require.Contains(t, strings.Join(requested, ","), "/entry/IGI/")
+	require.NotContains(t, strings.Join(requested, ","), "/apis/entry/IGI/")
+}
+
 func TestExecuteSkipsUnresolvedDynamicPath(t *testing.T) {
 	var requested []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
