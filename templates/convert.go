@@ -18,17 +18,15 @@ func (t *Template) ToQuery() *dsl.Query {
 		}
 	}
 
-	ops := t.GetOperators()
-	if len(ops) == 0 {
+	// matcher-derived AST
+	requests := t.GetRequests()
+	if len(requests) == 0 {
 		return q
 	}
 
 	var nodes []*dsl.Node
-	for _, op := range ops {
-		if op == nil {
-			continue
-		}
-		rq := op.ToQuery()
+	for _, req := range requests {
+		rq := req.Operators.ToQuery()
 		q.Warnings = append(q.Warnings, rq.Warnings...)
 		q.Errors = append(q.Errors, rq.Errors...)
 		if rq.Node != nil {

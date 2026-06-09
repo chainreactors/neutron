@@ -3,10 +3,10 @@ package templates
 import (
 	"testing"
 
-	_ "github.com/chainreactors/neutron/protocols/network"
 	"gopkg.in/yaml.v3"
 )
 
+// TestTCPUDPFieldAlias 测试 tcp 和 udp 字段作为 network 的别名
 func TestTCPUDPFieldAlias(t *testing.T) {
 	t.Run("TCP field alias", func(t *testing.T) {
 		yamlContent := `
@@ -27,17 +27,30 @@ tcp:
           - "response"
 `
 		var tmpl Template
-		if err := yaml.Unmarshal([]byte(yamlContent), &tmpl); err != nil {
+		err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+		if err != nil {
 			t.Fatalf("Failed to unmarshal template: %v", err)
 		}
 
-		if err := tmpl.Parse(); err != nil {
-			t.Fatalf("Failed to parse template: %v", err)
+		// 验证 tcp 字段被解析
+		if len(tmpl.RequestsTCP) == 0 {
+			t.Error("TCP requests should be parsed from 'tcp' field")
 		}
-		if len(tmpl.GetRequests()) == 0 {
-			t.Error("TCP alias should produce parsed requests")
+
+		// 编译模板
+		err = tmpl.Compile(nil)
+		if err != nil {
+			t.Fatalf("Failed to compile template: %v", err)
 		}
-		t.Logf("TCP alias: %d requests parsed", len(tmpl.GetRequests()))
+
+		// 验证 tcp 请求被合并到 RequestsNetwork
+		if len(tmpl.RequestsNetwork) == 0 {
+			t.Error("TCP requests should be merged into RequestsNetwork after compile")
+		}
+
+		t.Logf("✅ TCP field successfully processed as network alias")
+		t.Logf("   RequestsTCP: %d", len(tmpl.RequestsTCP))
+		t.Logf("   RequestsNetwork: %d", len(tmpl.RequestsNetwork))
 	})
 
 	t.Run("UDP field alias", func(t *testing.T) {
@@ -59,17 +72,30 @@ udp:
           - "response"
 `
 		var tmpl Template
-		if err := yaml.Unmarshal([]byte(yamlContent), &tmpl); err != nil {
+		err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+		if err != nil {
 			t.Fatalf("Failed to unmarshal template: %v", err)
 		}
 
-		if err := tmpl.Parse(); err != nil {
-			t.Fatalf("Failed to parse template: %v", err)
+		// 验证 udp 字段被解析
+		if len(tmpl.RequestsUDP) == 0 {
+			t.Error("UDP requests should be parsed from 'udp' field")
 		}
-		if len(tmpl.GetRequests()) == 0 {
-			t.Error("UDP alias should produce parsed requests")
+
+		// 编译模板
+		err = tmpl.Compile(nil)
+		if err != nil {
+			t.Fatalf("Failed to compile template: %v", err)
 		}
-		t.Logf("UDP alias: %d requests parsed", len(tmpl.GetRequests()))
+
+		// 验证 udp 请求被合并到 RequestsNetwork
+		if len(tmpl.RequestsNetwork) == 0 {
+			t.Error("UDP requests should be merged into RequestsNetwork after compile")
+		}
+
+		t.Logf("✅ UDP field successfully processed as network alias")
+		t.Logf("   RequestsUDP: %d", len(tmpl.RequestsUDP))
+		t.Logf("   RequestsNetwork: %d", len(tmpl.RequestsNetwork))
 	})
 
 	t.Run("Mixed tcp and udp fields", func(t *testing.T) {
@@ -93,16 +119,34 @@ udp:
       - "{{Hostname}}"
 `
 		var tmpl Template
-		if err := yaml.Unmarshal([]byte(yamlContent), &tmpl); err != nil {
+		err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+		if err != nil {
 			t.Fatalf("Failed to unmarshal template: %v", err)
 		}
 
-		if err := tmpl.Parse(); err != nil {
-			t.Fatalf("Failed to parse template: %v", err)
+		// 验证两个字段都被解析
+		if len(tmpl.RequestsTCP) == 0 {
+			t.Error("TCP requests should be parsed")
 		}
-		if len(tmpl.GetRequests()) != 2 {
-			t.Errorf("Expected 2 requests from mixed tcp+udp, got %d", len(tmpl.GetRequests()))
+		if len(tmpl.RequestsUDP) == 0 {
+			t.Error("UDP requests should be parsed")
 		}
-		t.Logf("Mixed: %d requests parsed", len(tmpl.GetRequests()))
+
+		// 编译模板
+		err = tmpl.Compile(nil)
+		if err != nil {
+			t.Fatalf("Failed to compile template: %v", err)
+		}
+
+		// 验证两个请求都被合并到 RequestsNetwork
+		expectedCount := len(tmpl.RequestsTCP) + len(tmpl.RequestsUDP)
+		if len(tmpl.RequestsNetwork) != expectedCount {
+			t.Errorf("Expected %d network requests, got %d", expectedCount, len(tmpl.RequestsNetwork))
+		}
+
+		t.Logf("✅ Mixed TCP/UDP fields successfully processed")
+		t.Logf("   RequestsTCP: %d", len(tmpl.RequestsTCP))
+		t.Logf("   RequestsUDP: %d", len(tmpl.RequestsUDP))
+		t.Logf("   RequestsNetwork: %d", len(tmpl.RequestsNetwork))
 	})
 }

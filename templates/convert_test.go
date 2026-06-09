@@ -5,26 +5,22 @@ import (
 
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/neutron/protocols/executer"
-	protohttp "github.com/chainreactors/neutron/protocols/http"
+	"github.com/chainreactors/neutron/protocols/http"
 )
 
 func makeTemplate(id string, matchers []*operators.Matcher, matchersCond string, metadata map[string]interface{}) *Template {
-	req := &protohttp.Request{}
+	req := &http.Request{}
 	req.Operators = operators.Operators{
 		Matchers:          matchers,
 		MatchersCondition: matchersCond,
 	}
-	options := &protocols.ExecuterOptions{Options: &protocols.Options{}}
-	req.Compile(options)
+	req.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{}})
 
-	t := &Template{
-		Id:             id,
-		Info:           Info{Name: id, Metadata: metadata},
-		parsedRequests: []protocols.Request{req},
+	return &Template{
+		Id:           id,
+		Info:         Info{Name: id, Metadata: metadata},
+		RequestsHTTP: []*http.Request{req},
 	}
-	t.Executor = executer.NewExecuter(t.parsedRequests, options)
-	return t
 }
 
 func TestTemplateToQuery_MetadataOnly(t *testing.T) {

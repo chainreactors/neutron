@@ -69,8 +69,5 @@ func Load(data []byte) (*Template, error) {
 	if err := yaml.Unmarshal(data, tmpl); err != nil {
 		return nil, fmt.Errorf("unmarshal template: %w", err)
 	}
-	if err := tmpl.Parse(); err != nil {
-		return nil, fmt.Errorf("parse template: %w", err)
-	}
 	return tmpl, nil
 }
