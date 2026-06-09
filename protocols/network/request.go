@@ -52,6 +52,8 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 		return matcher.ResultWithMatchedSnippet(matcher.MatchRegex(itemStr))
 	case operators.BinaryMatcher:
 		return matcher.ResultWithMatchedSnippet(matcher.MatchBinary(itemStr))
+	default:
+		return matcher.ResultWithMatchedSnippet(matcher.MatchWithHandler(itemStr, data))
 	}
 	return false, []string{}
 }
@@ -69,6 +71,8 @@ func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extr
 		return extractor.ExtractKval(data)
 	case operators.DSLExtractor:
 		return extractor.ExtractDSL(data)
+	default:
+		return extractor.ExtractWithHandler(item, data)
 	}
 	return nil
 }

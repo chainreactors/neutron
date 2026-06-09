@@ -72,8 +72,8 @@ type Extractor struct {
 	//   - value: >
 	//       []string{".batters | .batter | .[] | .id"}
 	JSON []string `yaml:"json,omitempty" jsonschema:"title=json jq expressions to extract data,description=JSON JQ expressions to evaluate from response part"`
-	// jsonCompiled is the compiled variant
-	//jsonCompiled []*gojq.Code
+
+	compiledData interface{}
 
 	// description: |
 	//   XPath allows using xpath expressions to extract items from html response
@@ -134,17 +134,11 @@ func (e *Extractor) CompileExtractors() error {
 		e.KVal[i] = strings.ToLower(kval)
 	}
 
-	//for _, query := range e.JSON {
-	//	query, err := gojq.Parse(query)
-	//	if err != nil {
-	//		return fmt.Errorf("could not parse json: %s", query)
-	//	}
-	//	compiled, err := gojq.Compile(query)
-	//	if err != nil {
-	//		return fmt.Errorf("could not compile json: %s", query)
-	//	}
-	//	e.jsonCompiled = append(e.jsonCompiled, compiled)
-	//}
+	if handler, ok := registeredExtractCompilers[e.extractorType]; ok {
+		if err := handler(e); err != nil {
+			return err
+		}
+	}
 
 	for _, dslExp := range e.DSL {
 		compiled, err := govaluate.NewEvaluableExpressionWithFunctions(dslExp, common.GetHelperFunctions())
@@ -215,108 +209,17 @@ func (e *Extractor) ExtractKval(data map[string]interface{}) map[string]struct{}
 	return results
 }
 
-//// ExtractXPath extracts items from text using XPath selectors
-//func (e *Extractor) ExtractXPath(corpus string) map[string]struct{} {
-//	if strings.HasPrefix(corpus, "<?xml") {
-//		return e.ExtractXML(corpus)
-//	}
-//	return e.ExtractHTML(corpus)
-//}
-//
-//// ExtractHTML extracts items from HTML using XPath selectors
-//func (e *Extractor) ExtractHTML(corpus string) map[string]struct{} {
-//	results := make(map[string]struct{})
-//
-//	doc, err := htmlquery.Parse(strings.NewReader(corpus))
-//	if err != nil {
-//		return results
-//	}
-//	for _, k := range e.XPath {
-//		nodes, err := htmlquery.QueryAll(doc, k)
-//		if err != nil {
-//			continue
-//		}
-//		for _, node := range nodes {
-//			var value string
-//
-//			if e.Attribute != "" {
-//				value = htmlquery.SelectAttr(node, e.Attribute)
-//			} else {
-//				value = htmlquery.InnerText(node)
-//			}
-//			if _, ok := results[value]; !ok {
-//				results[value] = struct{}{}
-//			}
-//		}
-//	}
-//	return results
-//}
-//
-//// ExtractXML extracts items from XML using XPath selectors
-//func (e *Extractor) ExtractXML(corpus string) map[string]struct{} {
-//	results := make(map[string]struct{})
-//
-//	doc, err := xmlquery.Parse(strings.NewReader(corpus))
-//	if err != nil {
-//		return results
-//	}
-//
-//	for _, k := range e.XPath {
-//		nodes, err := xmlquery.QueryAll(doc, k)
-//		if err != nil {
-//			continue
-//		}
-//		for _, node := range nodes {
-//			var value string
-//
-//			if e.Attribute != "" {
-//				value = node.SelectAttr(e.Attribute)
-//			} else {
-//				value = node.InnerText()
-//			}
-//			if _, ok := results[value]; !ok {
-//				results[value] = struct{}{}
-//			}
-//		}
-//	}
-//	return results
-//}
+func (e *Extractor) SetCompiledData(data interface{}) { e.compiledData = data }
 
-// ExtractJSON extracts text from a corpus using JQ queries and returns it
-//func (e *Extractor) ExtractJSON(corpus string) map[string]struct{} {
-//	results := make(map[string]struct{})
-//
-//	var jsonObj interface{}
-//
-//	if err := json.Unmarshal([]byte(corpus), &jsonObj); err != nil {
-//		return results
-//	}
-//
-//	for _, k := range e.jsonCompiled {
-//		iter := k.Run(jsonObj)
-//		for {
-//			v, ok := iter.Next()
-//			if !ok {
-//				break
-//			}
-//			if _, ok := v.(error); ok {
-//				break
-//			}
-//			var result string
-//			if res, err := common.JSONScalarToString(v); err == nil {
-//				result = res
-//			} else if res, err := json.Marshal(v); err == nil {
-//				result = string(res)
-//			} else {
-//				result = common.ToString(v)
-//			}
-//			if _, ok := results[result]; !ok {
-//				results[result] = struct{}{}
-//			}
-//		}
-//	}
-//	return results
-//}
+func (e *Extractor) GetCompiledData() interface{} { return e.compiledData }
+
+// ExtractWithHandler dispatches extraction to a registered handler.
+func (e *Extractor) ExtractWithHandler(corpus string, data map[string]interface{}) map[string]struct{} {
+	if handler, ok := registeredExtractHandlers[e.extractorType]; ok {
+		return handler(e, corpus, data)
+	}
+	return nil
+}
 
 // ExtractDSL execute the expression and returns the results
 func (e *Extractor) ExtractDSL(data map[string]interface{}) map[string]struct{} {
