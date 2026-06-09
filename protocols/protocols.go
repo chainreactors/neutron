@@ -33,9 +33,6 @@ type Executer interface {
 type Request interface {
 	// Compile compiles the request generators preparing any requests possible.
 	Compile(options *ExecuterOptions) error
-	// CompileOperators compiles only the matchers and extractors, without
-	// initializing protocol-specific resources (clients, connections, etc.).
-	CompileOperators() error
 	// Requests returns the total number of requests the rule will perform
 	Requests() int
 	// GetID returns the ID for the request if any. IDs are used for multi-request

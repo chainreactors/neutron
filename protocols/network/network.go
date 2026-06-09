@@ -61,15 +61,6 @@ func (r *Request) GetID() string {
 	return r.ID
 }
 
-func (r *Request) CompileOperators() error {
-	compiled := &r.Operators
-	if err := compiled.Compile(); err != nil {
-		return err
-	}
-	r.CompiledOperators = compiled
-	return nil
-}
-
 // Compile compiles the protocol request for further execution.
 func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 	var shouldUseTLS bool

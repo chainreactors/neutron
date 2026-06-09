@@ -185,9 +185,10 @@ func loadNuclei(path string) (*templates.Template, error) {
 	// request so verification can still proceed.
 	if err := t.Compile(nil); err != nil {
 		for _, req := range t.GetRequests() {
-			if compileErr := req.CompileOperators(); compileErr != nil {
+			if compileErr := (&req.Operators).Compile(); compileErr != nil {
 				return nil, fmt.Errorf("compile matchers: %w (template compile: %v)", compileErr, err)
 			}
+			req.CompiledOperators = &req.Operators
 		}
 	}
 	return t, nil
@@ -255,13 +256,7 @@ func verify(xray xrayPOC, tpl *templates.Template, xrayPath, nucleiPath string, 
 
 func pairRules(xray xrayPOC, tpl *templates.Template) ([]rulePair, []string) {
 	var warnings []string
-	allReqs := tpl.GetRequests()
-	var reqs []*http.Request
-	for _, r := range allReqs {
-		if hr, ok := r.(*http.Request); ok {
-			reqs = append(reqs, hr)
-		}
-	}
+	reqs := tpl.GetRequests()
 	if len(xray.Rules) == 0 || len(reqs) == 0 {
 		return nil, warnings
 	}

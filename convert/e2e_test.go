@@ -46,7 +46,8 @@ expression: index_contains()
 	if err := tmpl.Compile(nil); err != nil {
 		// Try compiling matchers directly
 		for _, req := range tmpl.GetRequests() {
-			req.CompileOperators()
+			(&req.Operators).Compile()
+			req.CompiledOperators = &req.Operators
 		}
 	}
 
@@ -158,7 +159,8 @@ expression: kw()
 	}
 	tmpl.Compile(nil)
 	for _, req := range tmpl.GetRequests() {
-		req.CompileOperators()
+		(&req.Operators).Compile()
+		req.CompiledOperators = &req.Operators
 	}
 
 	q := tmpl.ToQuery()
@@ -200,7 +202,8 @@ expression: redirect()
 	}
 	tmpl.Compile(nil)
 	for _, req := range tmpl.GetRequests() {
-		req.CompileOperators()
+		(&req.Operators).Compile()
+		req.CompiledOperators = &req.Operators
 	}
 
 	fofa := tmpl.ToQuery().ToFOFA()
@@ -264,7 +267,8 @@ expression: first() && second()
 	}
 	tmpl.Compile(nil)
 	for _, req := range tmpl.GetRequests() {
-		req.CompileOperators()
+		(&req.Operators).Compile()
+		req.CompiledOperators = &req.Operators
 	}
 
 	fofa := tmpl.ToQuery().ToFOFA()
@@ -306,7 +310,8 @@ expression: kw()
 	}
 	tmpl.Compile(nil)
 	for _, req := range tmpl.GetRequests() {
-		req.CompileOperators()
+		(&req.Operators).Compile()
+		req.CompiledOperators = &req.Operators
 	}
 
 	q := tmpl.ToQuery()
