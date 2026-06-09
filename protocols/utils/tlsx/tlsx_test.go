@@ -1,0 +1,115 @@
+//go:build !tinygo
+// +build !tinygo
+
+package tlsx
+
+import (
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/chainreactors/neutron/common"
+)
+
+func sampleState() *tls.ConnectionState {
+	leaf := &x509.Certificate{
+		Raw:            []byte("der-bytes-Internet Widgits Pty Ltd-marker"),
+		SerialNumber:   big.NewInt(0x1234), // decimal 4660 == hex 12:34
+		DNSNames:       []string{"ingress-nginx", "leaf.example"},
+		EmailAddresses: []string{"admin@example.com"},
+		NotBefore:      time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC),
+		NotAfter:       time.Date(2120, 1, 2, 3, 4, 5, 0, time.UTC),
+		Subject: pkix.Name{
+			CommonName:   "leaf.example",
+			Organization: []string{"Internet Widgits Pty Ltd"},
+		},
+		Issuer: pkix.Name{CommonName: "issuer-cn", Organization: []string{"qax"}},
+	}
+	return &tls.ConnectionState{
+		Version:          0x0303, // tls12
+		CipherSuite:      0x1301, // TLS_AES_128_GCM_SHA256
+		ServerName:       "leaf.example",
+		PeerCertificates: []*x509.Certificate{leaf},
+	}
+}
+
+func TestFillCertDSLDualNamespaces(t *testing.T) {
+	data := map[string]interface{}{}
+	FillCertDSL(data, sampleState(), "leaf.example")
+
+	// xray namespace: exact for stable fields, substring for DN strings whose
+	// component ordering is not contractually fixed.
+	exact := map[string]string{
+		"cert_not_before":   "2020-01-02 03:04:05",
+		"cert_dnsnames":     "ingress-nginx leaf.example",
+		"cert_serial":       "4660", // decimal
+		"cert_common_name":  "leaf.example",
+		"cert_organization": "Internet Widgits Pty Ltd",
+	}
+	for k, want := range exact {
+		got, ok := data[k].(string)
+		if !ok || got != want {
+			t.Errorf("%s = %v, want %q", k, data[k], want)
+		}
+	}
+	if s, _ := data["cert_subject"].(string); !strings.Contains(s, "Internet Widgits Pty Ltd") {
+		t.Errorf("cert_subject missing org: %q", s)
+	}
+	if s, _ := data["cert_issuer"].(string); !strings.Contains(s, "issuer-cn") {
+		t.Errorf("cert_issuer missing CN: %q", s)
+	}
+
+	// nuclei namespace (typed).
+	if _, ok := data["not_before"].(time.Time); !ok {
+		t.Errorf("nuclei not_before must be time.Time, got %T", data["not_before"])
+	}
+	if data["serial"] != "12:34" {
+		t.Errorf("nuclei serial = %v, want colon-hex 12:34", data["serial"])
+	}
+	if data["tls_version"] != "tls12" {
+		t.Errorf("tls_version = %v, want tls12", data["tls_version"])
+	}
+	if data["cipher"] != "TLS_AES_128_GCM_SHA256" {
+		t.Errorf("cipher = %v", data["cipher"])
+	}
+	if data["mismatched"] != false {
+		t.Errorf("mismatched should be false for matching SNI, got %v", data["mismatched"])
+	}
+	if data["expired"] != false {
+		t.Errorf("expired should be false for far-future not_after, got %v", data["expired"])
+	}
+	fp, ok := data["fingerprint_hash"].(FingerprintHash)
+	if !ok || len(fp.SHA256) != 64 || len(fp.SHA1) != 40 || len(fp.MD5) != 32 {
+		t.Errorf("fingerprint_hash shape wrong: %#v", data["fingerprint_hash"])
+	}
+
+	// raw_cert carries the DER marker for xray bcontains-style matching.
+	raw, ok := data[common.RawCertKey].(string)
+	if !ok || !strings.Contains(raw, "Internet Widgits Pty Ltd") {
+		t.Errorf("raw_cert missing DER marker: %q", raw)
+	}
+}
+
+func TestFillCertDSLNoCert(t *testing.T) {
+	data := map[string]interface{}{}
+	FillCertDSL(data, nil, "")
+	if len(data) != 0 {
+		t.Errorf("expected no keys for nil state, got %v", data)
+	}
+	FillCertDSL(data, &tls.ConnectionState{}, "")
+	if len(data) != 0 {
+		t.Errorf("expected no keys for empty chain, got %v", data)
+	}
+}
+
+func TestFillCertDSLEmptySNINoMismatch(t *testing.T) {
+	data := map[string]interface{}{}
+	FillCertDSL(data, sampleState(), "") // empty SNI must not flag mismatch
+	if data["mismatched"] != false {
+		t.Errorf("empty SNI should not be marked mismatched, got %v", data["mismatched"])
+	}
+}
