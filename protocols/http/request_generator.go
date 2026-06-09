@@ -154,7 +154,7 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(reqdata, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
-	targetValues := generateVariables(parsed, trailingSlash)
+	targetValues := generateVariables(parsed, trailingSlash, pathPrefix(r.input))
 	var globalVars map[string]interface{}
 	if r.input != nil {
 		globalVars = r.input.GlobalVars
@@ -381,7 +381,7 @@ func setHeader(req *http.Request, name, value string) {
 }
 
 // generateVariables will create default variables after parsing a url
-func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface{} {
+func generateVariables(parsed *url.URL, trailingSlash bool, mountPrefix string) map[string]interface{} {
 	domain := parsed.Host
 	if strings.Contains(parsed.Host, ":") {
 		domain = strings.Split(parsed.Host, ":")[0]
@@ -410,9 +410,15 @@ func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface
 		base = ""
 	}
 
+	// RootURL gets the optional mount prefix appended so templates that compute
+	// paths relative to "the app root" land under the sub-path the caller
+	// declared. BaseURL stays untouched: it's the literal scan input, so
+	// templates that reference {{BaseURL}}/foo keep behaving as before.
+	rootURL := fmt.Sprintf("%s://%s%s", parsed.Scheme, parsed.Host, normalizePathPrefix(mountPrefix))
+
 	httpVariables := map[string]interface{}{
 		"BaseURL":  parsed.String(),
-		"RootURL":  fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host),
+		"RootURL":  rootURL,
 		"Hostname": parsed.Host,
 		"Host":     domain,
 		"Port":     port,
@@ -422,4 +428,29 @@ func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface
 	}
 
 	return common.MergeMaps(httpVariables, common.GenerateDNVariables(domain))
+}
+
+// pathPrefix pulls the optional mount-path prefix off the ScanContext. Nil
+// input is the common case (in-process tests, no extra context) and yields
+// "" so RootURL stays scheme://host.
+func pathPrefix(input *protocols.ScanContext) string {
+	if input == nil {
+		return ""
+	}
+	return input.PathPrefix
+}
+
+// normalizePathPrefix canonicalises a mount-path prefix: empty/"/" become ""
+// (no prefix), missing leading slash gets one prepended, trailing slashes are
+// trimmed so the final RootURL doesn't end with "//" when a template appends
+// a leading-slash path.
+func normalizePathPrefix(prefix string) string {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" || prefix == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
+	return strings.TrimRight(prefix, "/")
 }
