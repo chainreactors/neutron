@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/common/dsl"
 )
 
@@ -447,12 +448,32 @@ func (p *parser) parseCertAccess() (*dsl.Node, error) {
 		return dsl.Variable("cert"), nil
 	}
 	field := headerVarName(p.next().Val)
-	switch field {
-	case "subject", "issuer", "not_before", "not_after":
-		return p.maybeMethodCall(dsl.Variable("cert_" + field))
-	default:
-		return p.consumeUnevaluable()
+	// common.XrayCertFields is the single source of truth for which cert
+	// subfields are evaluable; its values are the full data-map keys (already
+	// "cert_"-prefixed) populated by the HTTP/SSL runtime via tlsx.FillCertDSL.
+	// not_before/not_after stay string-valued, so the timeConvert chain is
+	// unaffected.
+	if key, ok := common.XrayCertFields[field]; ok {
+		node, err := p.maybeMethodCall(dsl.Variable(key))
+		if err != nil {
+			return nil, err
+		}
+		return caseFoldCertMatch(node), nil
 	}
+	return p.consumeUnevaluable()
+}
+
+// caseFoldCertMatch makes substring matching on X.509 DN fields case-insensitive
+// (contains -> icontains). Certificate field casing (PA-820 vs pa-820, DigiCert
+// vs digicert) is not semantic and varies across CAs/devices, so xray's
+// case-sensitive contains() on cert.* is a common false-negative source;
+// fingerprint practice treats these as case-insensitive. raw_cert (byte
+// matching) is unaffected: it is not a structured field and never reaches here.
+func caseFoldCertMatch(node *dsl.Node) *dsl.Node {
+	if node != nil && node.Type == dsl.NodeCall && node.FuncName == "contains" {
+		node.FuncName = "icontains"
+	}
+	return node
 }
 
 func (p *parser) consumeUnevaluable() (*dsl.Node, error) {

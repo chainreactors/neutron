@@ -28,8 +28,19 @@ func TestParseToAST(t *testing.T) {
 		{"title_to_title", `response.title_string.contains("Login")`, `contains(title, "Login")`},
 		{"string_title_contains", `string(response.title).contains("Sindoh")`, `contains(title, "Sindoh")`},
 		{"literal_contains", `"a".contains("b")`, `contains("a", "b")`},
-		{"cert_subject", `response.cert.issuer.contains("test")`, `contains(cert_issuer, "test")`},
+		{"cert_subject", `response.cert.issuer.contains("test")`, `icontains(cert_issuer, "test")`},
 		{"cert_time_convert", `timeConvert(response.cert.not_before, "2006-01-02 03:04:05").icontains("2020")`, `icontains(time_convert(cert_not_before, concat("2", "0", "0", "6", "-", "0", "1", "-", "0", "2", " ", "0", "3", ":", "0", "4", ":", "0", "5")), "2020")`},
+		// cert subfields beyond subject/issuer used to be silently dropped; they
+		// now resolve via common.XrayCertFields (the single source of truth).
+		// contains() on cert.* is folded to icontains() because X.509 DN casing
+		// is not semantic (see caseFoldCertMatch).
+		{"cert_dnsnames", `response.cert.dnsnames.contains("ingress-nginx")`, `icontains(cert_dnsnames, "ingress-nginx")`},
+		{"cert_serial", `response.cert.serial.contains("12")`, `icontains(cert_serial, "12")`},
+		{"cert_common_name", `response.cert.common_name.contains("leaf")`, `icontains(cert_common_name, "leaf")`},
+		{"cert_cn_alias", `response.cert.cn.contains("leaf")`, `icontains(cert_common_name, "leaf")`},
+		{"cert_organization", `response.cert.organization.contains("Acme")`, `icontains(cert_organization, "Acme")`},
+		{"cert_org_alias", `response.cert.org.contains("Acme")`, `icontains(cert_organization, "Acme")`},
+		{"cert_icontains_idempotent", `response.cert.issuer.icontains("RG-SMP")`, `icontains(cert_issuer, "RG-SMP")`},
 		{"size_to_len", `size(response.body) < 100`, `(len(body) < 100)`},
 		{"bytes_func", `response.body.bcontains(bytes("ITDR"))`, `contains(body, "ITDR")`},
 		{"translate_literal", `response.body.bcontains(b"{{ 'Common.Title' | translate }}")`, `contains(body, "{{ \'Common.Title\' | translate }}")`},

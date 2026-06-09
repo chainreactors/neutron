@@ -156,27 +156,35 @@ expression: r0()
 }
 
 // ====================================================================
-// Issue 4 [LOW]: response.cert stub drops AND constraint
+// Previously Issue 4 [LOW]: response.cert stub dropped AND constraints.
 //
-// cert.check() && body.check() → true && body.check()
-// xray would fail if cert doesn't match; neutron always passes cert part
+// The shared tlsx pipeline now evaluates response.cert.* natively, so
+// `cert.check() && body.check()` keeps BOTH constraints instead of silently
+// degrading to just the body check (which used to cause false positives).
 // ====================================================================
 
-func TestInequivalence_CertStubFalsePositive(t *testing.T) {
-	// This is a known limitation: neutron can't evaluate TLS certificates.
-	// We just document the direction of the mismatch.
+func TestCertConstraintPreservedInAnd(t *testing.T) {
 	result, err := ExprToMatchers(`response.cert.issuer.contains("Example Corp") && response.body.contains("login")`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The cert constraint should be silently dropped → only body check remains
-	if result.MatchersCondition != "or" {
-		// After dropping cert (becomes true), only body.contains remains,
-		// so condition degrades from "and" to single-matcher "or"
+	if result.MatchersCondition != "and" {
+		t.Fatalf("expected AND condition preserved, got %q", result.MatchersCondition)
 	}
-	t.Logf("cert stub: %d matchers, condition=%s", len(result.Matchers), result.MatchersCondition)
-	t.Log("Known limitation: cert constraints are dropped (converted to true). " +
-		"neutron may match where xray wouldn't if the cert check fails.")
+	if len(result.Matchers) != 2 {
+		t.Fatalf("expected 2 matchers (cert + body), got %d", len(result.Matchers))
+	}
+	found := false
+	for _, m := range result.Matchers {
+		for _, d := range m.DSL {
+			if strings.Contains(d, "cert_issuer") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("cert_issuer matcher missing: %+v", result.Matchers)
+	}
 }
 
 // ====================================================================
