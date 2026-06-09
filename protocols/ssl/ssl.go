@@ -3,6 +3,17 @@
 // single TLS handshake (no HTTP request) against the target and exposes the
 // peer certificate as nuclei-compatible DSL keys (subject_cn, issuer_org,
 // serial, fingerprint_hash, tls_version, cipher, ...) for matchers/extractors.
+//
+// Scope: this package never imports zcrypto/ztls. Nuclei reaches for zcrypto
+// via tlsx when it needs to talk SSLv3, export ciphers, or other pre-TLS-1.2
+// oddities that Go's crypto/tls dropped in 1.22+. We deliberately accept that
+// limit — running probes against legitimately-modern endpoints covers the DSL
+// surface used by ~all nuclei `ssl/` templates, and adding zcrypto would more
+// than triple the dependency closure. When `min_version` pins TLS 1.1 or
+// below we DO opt into `tls.InsecureCipherSuites()` so the CBC/3DES suites
+// the stdlib still ships keep working; SSLv3 / RC4_EXPORT / DES40 endpoints
+// fall outside this package's reach. For those, fall back to the upstream
+// tlsx/nuclei binaries.
 package ssl
 
 import (
