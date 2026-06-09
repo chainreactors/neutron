@@ -26,17 +26,7 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 	}
 	var requests []protocols.Request
 	var err error
-	if options == nil {
-		options = &protocols.ExecuterOptions{
-			Options: &protocols.Options{
-				Timeout: 5,
-			},
-		}
-	}
-
-	if t.Variables.Len() > 0 {
-		options.Variables = t.Variables
-	}
+	options = templateExecuterOptions(options, t.Variables)
 
 	// Merge tcp and udp fields into RequestsNetwork (aliases support)
 	// FingerprintHub and other tools may use 'tcp' or 'udp' instead of 'network'
@@ -79,6 +69,27 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 		return errors.New("cannot compiled any executor")
 	}
 	return nil
+}
+
+// templateExecuterOptions creates the template-owned compile options. Compile
+// binds variables to this copy only; variable evaluation stays in Execute.
+func templateExecuterOptions(options *protocols.ExecuterOptions, variables protocols.Variable) *protocols.ExecuterOptions {
+	if options == nil {
+		options = &protocols.ExecuterOptions{
+			Options: &protocols.Options{
+				Timeout: 5,
+			},
+		}
+	}
+	templateOptions := *options
+	if options.Options != nil {
+		compiledOptions := *options.Options
+		templateOptions.Options = &compiledOptions
+	} else {
+		templateOptions.Options = &protocols.Options{Timeout: 5}
+	}
+	templateOptions.Variables = variables
+	return &templateOptions
 }
 
 func (t *Template) Execute(input string, payload map[string]interface{}) (*operators.Result, error) {
