@@ -116,9 +116,20 @@ func NucleiCertFields(state *tls.ConnectionState, sni string) map[string]interfa
 		"self_signed":          IsSelfSigned(leaf),
 		"expired":              time.Now().After(leaf.NotAfter),
 		"mismatched":           mismatched,
-		"sni":                  sni,
-		"tls_version":          TLSVersionName(state.Version),
-		"cipher":               CipherName(state.CipherSuite),
+		// untrusted: leaf chain does NOT verify against the system root pool
+		// (using the presented intermediates as candidates and the SNI for DNS
+		// validation). Mirrors nuclei's `untrusted` DSL field — the strict
+		// superset of self_signed+expired+mismatched the upstream tlsx exposes.
+		"untrusted": IsUntrusted(state, sni),
+		// revoked: CRL/OCSP-based revocation lookup. The default neutron build
+		// has NO revocation backend wired up and this always returns false
+		// (safe soft-fail). Import _ ".../protocols/utils/tlsx/full" in the
+		// calling binary to register the cfssl-backed checker — that adds the
+		// heavy cfssl dependency only to consumers that actually need it.
+		"revoked":     IsRevoked(state),
+		"sni":         sni,
+		"tls_version": TLSVersionName(state.Version),
+		"cipher":      CipherName(state.CipherSuite),
 		"fingerprint_hash": FingerprintHash{
 			MD5:    CertFingerprint(leaf, "md5"),
 			SHA1:   CertFingerprint(leaf, "sha1"),
@@ -211,6 +222,68 @@ func IsWildcardName(names []string) bool {
 // IsSelfSigned reports whether the certificate appears self-signed.
 func IsSelfSigned(cert *x509.Certificate) bool {
 	return len(cert.AuthorityKeyId) == 0 || bytes.Equal(cert.AuthorityKeyId, cert.SubjectKeyId)
+}
+
+// IsUntrusted reports whether the presented certificate chain fails to verify
+// against the system root pool, mirroring nuclei's `untrusted` DSL field.
+//
+// "Untrusted" includes: self-signed leaves, expired certs, hostname/SAN
+// mismatches, unknown CAs, broken signature chains — anything a normal
+// browser/HTTPS client would reject. If the system has no CA bundle (e.g. a
+// minimal container with no /etc/ssl/certs), we return false: we'd rather miss
+// the detection than flag the whole internet as untrusted because of an
+// environment quirk. We always pass the leaf SANs through `DNSName` so SNI
+// mismatches are surfaced too — keeping `untrusted` a strict superset of
+// `mismatched` + `self_signed` + `expired`, the way the upstream tlsx behaves.
+func IsUntrusted(state *tls.ConnectionState, sni string) bool {
+	if state == nil || len(state.PeerCertificates) == 0 {
+		return false
+	}
+	roots, err := x509.SystemCertPool()
+	if err != nil || roots == nil {
+		return false
+	}
+	intermediates := x509.NewCertPool()
+	for _, cert := range state.PeerCertificates[1:] {
+		intermediates.AddCert(cert)
+	}
+	opts := x509.VerifyOptions{
+		Roots:         roots,
+		Intermediates: intermediates,
+		DNSName:       sni, // empty string disables hostname verification
+		CurrentTime:   time.Now(),
+	}
+	_, err = state.PeerCertificates[0].Verify(opts)
+	return err != nil
+}
+
+// RevokeCheckFunc is the signature of a CRL/OCSP-based revocation checker.
+// Return true iff the leaf cert is positively known revoked; soft-fail (return
+// false) on any check-completion problem.
+type RevokeCheckFunc func(state *tls.ConnectionState) bool
+
+var registeredRevokeCheck RevokeCheckFunc
+
+// RegisterRevokeCheck installs a CRL/OCSP revocation backend. The default
+// neutron build registers nothing and IsRevoked always returns false, keeping
+// the main module free of the cfssl/zcrypto dependency closure. The optional
+// protocols/utils/tlsx/full submodule provides a cfssl-backed implementation
+// — `import _ ".../protocols/utils/tlsx/full"` in the consumer binary enables
+// it. Last call wins; passing nil clears the registration.
+func RegisterRevokeCheck(f RevokeCheckFunc) { registeredRevokeCheck = f }
+
+// IsRevoked mirrors nuclei's `revoked` DSL field. With no backend registered
+// it ALWAYS returns false (safe soft-fail) so templates that read `revoked`
+// don't false-positive on stock builds. See RegisterRevokeCheck for opting in
+// to the real implementation.
+func IsRevoked(state *tls.ConnectionState) bool {
+	if registeredRevokeCheck == nil {
+		return false
+	}
+	if state == nil || len(state.PeerCertificates) == 0 {
+		return false
+	}
+	return registeredRevokeCheck(state)
 }
 
 // IsMismatchedCert reports whether `host` is NOT covered by any of the
