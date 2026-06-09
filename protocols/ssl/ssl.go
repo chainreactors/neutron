@@ -56,6 +56,15 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 	return nil
 }
 
+func (r *Request) CompileOperators() error {
+	compiled := &r.Operators
+	if err := compiled.Compile(); err != nil {
+		return err
+	}
+	r.CompiledOperators = compiled
+	return nil
+}
+
 // Requests returns the total number of requests the rule will perform.
 func (r *Request) Requests() int {
 	return 1

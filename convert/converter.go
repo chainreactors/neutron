@@ -1393,8 +1393,7 @@ func appendGeneratedQueries(yamlData []byte, tmpl map[string]interface{}) []byte
 	}
 	if t.Compile(nil) != nil {
 		for _, req := range t.GetRequests() {
-			(&req.Operators).Compile()
-			req.CompiledOperators = &req.Operators
+			req.CompileOperators()
 		}
 	}
 
