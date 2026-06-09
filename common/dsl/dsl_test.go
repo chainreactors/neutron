@@ -127,6 +127,8 @@ func TestDslExpressions(t *testing.T) {
 		`trim_prefix("aaHelloaa", "aa")`:                 "Helloaa",
 		`trim_right("aaaHelloddd", "ad")`:                "aaaHello",
 		`trim_space("  Hello  ")`:                        "Hello",
+		`dir("/static/ueditor.config.js")`:               "/static/",
+		`dir("ueditor.config.js")`:                       "",
 		`trim_suffix("aaHelloaa", "aa")`:                 "aaHello",
 		`url_decode("https:%2F%2Fprojectdiscovery.io%3Ftest=1")`: "https://projectdiscovery.io?test=1",
 		`url_encode("https://projectdiscovery.io/test?a=1")`:     "https%3A%2F%2Fprojectdiscovery.io%2Ftest%3Fa%3D1",
