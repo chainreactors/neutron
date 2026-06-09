@@ -40,6 +40,10 @@ type Matcher struct {
 	DSL []string `json:"dsl,omitempty" yaml:"dsl,omitempty"`
 	// Hash are the favicon hashes (md5 or mmh3) to match
 	Hash []string `json:"hash,omitempty" yaml:"hash,omitempty"`
+	// JSON contains jq-style expressions used for matching json response
+	JSON []string `json:"json,omitempty" yaml:"json,omitempty"`
+	// XPath contains xpath expressions used for matching html/xml response
+	XPath []string `json:"xpath,omitempty" yaml:"xpath,omitempty"`
 	// Encoding specifies the encoding for the word content if any.
 	Encoding string `json:"encoding,omitempty" yaml:"encoding,omitempty"`
 	// description: |
@@ -54,6 +58,7 @@ type Matcher struct {
 	regexCompiled   []*regexp.Regexp
 	dslCompiled     []*govaluate.EvaluableExpression
 	binaryDecoded   []string
+	compiledData    interface{}
 }
 
 // Result reverts the results of the match if the matcher is of type negative.
@@ -136,6 +141,12 @@ func (m *Matcher) CompileMatchers() error {
 	} else {
 		m.condition = ORCondition
 	}
+	if handler, ok := registeredMatchCompilers[m.matcherType]; ok {
+		if err := handler(m); err != nil {
+			return err
+		}
+	}
+
 	if m.CaseInsensitive {
 		if m.GetType() != WordsMatcher {
 			return fmt.Errorf("case-insensitive flag is supported only for 'word' matchers (not '%s')", m.Type)
@@ -432,4 +443,18 @@ func (m *Matcher) MatchHashValues(values []string) (bool, []string) {
 		return len(matched) == len(m.Hash), matched
 	}
 	return true, matched
+}
+
+func (m *Matcher) SetCompiledData(data interface{}) { m.compiledData = data }
+
+func (m *Matcher) GetCompiledData() interface{} { return m.compiledData }
+
+func (m *Matcher) GetCondition() ConditionType { return m.condition }
+
+// MatchWithHandler dispatches matching to a registered handler.
+func (m *Matcher) MatchWithHandler(corpus string, data map[string]interface{}) (bool, []string) {
+	if handler, ok := registeredMatchHandlers[m.matcherType]; ok {
+		return handler(m, corpus, data)
+	}
+	return false, nil
 }

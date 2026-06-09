@@ -9,8 +9,11 @@ const (
 	RegexExtractor ExtractorType = iota + 1
 	// name:kval
 	KValExtractor
-	//XPathExtractor
+	// name:xpath
+	XPathExtractor
+	// name:json
 	JSONExtractor
+	// name:dsl
 	DSLExtractor
 
 	limit
@@ -20,9 +23,7 @@ const (
 var extractorMappings = map[string]ExtractorType{
 	"regex": RegexExtractor,
 	"kval":  KValExtractor,
-	"dsl":   DSLExtractor,
-	//"xpath": XPathExtractor,
-	//"json": JSONExtractor,
+	"dsl": DSLExtractor,
 }
 
 // GetType returns the type of the matcher
@@ -57,6 +58,10 @@ const (
 	DSLMatcher
 	// FaviconMatcher matches responses with favicon hash
 	FaviconMatcher
+	// JSONMatcher matches responses using jq-style expressions
+	JSONMatcher
+	// XPathMatcher matches responses using xpath expressions
+	XPathMatcher
 )
 
 // matcherTypes is an table for conversion of matcher type from string.
