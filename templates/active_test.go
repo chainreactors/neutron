@@ -3,6 +3,9 @@ package templates
 import (
 	"testing"
 
+	_ "github.com/chainreactors/neutron/protocols/http"
+	_ "github.com/chainreactors/neutron/protocols/network"
+
 	"github.com/chainreactors/neutron/protocols"
 	"gopkg.in/yaml.v3"
 )
@@ -113,7 +116,7 @@ network:
 	}
 
 	t.Logf("Template compiled successfully")
-	t.Logf("  Network requests: %d", len(tmpl.RequestsNetwork))
+	t.Logf("  Network requests: %d", len(tmpl.GetRequests()))
 
 	// 执行请求 - 连接到 localhost:5432
 	t.Log("\nExecuting network request to 127.0.0.1:5432...")
@@ -179,7 +182,7 @@ tcp:
 	}
 
 	t.Logf("Template compiled successfully")
-	t.Logf("  TCP requests (as RequestsNetwork): %d", len(tmpl.RequestsNetwork))
+	t.Logf("  TCP requests (as RequestsNetwork): %d", len(tmpl.GetRequests()))
 
 	// 执行请求
 	t.Log("\nExecuting TCP request to 127.0.0.1:5432...")

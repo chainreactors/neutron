@@ -12,6 +12,9 @@ import (
 	"github.com/chainreactors/neutron/convert"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
+	_ "github.com/chainreactors/neutron/protocols/http"
+	_ "github.com/chainreactors/neutron/protocols/network"
+	_ "github.com/chainreactors/neutron/protocols/ssl"
 	"github.com/chainreactors/neutron/templates"
 	"gopkg.in/yaml.v3"
 )

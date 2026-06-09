@@ -375,15 +375,14 @@ func neutronEval(convertedYAML []byte, resp mockResponse) bool {
 	}
 	if tmpl.Compile(nil) != nil {
 		for _, req := range tmpl.GetRequests() {
-			(&req.Operators).Compile()
-			req.CompiledOperators = &req.Operators
+			req.CompileOperators()
 		}
 	}
 
 	reqs := tmpl.GetRequests()
 	hasReqCond := false
 	for _, req := range reqs {
-		if req.ReqCondition {
+		if httpReq, ok := req.(*nhttp.Request); ok && httpReq.ReqCondition {
 			hasReqCond = true
 			break
 		}
@@ -392,7 +391,6 @@ func neutronEval(convertedYAML []byte, resp mockResponse) bool {
 	data := buildNeutronData(resp)
 
 	if hasReqCond {
-		// Populate _N variables for all requests (same mock data for test)
 		for i := range reqs {
 			suffix := fmt.Sprintf("_%d", i+1)
 			for k, v := range buildNeutronData(resp) {
@@ -402,10 +400,11 @@ func neutronEval(convertedYAML []byte, resp mockResponse) bool {
 	}
 
 	for _, req := range reqs {
-		if req.CompiledOperators == nil || len(req.CompiledOperators.Matchers) == 0 {
+		httpReq, ok := req.(*nhttp.Request)
+		if !ok || httpReq.CompiledOperators == nil || len(httpReq.CompiledOperators.Matchers) == 0 {
 			continue
 		}
-		if matchReq(req, data) {
+		if matchReq(httpReq, data) {
 			return true
 		}
 	}
