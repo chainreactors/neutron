@@ -131,6 +131,8 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 			return false, []string{}
 		}
 		return matcher.ResultWithMatchedSnippet(matcher.MatchFavicon(faviconMap))
+	default:
+		return matcher.ResultWithMatchedSnippet(matcher.MatchWithHandler(item, data))
 	}
 	return false, []string{}
 }
@@ -148,11 +150,8 @@ func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extr
 		return extractor.ExtractKval(data)
 	case operators.DSLExtractor:
 		return extractor.ExtractDSL(data)
-		//case operators.XPathExtractor:
-		//	return extractor.ExtractXPath(item)
-		//case operators.JSONExtractor:
-		//	return extractor.ExtractJSON(item)
-
+	default:
+		return extractor.ExtractWithHandler(item, data)
 	}
 	return nil
 }
