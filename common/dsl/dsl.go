@@ -252,17 +252,6 @@ func registerDefaultFunctions() {
 		}
 		return compiled.ReplaceAllString(toString(args[0]), toString(args[2])), nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("dir", 1, false, func(args ...interface{}) (interface{}, error) {
-		// dir("/a/b/c.js") -> "/a/b/"; no slash -> "". Used by nuclei-style
-		// templates that compute a sibling path off an extracted asset URL
-		// (e.g. fingerprinting backoffice/admin pages relative to a JS file).
-		value := toString(args[0])
-		idx := strings.LastIndex(value, "/")
-		if idx < 0 {
-			return "", nil
-		}
-		return value[:idx+1], nil
-	}))
 	MustAddFunction(NewWithPositionalArgs("trim", 2, false, func(args ...interface{}) (interface{}, error) {
 		return strings.Trim(toString(args[0]), toString(args[1])), nil
 	}))

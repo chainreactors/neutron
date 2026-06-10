@@ -66,6 +66,11 @@ func TestParseToAST(t *testing.T) {
 		{"triple_quote_regex", `r'''(?i)<input\b.+?type=["']?file['"]?'''.bmatches(response.body)`, "regex(\"(?i)<input\\\\b.+?type=[\\\"\\']?file[\\'\\\"]?\", body)"},
 		// variable-indexed header access
 		{"header_var_access", `response.headers[rHeader].startsWith(r1)`, `contains(all_headers, r1)`},
+		// xray's dir() has no nuclei equivalent — convertFunctionCall expands it
+		// to neutron's replace_regex (NOT regex_replace, which is the upstream
+		// nuclei spelling). Locks the function name against future drift.
+		{"dir_expand", `dir("/static/ueditor.config.js")`, `replace_regex("/static/ueditor.config.js", "/[^/]*$", "/")`},
+		{"dir_expand_concat", `dir("/" + config_path)`, `replace_regex(concat("/", config_path), "/[^/]*$", "/")`},
 	}
 
 	for _, tt := range tests {

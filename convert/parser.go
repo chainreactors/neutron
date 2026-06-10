@@ -755,6 +755,15 @@ func convertFunctionCall(name string, args []*dsl.Node) *dsl.Node {
 	switch name {
 	case "size":
 		return dsl.Call("len", args...)
+	case "dir":
+		// xray's dir(x) trims everything after the last "/" but keeps that "/".
+		// Expand to neutron's replace_regex (registered in common/dsl/dsl.go) so
+		// the produced template no longer relies on a neutron-private dir()
+		// helper. Note: upstream nuclei spells this regex_replace; templates that
+		// hit this branch run on neutron, not stock nuclei.
+		if len(args) == 1 {
+			return dsl.Call("replace_regex", args[0], dsl.Literal("/[^/]*$"), dsl.Literal("/"))
+		}
 	case "timeConvert":
 		return dsl.Call("time_convert", args...)
 	case "replaceAll":
