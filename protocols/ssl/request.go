@@ -13,7 +13,7 @@ import (
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/neutron/protocols/utils/tlsx"
+	"github.com/chainreactors/neutron/common/tlsx"
 )
 
 var _ protocols.Request = &Request{}

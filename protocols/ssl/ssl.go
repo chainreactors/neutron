@@ -24,7 +24,7 @@ import (
 
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/neutron/protocols/utils/tlsx"
+	"github.com/chainreactors/neutron/common/tlsx"
 )
 
 // Request contains an SSL protocol request to be made from a template.
@@ -108,7 +108,7 @@ func (r *Request) validateOptions() error {
 		return fmt.Errorf("unsupported nuclei ssl option(s): %s; neutron stdlib ssl supports address, min_version, max_version, scan_mode: ctls, and cipher_suites", strings.Join(unsupported, ", "))
 	}
 	if r.referencesRevoked() && !tlsx.HasRevokeCheck() {
-		return fmt.Errorf("ssl request references revoked but no revocation backend is registered; import _ \"github.com/chainreactors/neutron/protocols/utils/tlsx/full\" in the scanner binary")
+		return fmt.Errorf("ssl request references revoked but no revocation backend is registered; import _ \"github.com/chainreactors/neutron/common/tlsx/full\" in the scanner binary")
 	}
 	if len(r.CipherSuites) == 0 {
 		r.cipherSuites = nil
