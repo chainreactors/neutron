@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"testing"
 
-	"github.com/chainreactors/neutron/protocols/utils/tlsx"
+	"github.com/chainreactors/neutron/common/tlsx"
 )
 
 // TestRegistrationViaInit asserts that importing this package wires up

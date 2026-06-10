@@ -1,4 +1,4 @@
-module github.com/chainreactors/neutron/protocols/utils/tlsx/full
+module github.com/chainreactors/neutron/common/tlsx/full
 
 go 1.24.0
 
@@ -18,4 +18,4 @@ require (
 	golang.org/x/crypto v0.19.0 // indirect
 )
 
-replace github.com/chainreactors/neutron => ../../../..
+replace github.com/chainreactors/neutron => ../../..

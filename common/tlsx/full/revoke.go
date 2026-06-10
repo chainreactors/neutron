@@ -5,7 +5,7 @@
 //
 // Usage from a consumer binary:
 //
-//	import _ "github.com/chainreactors/neutron/protocols/utils/tlsx/full"
+//	import _ "github.com/chainreactors/neutron/common/tlsx/full"
 //
 // With this import the package's init() registers a checker built on
 // cloudflare/cfssl/revoke — the exact backend projectdiscovery/tlsx and
@@ -22,7 +22,7 @@ import (
 	cflog "github.com/cloudflare/cfssl/log"
 	"github.com/cloudflare/cfssl/revoke"
 
-	"github.com/chainreactors/neutron/protocols/utils/tlsx"
+	"github.com/chainreactors/neutron/common/tlsx"
 )
 
 func init() {

@@ -123,7 +123,7 @@ func NucleiCertFields(state *tls.ConnectionState, sni string) map[string]interfa
 		"untrusted": IsUntrusted(state, sni),
 		// revoked: CRL/OCSP-based revocation lookup. The default neutron build
 		// has NO revocation backend wired up and this always returns false
-		// (safe soft-fail). Import _ ".../protocols/utils/tlsx/full" in the
+		// (safe soft-fail). Import _ ".../common/tlsx/full" in the
 		// calling binary to register the cfssl-backed checker — that adds the
 		// heavy cfssl dependency only to consumers that actually need it.
 		"revoked":     IsRevoked(state),
@@ -267,8 +267,8 @@ var registeredRevokeCheck RevokeCheckFunc
 // RegisterRevokeCheck installs a CRL/OCSP revocation backend. The default
 // neutron build registers nothing and IsRevoked always returns false, keeping
 // the main module free of the cfssl/zcrypto dependency closure. The optional
-// protocols/utils/tlsx/full submodule provides a cfssl-backed implementation
-// — `import _ ".../protocols/utils/tlsx/full"` in the consumer binary enables
+// common/tlsx/full submodule provides a cfssl-backed implementation
+// — `import _ ".../common/tlsx/full"` in the consumer binary enables
 // it. Last call wins; passing nil clears the registration.
 func RegisterRevokeCheck(f RevokeCheckFunc) { registeredRevokeCheck = f }
 

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/neutron/common"
-	"github.com/chainreactors/neutron/protocols/utils/tlsx"
+	"github.com/chainreactors/neutron/common/tlsx"
 	"github.com/stretchr/testify/require"
 )
 
