@@ -9,48 +9,45 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.11', '1.17', '1.24']
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
-          # operators/full submodule requires go 1.24.
-          go-version: '1.24'
+          go-version: ${{ matrix.go-version }}
+
+      - name: Enable Go modules (go 1.11/1.12)
+        if: matrix.go-version == '1.11'
+        run: echo "GO111MODULE=on" >> $GITHUB_ENV
 
       - name: Build
         run: go build ./...
 
       - name: Vet
+        if: matrix.go-version != '1.11'
         run: go vet ./...
 
-      # Whole main module (convert, common/dsl, common/tlsx, operators,
-      # protocols/{http,ssl}, harness, templates ...). `./...` does not descend
-      # into operators/full — that is a separate module tested in its own step
-      # below.
       - name: Test
         run: go test ./... -v -count=1 -timeout=180s
 
       - name: Test JSON build
         run: go test -tags json ./... -v -count=1 -timeout=180s
 
-      # operators/full is the opt-in gojq + htmlquery + xmlquery submodule that
-      # registers `type: json` / `type: xpath` extractors/matchers. It lives in
-      # its own Go module (own go.mod, own dependency closure) so the main
-      # neutron module stays stdlib-only — running its tests here guards that
-      # the registration surface main relies on doesn't drift.
+      # operators/full requires go 1.24 (gojq, htmlquery, xmlquery).
       - name: Test operators/full submodule
+        if: matrix.go-version == '1.24'
         working-directory: operators/full
         run: |
           go build ./...
           go vet ./...
           go test ./... -v -count=1 -timeout=120s
 
-      # Live end-to-end match assertions against real targets (opt-in).
-      # Each xpoc example is executed against one verified target and must still
-      # MATCH; only a reachable-but-no-match counts as a regression — targets
-      # unreachable from the runner are skipped, so this never reds out purely
-      # on network/geo blocking.
       - name: Test live match (xpoc examples)
+        if: matrix.go-version == '1.24'
         run: NEUTRON_LIVE_MATCH=1 go test ./templates/ -run TestXpocExamplesLiveMatch -v -count=1 -timeout=300s
