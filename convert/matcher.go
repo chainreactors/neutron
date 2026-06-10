@@ -407,24 +407,28 @@ func faviconContains(node *dsl.Node) (string, string, bool) {
 	return part, hash, true
 }
 
-// variableToPart maps an AST variable to a nuclei matcher part.
-// Body and all_headers map directly. Individual header variables (server,
-// content_type, etc.) map to "header" only when used in a contains/icontains
-// call whose word argument has sufficient specificity (>= 3 chars).
-// This avoids both: (a) false positives from too-generic words like ":" or "_",
-// and (b) DSL fallback using functions (icontains) that may not exist at runtime.
+// variableToPart maps an AST variable to a matcher part.
+// Body/all_headers map directly. Cert fields and raw_cert are first-class
+// response parts populated by the shared tlsx runtime. Individual header
+// variables (server, content_type, etc.) deliberately do not map to "header":
+// searching the full header block would false-positive when the word appears in
+// a different header.
 func variableToPart(node *dsl.Node) string {
 	if node.Type != dsl.NodeVariable {
 		return ""
 	}
-	switch node.Value.(string) {
+	name := node.Value.(string)
+	switch name {
 	case "body":
 		return "body"
 	case "all_headers":
 		return "header"
+	case "raw_cert":
+		return "raw_cert"
 	}
-	// Individual header variable — caller will check word specificity
-	// before deciding whether to use "header" part or fall back to DSL.
+	if strings.HasPrefix(name, "cert_") {
+		return name
+	}
 	return ""
 }
 

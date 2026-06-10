@@ -460,7 +460,7 @@ func (p *parser) parseCertAccess() (*dsl.Node, error) {
 		}
 		return caseFoldCertMatch(node), nil
 	}
-	return p.consumeUnevaluable()
+	return nil, fmt.Errorf("unsupported xray response.cert.%s field", field)
 }
 
 // caseFoldCertMatch makes substring matching on X.509 DN fields case-insensitive
@@ -867,7 +867,7 @@ func isKnownStringVariable(node *dsl.Node) bool {
 	}
 	name, _ := node.Value.(string)
 	if name == "body" || name == "title" || name == "all_headers" ||
-		name == "content_type" || strings.HasPrefix(name, "cert_") {
+		name == "content_type" || name == common.RawCertKey || strings.HasPrefix(name, "cert_") {
 		return true
 	}
 	return false
