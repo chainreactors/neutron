@@ -166,14 +166,7 @@ func (r *Request) executeTarget(input *protocols.ScanContext, target string, dyn
 	if len(r.cipherSuites) > 0 {
 		cfg.CipherSuites = append([]uint16(nil), r.cipherSuites...)
 	} else if cfg.MinVersion != 0 || cfg.MaxVersion != 0 {
-		all := cfg.CipherSuites
-		for _, c := range tls.CipherSuites() {
-			all = append(all, c.ID)
-		}
-		for _, c := range tls.InsecureCipherSuites() {
-			all = append(all, c.ID)
-		}
-		cfg.CipherSuites = all
+		cfg.CipherSuites = append(cfg.CipherSuites, allCipherSuiteIDs()...)
 	}
 
 	conn, err := r.dialTLS(target, cfg)
@@ -407,20 +400,6 @@ func parseCipherSuiteIDs(names []string) ([]uint16, error) {
 		return nil, fmt.Errorf("cipher_suites must contain at least one supported suite")
 	}
 	return ids, nil
-}
-
-func cipherSuiteID(name string) (uint16, bool) {
-	for _, suite := range tls.CipherSuites() {
-		if strings.EqualFold(suite.Name, name) {
-			return suite.ID, true
-		}
-	}
-	for _, suite := range tls.InsecureCipherSuites() {
-		if strings.EqualFold(suite.Name, name) {
-			return suite.ID, true
-		}
-	}
-	return 0, false
 }
 
 func isTLS13CipherSuite(id uint16) bool {
