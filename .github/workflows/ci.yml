@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.11', '1.17', '1.24']
+        go-version: ['1.17', '1.24']
 
     steps:
       - uses: actions/checkout@v4
@@ -22,37 +22,18 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Enable Go modules (go 1.11)
-        if: matrix.go-version == '1.11'
-        run: echo "GO111MODULE=on" >> $GITHUB_ENV
-
       - name: Build
-        run: |
-          if [ "${{ matrix.go-version }}" = "1.11" ]; then
-            go build $(go list ./... | grep -v /cmd/)
-          else
-            go build ./...
-          fi
+        run: go build ./...
 
       - name: Vet
         if: matrix.go-version != '1.11'
         run: go vet ./...
 
       - name: Test
-        run: |
-          if [ "${{ matrix.go-version }}" = "1.11" ]; then
-            go test $(go list ./... | grep -v /cmd/) -v -count=1 -timeout=180s
-          else
-            go test ./... -v -count=1 -timeout=180s
-          fi
+        run: go test ./... -v -count=1 -timeout=180s
 
       - name: Test JSON build
-        run: |
-          if [ "${{ matrix.go-version }}" = "1.11" ]; then
-            go test -tags json $(go list ./... | grep -v /cmd/) -v -count=1 -timeout=180s
-          else
-            go test -tags json ./... -v -count=1 -timeout=180s
-          fi
+        run: go test -tags json ./... -v -count=1 -timeout=180s
 
       # operators/full requires go 1.24 (gojq, htmlquery, xmlquery).
       - name: Test operators/full submodule
