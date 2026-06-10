@@ -689,7 +689,7 @@ func (r *ResponseSpec) event() map[string]interface{} {
 	data := map[string]interface{}{
 		"status_code": r.StatusCode,
 		"duration":    r.Delay.Seconds(),
-		"latency":     float64(r.Delay.Milliseconds()),
+		"latency":     float64(r.Delay / time.Millisecond),
 		"body":        r.Body,
 		"title":       extractTitle(r.Body),
 	}
@@ -1068,7 +1068,7 @@ func simpleOutputValue(expr string, resp *ResponseSpec) (string, bool) {
 	expr = strings.TrimSpace(expr)
 	switch expr {
 	case "response.latency":
-		return strconv.FormatInt(resp.Delay.Milliseconds(), 10), true
+		return strconv.FormatInt(int64(resp.Delay/time.Millisecond), 10), true
 	case "response.status":
 		return strconv.Itoa(resp.StatusCode), true
 	case "response.body", "response.body_string":

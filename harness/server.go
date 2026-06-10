@@ -3,7 +3,6 @@ package harness
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -146,7 +145,7 @@ func readRequestBody(req *http.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Body = io.NopCloser(bytes.NewReader(data))
+	req.Body = ioutil.NopCloser(bytes.NewReader(data))
 	return string(data), nil
 }
 
