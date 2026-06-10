@@ -12,6 +12,6 @@ func init() {
 // xrayConverter adapts this package's xray conversion to templates.Converter.
 type xrayConverter struct{}
 
-func (xrayConverter) Name() string                       { return "xray" }
-func (xrayConverter) Detect(data []byte) bool            { return IsXrayPOC(data) }
+func (xrayConverter) Name() string                        { return "xray" }
+func (xrayConverter) Detect(data []byte) bool             { return IsXrayPOC(data) }
 func (xrayConverter) Convert(data []byte) ([]byte, error) { return Convert(data) }

@@ -346,7 +346,12 @@ func TestXrayTemplatePath(t *testing.T) {
 	}
 }
 
-func TestEndToEnd_RootURLPreventsDoubledPath(t *testing.T) {
+func TestEndToEnd_XrayPathBindsToRootURL(t *testing.T) {
+	// xray POC paths and the implicit default request are both relative to the
+	// application root. converter emits {{RootURL}}+path so the call site's
+	// mount-path prefix (PathPrefix on ScanContext, joined into RootURL) is
+	// honoured. When no PathPrefix is set, RootURL falls back to scheme://host
+	// and the converted template hits the server-root path the POC author wrote.
 	xrayYAML := `
 name: fingerprint-test--rooturl-path
 detail:
@@ -370,7 +375,7 @@ expression: r0()
 		t.Fatalf("expected RootURL in converted path:\n%s", s)
 	}
 	if strings.Contains(s, "{{BaseURL}}/druid") {
-		t.Fatalf("should not use BaseURL for absolute xray path:\n%s", s)
+		t.Fatalf("xray absolute path should not use BaseURL:\n%s", s)
 	}
 
 	var tmpl templates.Template
@@ -379,7 +384,6 @@ expression: r0()
 	}
 	tmpl.Compile(nil)
 
-	// Simulate target with path: http://host/druid/
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/druid/index.html" {
 			w.WriteHeader(200)
@@ -391,12 +395,12 @@ expression: r0()
 	}))
 	defer server.Close()
 
-	// Pass target WITH path — RootURL strips it, so template hits /druid/index.html not /druid/druid/index.html
-	result, err := tmpl.Execute(server.URL+"/druid/", nil)
+	// Bare root → RootURL = server.URL, request hits /druid/index.html.
+	result, err := tmpl.Execute(server.URL, nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	if result == nil || !result.Matched {
-		t.Fatalf("expected match — RootURL should prevent /druid/druid/ doubling")
+		t.Fatalf("expected match against /druid/index.html via RootURL")
 	}
 }

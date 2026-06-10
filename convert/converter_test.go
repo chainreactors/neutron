@@ -41,6 +41,7 @@ func TestParseToAST(t *testing.T) {
 		{"cert_organization", `response.cert.organization.contains("Acme")`, `icontains(cert_organization, "Acme")`},
 		{"cert_org_alias", `response.cert.org.contains("Acme")`, `icontains(cert_organization, "Acme")`},
 		{"cert_icontains_idempotent", `response.cert.issuer.icontains("RG-SMP")`, `icontains(cert_issuer, "RG-SMP")`},
+		{"raw_cert", `response.raw_cert.bcontains(b"RV042G")`, `contains(raw_cert, "RV042G")`},
 		{"size_to_len", `size(response.body) < 100`, `(len(body) < 100)`},
 		{"bytes_func", `response.body.bcontains(bytes("ITDR"))`, `contains(body, "ITDR")`},
 		{"translate_literal", `response.body.bcontains(b"{{ 'Common.Title' | translate }}")`, `contains(body, "{{ \'Common.Title\' | translate }}")`},
@@ -78,6 +79,16 @@ func TestParseToAST(t *testing.T) {
 				t.Errorf("got:  %s\nwant: %s", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseUnsupportedCertFieldErrors(t *testing.T) {
+	_, err := ParseToAST(`response.cert.fingerprint.contains("abc")`)
+	if err == nil {
+		t.Fatal("expected unsupported cert field error")
+	}
+	if !strings.Contains(err.Error(), "unsupported xray response.cert.fingerprint") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -152,6 +163,24 @@ func TestExprToMatchers(t *testing.T) {
 			func(t *testing.T, r *ConvertResult) {
 				m := r.Matchers[0]
 				if m.Type != "favicon" || m.Part != "body_favicon_hash" || m.Hash[0] != "123" {
+					t.Errorf("got %+v", m)
+				}
+			},
+		},
+		{
+			"cert_word", `response.cert.issuer.contains("Example Corp")`, 1, "or",
+			func(t *testing.T, r *ConvertResult) {
+				m := r.Matchers[0]
+				if m.Type != "word" || m.Part != "cert_issuer" || !m.CaseInsensitive || m.Words[0] != "Example Corp" {
+					t.Errorf("got %+v", m)
+				}
+			},
+		},
+		{
+			"raw_cert_word", `response.raw_cert.bcontains(b"RV042G")`, 1, "or",
+			func(t *testing.T, r *ConvertResult) {
+				m := r.Matchers[0]
+				if m.Type != "word" || m.Part != "raw_cert" || m.Words[0] != "RV042G" {
 					t.Errorf("got %+v", m)
 				}
 			},

@@ -176,10 +176,8 @@ func TestCertConstraintPreservedInAnd(t *testing.T) {
 	}
 	found := false
 	for _, m := range result.Matchers {
-		for _, d := range m.DSL {
-			if strings.Contains(d, "cert_issuer") {
-				found = true
-			}
+		if m.Type == "word" && m.Part == "cert_issuer" && m.CaseInsensitive {
+			found = true
 		}
 	}
 	if !found {

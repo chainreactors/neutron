@@ -591,10 +591,13 @@ func rewriteTemplatePlaceholders(value string, aliases map[string]string) string
 }
 
 // xrayTemplatePath returns the full path expression for a converted xray template.
-// xray POC paths are always absolute (relative to host root), so we use RootURL
-// instead of BaseURL. This avoids doubled path segments when the scan target
-// includes a path (e.g. http://host/app/) — BaseURL would include /app/ and the
-// template path /app/login would produce /app/app/login.
+// xray POC paths and the implicit default request are both relative to the
+// "application root" — the URL the caller passed in (which in xray runtime
+// terms is what `response.*` reads). The nuclei equivalent under SDK pinned
+// semantics is {{RootURL}}: BaseURL is always scheme://host[:port] (server
+// root, no mount path), while RootURL = scheme://host + PathPrefix tracks the
+// caller's mount point. Emitting BaseURL here would silently drop the mount
+// path, breaking POCs whose "implicit GET /" expects to land on the app root.
 func xrayTemplatePath(path string) string {
 	if strings.HasPrefix(path, "/") {
 		return "{{RootURL}}" + path
