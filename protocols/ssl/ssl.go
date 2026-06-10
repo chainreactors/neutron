@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chainreactors/neutron/common/tlsx"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/neutron/common/tlsx"
 )
 
 // Request contains an SSL protocol request to be made from a template.
