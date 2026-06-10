@@ -5,6 +5,25 @@ import (
 	"strings"
 )
 
+// CertDataKeys lists every cert_* / raw_cert data-map key the converter may
+// surface to emitters. Every Emitter partMap must map each of these
+// explicitly: unmapped cert variables fall through to the header default and
+// get rewritten as `header="cert_xxx: ..."` by isHeaderVariable.
+//
+// Kept in lockstep with common.XrayCertFields' values via a parity test in
+// the convert/ package (which can import both without a cycle).
+var CertDataKeys = []string{
+	"cert_subject",
+	"cert_issuer",
+	"cert_common_name",
+	"cert_organization",
+	"cert_not_before",
+	"cert_not_after",
+	"cert_dnsnames",
+	"cert_serial",
+	"raw_cert",
+}
+
 // --- FOFA ---
 
 type FOFAEmitter struct{}
@@ -23,26 +42,24 @@ var fofaPartMap = map[string]string{
 	"cert_issuer":       "cert.issuer",
 	"cert_common_name":  "certs_subject_cn",
 	"cert_organization": "certs_subject_org",
-	// fofa has no per-field DNS-SAN / serial cert syntax; fall back to the
-	// whole-certificate substring match. raw_cert.bcontains is equivalent to
-	// fofa cert= so it also maps to the whole-cert field rather than header.
-	"cert_dnsnames": "cert",
-	"cert_serial":   "cert",
-	"raw_cert":      "cert",
-	"protocol":      "protocol",
+	// fofa has no per-field DNS-SAN / serial / validity cert syntax; fall back
+	// to the whole-certificate substring match. raw_cert.bcontains is
+	// equivalent to fofa cert= so it also maps to the whole-cert field.
+	"cert_dnsnames":   "cert",
+	"cert_serial":     "cert",
+	"cert_not_before": "cert",
+	"cert_not_after":  "cert",
+	"raw_cert":        "cert",
+	"protocol":        "protocol",
 }
 
 func (f *FOFAEmitter) Field(part string) string {
 	if v, ok := fofaPartMap[part]; ok {
 		return v
 	}
-	// Any other cert_* subfield falls back to the whole-certificate field
-	// rather than being mistaken for a response header.
-	if strings.HasPrefix(part, "cert") {
-		return "cert"
-	}
 	// Unmapped variables (location, set_cookie, x_powered_by, etc.)
-	// are individual header fields from xray conversion
+	// are individual header fields from xray conversion. Every cert_* key
+	// must be explicitly mapped above — see CertDataKeys / parity test.
 	return "header"
 }
 
@@ -91,6 +108,8 @@ var hunterPartMap = map[string]string{
 	"cert_organization": "cert",
 	"cert_dnsnames":     "cert",
 	"cert_serial":       "cert",
+	"cert_not_before":   "cert",
+	"cert_not_after":    "cert",
 	"raw_cert":          "cert",
 	"protocol":          "protocol",
 }
@@ -99,9 +118,8 @@ func (h *HunterEmitter) Field(part string) string {
 	if v, ok := hunterPartMap[part]; ok {
 		return v
 	}
-	if strings.HasPrefix(part, "cert") {
-		return "cert"
-	}
+	// Cert keys are all explicitly mapped above (see CertDataKeys); anything
+	// else is an individual response header.
 	return "header"
 }
 
@@ -145,20 +163,22 @@ var censysPartMap = map[string]string{
 	"cert_common_name":  "services.tls.certificates.leaf_data.subject.common_name",
 	"cert_organization": "services.tls.certificates.leaf_data.subject.organization",
 	"cert_dnsnames":     "services.tls.certificates.leaf_data.names",
-	// serial is not exposed on censys host records (only the certificates
-	// index); fall back to the whole-certificate field.
-	"cert_serial": "services.certificate",
-	"raw_cert":    "services.certificate",
-	"protocol":    "services.service_name",
+	// serial / not_before / not_after are not exposed as per-field queries on
+	// censys host records (only the certificates index); fall back to the
+	// whole-certificate field so the value still matches as a substring.
+	"cert_serial":     "services.certificate",
+	"cert_not_before": "services.certificate",
+	"cert_not_after":  "services.certificate",
+	"raw_cert":        "services.certificate",
+	"protocol":        "services.service_name",
 }
 
 func (c *CensysEmitter) Field(part string) string {
 	if v, ok := censysPartMap[part]; ok {
 		return v
 	}
-	if strings.HasPrefix(part, "cert") {
-		return "services.certificate"
-	}
+	// Cert keys are all explicitly mapped above (see CertDataKeys); anything
+	// else is an individual response header.
 	return "services.http.response.headers"
 }
 
