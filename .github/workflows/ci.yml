@@ -29,3 +29,11 @@ jobs:
 
       - name: Test JSON build
         run: go test -tags json ./operators/ ./protocols/ ./protocols/http/ ./templates/ -v -count=1 -timeout=120s
+
+      # Live end-to-end match assertions against real targets (opt-in).
+      # Each xpoc example is executed against one verified target and must still
+      # MATCH; only a reachable-but-no-match counts as a regression — targets
+      # unreachable from the runner are skipped, so this never reds out purely
+      # on network/geo blocking.
+      - name: Test live match (xpoc examples)
+        run: NEUTRON_LIVE_MATCH=1 go test ./templates/ -run TestXpocExamplesLiveMatch -v -count=1 -timeout=300s
