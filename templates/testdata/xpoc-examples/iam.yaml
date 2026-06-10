@@ -1,0 +1,30 @@
+http:
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+      req-condition: true
+    - matchers:
+        - dsl:
+            - ((contains(body_1, "/idp/AuthnEngine")) || ((contains(body_2, "./static/config.js")) && ((contains(body, "idpUrl") && contains(body, "authCenter")))))
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/static/config.js'
+      redirects: true
+      req-condition: true
+id: bamboocloud-iam
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "/idp/AuthnEngine" OR services.http.response.body: "./static/config.js" AND services.http.response.body: "idpUrl" AND services.http.response.body: "authCenter"'
+        cpe: bamboocloud:iam
+        fofa-query: body="/idp/AuthnEngine" || (body="/idp/AuthnEngine" || body="./static/config.js" && body="idpUrl" && body="authCenter")
+        hunter-query: body="/idp/AuthnEngine" || body="./static/config.js" && body="idpUrl" && body="authCenter"
+    name: 竹云-IAM
+    severity: info
+    tags: neutron,xray,converted

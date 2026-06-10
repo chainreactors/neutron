@@ -1,0 +1,99 @@
+http:
+    - matchers:
+        - regex:
+            - (?i)<title>[^<]*用友GRP-U8 高校内控管理软件[^<]*</title>
+          type: regex
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+    - matchers:
+        - case-insensitive: true
+          type: word
+          words:
+            - logo/images/ufida_
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+    - matchers:
+        - case-insensitive: true
+          type: word
+          words:
+            - /ext-js/images/usg
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+    - matchers:
+        - regex:
+            - (?i)window.location.replace("login.jsp?up=1")
+          type: regex
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+    - matchers:
+        - case-insensitive: true
+          type: word
+          words:
+            - javascript/bw8.js
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+    - matchers:
+        - case-insensitive: true
+          type: word
+          words:
+            - var servervendor = 'yonyouupcn
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+    - matchers:
+        - case-insensitive: true
+          type: word
+          words:
+            - 开启u8 cloud云端之旅
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+    - matchers:
+        - case-insensitive: true
+          type: word
+          words:
+            - 用友GRP-U8行政事业内控管理软件
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+    - matchers:
+        - case-insensitive: true
+          type: word
+          words:
+            - getFirstU8Accid
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+    - matchers:
+        - regex:
+            - (?i)<title>[^<]*用友grp-u8[^<]*</title>
+          type: regex
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+id: yonyou-yonyou_u8_oa
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "logo/images/ufida_" OR services.http.response.body: "/ext-js/images/usg" OR services.http.response.body: "javascript/bw8.js" OR services.http.response.body: "var servervendor = ''yonyouupcn" OR services.http.response.body: "开启u8 cloud云端之旅" OR services.http.response.body: "用友grp-u8行政事业内控管理软件" OR services.http.response.body: "getfirstu8accid"'
+        cpe: yonyou:yonyou_u8_oa
+        fofa-query: body="logo/images/ufida_" || body="/ext-js/images/usg" || body="javascript/bw8.js" || body="var servervendor = 'yonyouupcn" || body="开启u8 cloud云端之旅" || body="用友grp-u8行政事业内控管理软件" || body="getfirstu8accid"
+        hunter-query: body="logo/images/ufida_" || body="/ext-js/images/usg" || body="javascript/bw8.js" || body="var servervendor = 'yonyouupcn" || body="开启u8 cloud云端之旅" || body="用友grp-u8行政事业内控管理软件" || body="getfirstu8accid"
+    name: 用友-OA
+    severity: info
+    tags: neutron,xray,converted

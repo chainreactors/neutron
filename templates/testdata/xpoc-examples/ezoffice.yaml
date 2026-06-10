@@ -1,0 +1,34 @@
+http:
+    - matchers:
+        - condition: and
+          type: word
+          words:
+            - defaultroot/themes
+            - defaultroot/scripts
+        - dsl:
+            - (contains(set_cookie, "OASESSIONID") && contains(body, "defaultroot"))
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+    - matchers:
+        - condition: and
+          type: word
+          words:
+            - window.location
+            - /defaultroot/login.jsp
+      matchers-condition: and
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+id: wanhusoft-ezoffice
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "defaultroot/themes" AND services.http.response.body: "defaultroot/scripts" OR services.http.response.headers: "set_cookie: OASESSIONID" AND services.http.response.body: "defaultroot" OR services.http.response.body: "window.location" AND services.http.response.body: "/defaultroot/login.jsp"'
+        cpe: wanhusoft:ezoffice
+        fofa-query: 'app="万户网络-ezOFFICE" || (body="defaultroot/themes" && body="defaultroot/scripts" || header="set_cookie: OASESSIONID" && body="defaultroot" || body="window.location" && body="/defaultroot/login.jsp")'
+        hunter-query: 'body="defaultroot/themes" && body="defaultroot/scripts" || header="set_cookie: OASESSIONID" && body="defaultroot" || body="window.location" && body="/defaultroot/login.jsp"'
+    name: 万户-OA
+    severity: info
+    tags: neutron,xray,converted

@@ -1,0 +1,35 @@
+http:
+    - matchers:
+        - dsl:
+            - contains(server, "WebLogic")
+          type: dsl
+        - dsl:
+            - ((status_code == 200) && contains(body, "/console/framework/skins/wlsconsole/images/Branding_Login_WeblogicConsole.gif"))
+          type: dsl
+        - type: word
+          words:
+            - Welcome to Weblogic Application Server
+            - The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent.
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+    - matchers:
+        - type: word
+          words:
+            - The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent.
+      method: GET
+      path:
+        - '{{BaseURL}}/{{pathname}}'
+id: oracle-weblogic
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.headers.server: "WebLogic" OR services.http.response.status_code: 200 AND services.http.response.body: "/console/framework/skins/wlsconsole/images/Branding_Login_WeblogicConsole.gif" OR services.http.response.body: "Welcome to Weblogic Application Server" OR services.http.response.body: "The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent." OR services.http.response.body: "The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent."'
+        cpe: oracle:weblogic
+        fofa-query: app="BEA-WebLogic-Server" || (server="WebLogic" || status_code="200" && body="/console/framework/skins/wlsconsole/images/Branding_Login_WeblogicConsole.gif" || body="Welcome to Weblogic Application Server" || body="The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent." || body="The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent.")
+        hunter-query: server="WebLogic" || status_code="200" && body="/console/framework/skins/wlsconsole/images/Branding_Login_WeblogicConsole.gif" || body="Welcome to Weblogic Application Server" || body="The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent." || body="The server has not found anything matching the Request-URI. No indication is given of whether the condition is temporary or permanent."
+    name: WebLogic-Server
+    severity: info
+    tags: neutron,xray,converted
+variables:
+    pathname: '{{rand_text_alphanumeric(16)}}'

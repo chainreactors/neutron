@@ -1,0 +1,16 @@
+http:
+    - matchers:
+        - dsl:
+            - icontains(server, "GoAhead")
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+id: embedthis-goahead
+info:
+    author: xray-converter
+    metadata:
+        cpe: embedthis:goahead
+    name: Embedthis GoAhead
+    severity: info
+    tags: neutron,xray,converted

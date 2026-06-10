@@ -1,0 +1,20 @@
+http:
+    - matchers:
+        - type: word
+          words:
+            - <p>4.成功登陆ERDS系统。</p>
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+id: thinktrader-erds
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "<p>4.成功登陆ERDS系统。</p>"'
+        cpe: thinktrader:erds
+        fofa-query: body="<p>4.成功登陆ERDS系统。</p>" || (body="<p>4.成功登陆ERDS系统。</p>")
+        hunter-query: body="<p>4.成功登陆ERDS系统。</p>"
+    name: 讯投-ERDS
+    severity: info
+    tags: neutron,xray,converted

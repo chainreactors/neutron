@@ -1,0 +1,32 @@
+http:
+    - matchers:
+        - type: word
+          words:
+            - /wp-content/
+            - content="WordPress
+        - dsl:
+            - ((contains(body, "/wp-includes/js") || (contains(body, "id=\"__next\">") && (!contains(body, "href=\"/_next/")))) || (contains(body, "id=\"__next\"") && contains(body, "/wp-json/")))
+          type: dsl
+      matchers-condition: and
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+    - matchers:
+        - hash:
+            - "1198047028"
+          part: favicon_hash
+          type: favicon
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+id: wordpress-wordpress
+info:
+    author: xray-converter
+    metadata:
+        censys-query: '(services.http.response.body: "/wp-content/" OR services.http.response.body: "content="WordPress") AND (services.http.response.body: "/wp-includes/js" OR services.http.response.body: "id="__next">" AND NOT services.http.response.body: "href="/_next/" OR services.http.response.body: "id="__next"" AND services.http.response.body: "/wp-json/")'
+        cpe: wordpress:wordpress
+        fofa-query: (body="/wp-content/" || body="content=\"WordPress") && (body="/wp-includes/js" || body="id=\"__next\">" && !(body="href=\"/_next/") || body="id=\"__next\"" && body="/wp-json/") || icon_hash="1198047028"
+        hunter-query: (body="/wp-content/" || body="content=\"WordPress") && (body="/wp-includes/js" || body="id=\"__next\">" && !(body="href=\"/_next/") || body="id=\"__next\"" && body="/wp-json/") || icon_hash="1198047028"
+    name: WordPress
+    severity: info
+    tags: neutron,xray,converted

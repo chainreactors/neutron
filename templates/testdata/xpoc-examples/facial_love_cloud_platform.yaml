@@ -1,0 +1,26 @@
+http:
+    - matchers:
+        - type: word
+          words:
+            - 脸爱云
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+    - matchers:
+        - type: word
+          words:
+            - View/SystemMng/PwdChanges.aspx
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+id: szjocat-facial_love_cloud_platform
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "脸爱云" OR services.http.response.body: "View/SystemMng/PwdChanges.aspx"'
+        cpe: szjocat:facial_love_cloud_platform
+        fofa-query: body='View/UserReserved/UserReservedTest.aspx' || (body="脸爱云" || body="View/SystemMng/PwdChanges.aspx")
+        hunter-query: body="脸爱云" || body="View/SystemMng/PwdChanges.aspx"
+    name: 脸爱云一脸通智慧管理平台
+    severity: info
+    tags: neutron,xray,converted

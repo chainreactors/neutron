@@ -1,0 +1,31 @@
+http:
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+      req-condition: true
+    - matchers:
+        - dsl:
+            - (((contains(body_1, "search/pcRender") && contains(body_1, "pageId"))) || ((icontains(body_2, "eprotal")) && ((contains(body, "aisearch") || contains(body, "/search/admin/onlySearch.htm")))))
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/search/admin/toLogin.htm'
+      redirects: true
+      req-condition: true
+id: huilan-aisite_search
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "search/pcRender" AND services.http.response.body: "pageId" OR (services.http.response.body: "aisearch" OR services.http.response.body: "/search/admin/onlySearch.htm")'
+        cpe: huilan:aisite_search
+        fofa-query: body="search/pcRender" && body="pageId" || (body="aisearch" || body="/search/admin/onlySearch.htm")
+        hunter-query: body="search/pcRender" && body="pageId" || (body="aisearch" || body="/search/admin/onlySearch.htm")
+    name: 中科汇联-AiSearch
+    severity: info
+    tags: neutron,xray,converted

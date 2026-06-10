@@ -1,0 +1,31 @@
+http:
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - extractors:
+        - group: 1
+          internal: true
+          name: version
+          regex:
+            - WCM v(?P<version>[0-9\.]+)'
+          type: regex
+      matchers:
+        - dsl:
+            - (((((contains(body_1, "WCMAnt:param=") || contains(body_1, "URL=/wcm")) || icontains(body_1, "window.location.href = /wcm;")) || icontains(header_1, "com.trs.idm.coSessionId"))) && (true))
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/wcm/app/js/source/wcmlib/WCMConstants.js'
+      req-condition: true
+id: trs-wcm
+info:
+    author: xray-converter
+    metadata:
+        censys-query: '(services.http.response.body: "WCMAnt:param=" OR services.http.response.body: "URL=/wcm") AND true'
+        cpe: trs:wcm
+        fofa-query: app="拓尔思-WCM" || ((body="WCMAnt:param=" || body="URL=/wcm") && true)
+        hunter-query: (body="WCMAnt:param=" || body="URL=/wcm") && true
+    name: 拓尔思-WCM
+    severity: info
+    tags: neutron,xray,converted

@@ -1,0 +1,44 @@
+http:
+    - matchers:
+        - dsl:
+            - (contains(location, "/general/login/index.php") || contains(body, "redirectUrl = \"login.php\""))
+          type: dsl
+        - type: word
+          words:
+            - window.opener="eoffice";
+      matchers-condition: and
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+    - matchers:
+        - dsl:
+            - contains(location, "/eoffice10/client/web/login")
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+    - matchers:
+        - condition: and
+          type: word
+          words:
+            - /eoffice10/client/web/
+            - eoffice_loading_tip
+        - condition: and
+          type: word
+          words:
+            - clsid:FB4EE423-43A4-4AA9-BDE9-4335A6D3C74E
+            - /general/login/index.php?c=Login&a=updateSystem
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+id: weaver-weaver_e_office
+info:
+    author: xray-converter
+    metadata:
+        censys-query: '(services.http.response.headers: "location: /general/login/index.php" OR services.http.response.body: "redirectUrl = "login.php"") AND services.http.response.body: "window.opener="eoffice";" OR services.http.response.headers: "location: /eoffice10/client/web/login" OR services.http.response.body: "/eoffice10/client/web/" AND services.http.response.body: "eoffice_loading_tip" OR services.http.response.body: "clsid:FB4EE423-43A4-4AA9-BDE9-4335A6D3C74E" AND services.http.response.body: "/general/login/index.php?c=Login&a=updateSystem"'
+        cpe: weaver:weaver_e_office
+        fofa-query: 'app="泛微-EOffice" || ((header="location: /general/login/index.php" || body="redirectUrl = \"login.php\"") && body="window.opener=\"eoffice\";" || header="location: /eoffice10/client/web/login" || body="/eoffice10/client/web/" && body="eoffice_loading_tip" || body="clsid:FB4EE423-43A4-4AA9-BDE9-4335A6D3C74E" && body="/general/login/index.php?c=Login&a=updateSystem")'
+        hunter-query: '(header="location: /general/login/index.php" || body="redirectUrl = \"login.php\"") && body="window.opener=\"eoffice\";" || header="location: /eoffice10/client/web/login" || body="/eoffice10/client/web/" && body="eoffice_loading_tip" || body="clsid:FB4EE423-43A4-4AA9-BDE9-4335A6D3C74E" && body="/general/login/index.php?c=Login&a=updateSystem"'
+    name: 泛微-EOffice
+    severity: info
+    tags: neutron,xray,converted

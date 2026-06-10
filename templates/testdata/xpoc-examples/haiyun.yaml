@@ -1,0 +1,19 @@
+http:
+    - matchers:
+        - dsl:
+            - contains(header, "/ids/LoginServlet")
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/IGI/'
+id: trs-haiyun
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.headers: "/ids/LoginServlet"'
+        cpe: trs:haiyun
+        fofa-query: header="/ids/LoginServlet"
+        hunter-query: header="/ids/LoginServlet"
+    name: 拓尔思-政府网站集约化
+    severity: info
+    tags: neutron,xray,converted
