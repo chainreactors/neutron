@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.11', '1.17', '1.24']
+        go-version: ['1.18', '1.24']
 
     steps:
       - uses: actions/checkout@v4
@@ -22,15 +22,10 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Enable Go modules (go 1.11/1.12)
-        if: matrix.go-version == '1.11'
-        run: echo "GO111MODULE=on" >> $GITHUB_ENV
-
       - name: Build
         run: go build ./...
 
       - name: Vet
-        if: matrix.go-version != '1.11'
         run: go vet ./...
 
       - name: Test
