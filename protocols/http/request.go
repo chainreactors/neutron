@@ -134,7 +134,6 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 	default:
 		return matcher.ResultWithMatchedSnippet(matcher.MatchWithHandler(item, data))
 	}
-	return false, []string{}
 }
 
 // Extract performs extracting operation for an extractor on model and returns true or false.
@@ -153,7 +152,6 @@ func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extr
 	default:
 		return extractor.ExtractWithHandler(item, data)
 	}
-	return nil
 }
 
 // getMatchPart returns the match part honoring "all" matchers + others.
