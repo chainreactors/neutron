@@ -1,0 +1,22 @@
+http:
+    - matchers:
+        - regex:
+            - (?i)<title>[^<]*EmpireCMS[^<]*</title>
+          type: regex
+        - type: word
+          words:
+            - EmpireCMS</a></strong>
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+id: empiresoft-empirecms
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "EmpireCMS</a></strong>"'
+        cpe: empiresoft:empirecms
+        fofa-query: app="帝国软件-EmpireCMS" || (body="EmpireCMS</a></strong>")
+        hunter-query: body="EmpireCMS</a></strong>"
+    name: 帝国CMS
+    severity: info
+    tags: neutron,xray,converted

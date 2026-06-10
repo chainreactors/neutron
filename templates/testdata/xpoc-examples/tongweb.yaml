@@ -1,0 +1,45 @@
+http:
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/console/'
+      redirects: true
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/ejbserver/ejb'
+      req-condition: true
+    - matchers:
+        - dsl:
+            - ((icontains(server_1, "TongWeb Server")) || (icontains(server_2, "TongWeb Server")) || ((icontains(server_3, "webserver")) && ((regex("(?i)<title>\\s*TongWeb\\s*</title>", body_4) || (contains(body_4, "/console/rest/i18n?locale=") && contains(body_4, "/console/notinrealm/rest/commons"))))) || ((((len(body_5) == 0) && (status_code_5 == 200))) && ((status_code == 404))))
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/ejbserver/{{rStr3}}'
+      req-condition: true
+id: tongtech-tongweb
+info:
+    author: xray-converter
+    metadata:
+        censys-query: '(services.http.response.body: "/console/rest/i18n?locale=" AND services.http.response.body: "/console/notinrealm/rest/commons") OR <nil>="0" AND services.http.response.status_code: 200 AND services.http.response.status_code: 404'
+        cpe: tongtech:tongweb
+        fofa-query: (body="/console/rest/i18n?locale=" && body="/console/notinrealm/rest/commons") || <nil>=="0" && status_code="200" && status_code="404"
+        hunter-query: (body="/console/rest/i18n?locale=" && body="/console/notinrealm/rest/commons") || <nil>=="0" && status_code="200" && status_code="404"
+    name: TongWeb-东方通应用服务器
+    severity: info
+    tags: neutron,xray,converted
+variables:
+    rStr3: '{{rand_base(8, "abcdefghijklmnopqrstuvwxyz")}}'

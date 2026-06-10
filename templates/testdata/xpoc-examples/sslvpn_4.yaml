@@ -1,0 +1,19 @@
+http:
+    - matchers:
+        - type: word
+          words:
+            - /prx/000/http/
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+id: arraynetworks-sslvpn
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "/prx/000/http/"'
+        cpe: arraynetworks:sslvpn
+        fofa-query: app="Array-VPN" || (body="/prx/000/http/")
+        hunter-query: body="/prx/000/http/"
+    name: Array-SSL-VPN
+    severity: info
+    tags: neutron,xray,converted

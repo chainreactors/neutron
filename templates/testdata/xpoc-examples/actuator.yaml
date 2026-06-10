@@ -1,0 +1,50 @@
+http:
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+      method: GET
+      path:
+        - '{{BaseURL}}/{{404Path}}'
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/actuator'
+      req-condition: true
+    - headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+      method: GET
+      path:
+        - '{{BaseURL}}/actuator/health'
+      req-condition: true
+    - headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+      matchers:
+        - dsl:
+            - (((contains(favicon_hash_1, "116323821")) || (((((contains(body_2, "<h1>Whitelabel Error Page</h1>") || (contains(body_2, "assets/js/vue.min.js") && contains(body_2, "assets/js/element.js"))) || contains(body_2, "\"msg\":\"404 NOT_FOUND\"")) || contains(body_2, "Full authentication is required to access this resource")) || contains(content_type_2, "application/json"))) || (((((contains(body_3, "<h1>Whitelabel Error Page</h1>") || (contains(body_3, "assets/js/vue.min.js") && contains(body_3, "assets/js/element.js"))) || contains(body_3, "\"msg\":\"404 NOT_FOUND\"")) || contains(body_3, "Full authentication is required to access this resource")) || contains(content_type_3, "application/json")))) && ((((contains(body_4, "/actuator") && contains(body_4, "\"_links\":{")) && (contains(body_4, "\"env\":{") || contains(content_type_4, "spring-boot.actuator")))) || ((((status_code_5 == 200) && contains(content_type_5, "spring-boot.actuator")) || ((starts_with(body_5, "{\"code\":") && contains(body_5, "\"status\":")) && contains(body_5, "\"ping\":")))) || ((((status_code == 200) && contains(content_type, "spring-boot.actuator")) || ((starts_with(body, "{\"code\":") && contains(body, "\"status\":")) && contains(body, "\"ping\":"))))))
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/health'
+      req-condition: true
+id: spring-actuator
+info:
+    author: xray-converter
+    metadata:
+        censys-query: '(services.http.response.body: "<h1>Whitelabel Error Page</h1>" OR services.http.response.body: "assets/js/vue.min.js" AND services.http.response.body: "assets/js/element.js" OR services.http.response.body: ""msg":"404 NOT_FOUND"" OR services.http.response.body: "Full authentication is required to access this resource" OR services.http.response.headers.content_type: "application/json" OR services.http.response.body: "<h1>Whitelabel Error Page</h1>" OR services.http.response.body: "assets/js/vue.min.js" AND services.http.response.body: "assets/js/element.js" OR services.http.response.body: ""msg":"404 NOT_FOUND"" OR services.http.response.body: "Full authentication is required to access this resource" OR services.http.response.headers.content_type: "application/json") AND (services.http.response.body: "/actuator" AND services.http.response.body: ""_links":{" AND (services.http.response.body: ""env":{" OR services.http.response.headers.content_type: "spring-boot.actuator") OR services.http.response.status_code: 200 AND services.http.response.headers.content_type: "spring-boot.actuator" OR services.http.response.body: "{"code":" AND services.http.response.body: ""status":" AND services.http.response.body: ""ping":" OR services.http.response.status_code: 200 AND services.http.response.headers.content_type: "spring-boot.actuator" OR services.http.response.body: "{"code":" AND services.http.response.body: ""status":" AND services.http.response.body: ""ping":")'
+        cpe: spring:actuator
+        fofa-query: '(icon_hash="116323821" || body="<h1>Whitelabel Error Page</h1>" || body="assets/js/vue.min.js" && body="assets/js/element.js" || body="\"msg\":\"404 NOT_FOUND\"" || body="Full authentication is required to access this resource" || header="content_type: application/json" || body="<h1>Whitelabel Error Page</h1>" || body="assets/js/vue.min.js" && body="assets/js/element.js" || body="\"msg\":\"404 NOT_FOUND\"" || body="Full authentication is required to access this resource" || header="content_type: application/json") && (body="/actuator" && body="\"_links\":{" && (body="\"env\":{" || header="content_type: spring-boot.actuator") || status_code="200" && header="content_type: spring-boot.actuator" || body="{\"code\":" && body="\"status\":" && body="\"ping\":" || status_code="200" && header="content_type: spring-boot.actuator" || body="{\"code\":" && body="\"status\":" && body="\"ping\":")'
+        hunter-query: '(icon_hash="116323821" || body="<h1>Whitelabel Error Page</h1>" || body="assets/js/vue.min.js" && body="assets/js/element.js" || body="\"msg\":\"404 NOT_FOUND\"" || body="Full authentication is required to access this resource" || header="content_type: application/json" || body="<h1>Whitelabel Error Page</h1>" || body="assets/js/vue.min.js" && body="assets/js/element.js" || body="\"msg\":\"404 NOT_FOUND\"" || body="Full authentication is required to access this resource" || header="content_type: application/json") && (body="/actuator" && body="\"_links\":{" && (body="\"env\":{" || header="content_type: spring-boot.actuator") || status_code="200" && header="content_type: spring-boot.actuator" || body="{\"code\":" && body="\"status\":" && body="\"ping\":" || status_code="200" && header="content_type: spring-boot.actuator" || body="{\"code\":" && body="\"status\":" && body="\"ping\":")'
+    name: SpringBoot Actuator
+    severity: info
+    tags: neutron,xray,converted
+variables:
+    404Path: '{{rand_text_alphanumeric(16)}}'

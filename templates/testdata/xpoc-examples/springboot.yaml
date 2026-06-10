@@ -1,0 +1,44 @@
+http:
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - headers:
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+      method: GET
+      path:
+        - '{{BaseURL}}/{{404Path}}'
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - matchers:
+        - dsl:
+            - ((((md5(favicon_content_1) == "0488faca4c19046b94d07c3ee83cf9d6") || contains(favicon_hash_1, "116323821"))) || (contains(body_2, "<h1>Whitelabel Error Page</h1>")) || ((contains(all_headers_3, "set_cookie:") && contains(set_cookie_3, "org.springframework.web.servlet.i18n.CookieLocaleResolver"))) || ((contains(body_4, "/actuator/info") && contains(body_4, "target=\"_blank\">"))) || (((contains(body_5, "eureka/css/") || contains(body_5, "src=\"eureka/js/"))) && (contains(body, "spring-logo-eureka"))))
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/eureka/css/wro.css'
+      req-condition: true
+id: vmware-springboot
+info:
+    author: xray-converter
+    metadata:
+        censys-query: '<nil>="0488faca4c19046b94d07c3ee83cf9d6" OR services.http.response.body: "<h1>Whitelabel Error Page</h1>" OR services.http.response.headers: "set_cookie:" AND services.http.response.headers: "set_cookie: org.springframework.web.servlet.i18n.CookieLocaleResolver" OR services.http.response.body: "/actuator/info" AND services.http.response.body: "target="_blank">" OR (services.http.response.body: "eureka/css/" OR services.http.response.body: "src="eureka/js/") AND services.http.response.body: "spring-logo-eureka"'
+        cpe: vmware:springboot
+        fofa-query: '<nil>=="0488faca4c19046b94d07c3ee83cf9d6" || icon_hash="116323821" || body="<h1>Whitelabel Error Page</h1>" || header="set_cookie:" && header="set_cookie: org.springframework.web.servlet.i18n.CookieLocaleResolver" || body="/actuator/info" && body="target=\"_blank\">" || (body="eureka/css/" || body="src=\"eureka/js/") && body="spring-logo-eureka"'
+        hunter-query: '<nil>=="0488faca4c19046b94d07c3ee83cf9d6" || icon_hash="116323821" || body="<h1>Whitelabel Error Page</h1>" || header="set_cookie:" && header="set_cookie: org.springframework.web.servlet.i18n.CookieLocaleResolver" || body="/actuator/info" && body="target=\"_blank\">" || (body="eureka/css/" || body="src=\"eureka/js/") && body="spring-logo-eureka"'
+    name: SpringBoot
+    severity: info
+    tags: neutron,xray,converted
+variables:
+    404Path: '{{rand_text_alphanumeric(16)}}'

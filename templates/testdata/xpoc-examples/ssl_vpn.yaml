@@ -1,0 +1,61 @@
+http:
+    - matchers:
+        - type: word
+          words:
+            - 1=@@=本地认证=@@=1=@@=本地认证=@@=0=@@=0=@@=0=@@=0
+            - <title>奇安信VPN
+        - condition: and
+          type: word
+          words:
+            - 请使用手机奇安信ID扫码登录
+            - VPN
+        - type: word
+          words:
+            - <a href="sslvpn://" target="_blank">启动MAC客户端登录</a>
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+    - matchers:
+        - type: word
+          words:
+            - client.href='itms-services://?action=download-manifest&url='
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+    - matchers:
+        - type: word
+          words:
+            - 网神VPN安全网关系统
+        - condition: and
+          type: word
+          words:
+            - var __httpsVerify
+            - Public/resources/mPlugin/mToken.js
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+    - matchers:
+        - dsl:
+            - contains(set_cookie, "mod_pass_param=")
+          type: dsl
+        - dsl:
+            - contains(set_cookie, "portal_param=")
+          type: dsl
+        - dsl:
+            - contains(set_cookie, "client_style=")
+          type: dsl
+      matchers-condition: and
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+id: qianxin-ssl_vpn
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "1=@@=本地认证=@@=1=@@=本地认证=@@=0=@@=0=@@=0=@@=0" OR services.http.response.body: "<title>奇安信VPN" OR services.http.response.body: "请使用手机奇安信ID扫码登录" AND services.http.response.body: "VPN" OR services.http.response.body: "<a href="sslvpn://" target="_blank">启动MAC客户端登录</a>" OR services.http.response.body: "client.href=''itms-services://?action=download-manifest&url=''" OR services.http.response.body: "网神VPN安全网关系统" OR services.http.response.body: "var __httpsVerify" AND services.http.response.body: "Public/resources/mPlugin/mToken.js" OR services.http.response.headers: "set_cookie: mod_pass_param=" AND services.http.response.headers: "set_cookie: portal_param=" AND services.http.response.headers: "set_cookie: client_style="'
+        cpe: qianxin:ssl_vpn
+        fofa-query: 'body="1=@@=本地认证=@@=1=@@=本地认证=@@=0=@@=0=@@=0=@@=0" || (body="var client = document.getElementById(\"ios_dropdown_client\")" && icon_hash="634255230") || (body="1=@@=本地认证=@@=1=@@=本地认证=@@=0=@@=0=@@=0=@@=0" || body="<title>奇安信VPN" || body="请使用手机奇安信ID扫码登录" && body="VPN" || body="<a href=\"sslvpn://\" target=\"_blank\">启动MAC客户端登录</a>" || body="client.href=''itms-services://?action=download-manifest&url=''" || body="网神VPN安全网关系统" || body="var __httpsVerify" && body="Public/resources/mPlugin/mToken.js" || header="set_cookie: mod_pass_param=" && header="set_cookie: portal_param=" && header="set_cookie: client_style=")'
+        hunter-query: 'body="1=@@=本地认证=@@=1=@@=本地认证=@@=0=@@=0=@@=0=@@=0" || body="<title>奇安信VPN" || body="请使用手机奇安信ID扫码登录" && body="VPN" || body="<a href=\"sslvpn://\" target=\"_blank\">启动MAC客户端登录</a>" || body="client.href=''itms-services://?action=download-manifest&url=''" || body="网神VPN安全网关系统" || body="var __httpsVerify" && body="Public/resources/mPlugin/mToken.js" || header="set_cookie: mod_pass_param=" && header="set_cookie: portal_param=" && header="set_cookie: client_style="'
+    name: 奇安信-SSLVPN
+    severity: info
+    tags: neutron,xray,converted

@@ -1,0 +1,19 @@
+http:
+    - matchers:
+        - type: word
+          words:
+            - /IGI/nbhd
+      method: GET
+      path:
+        - '{{BaseURL}}/'
+id: trs-igi
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "/IGI/nbhd"'
+        cpe: trs:igi
+        fofa-query: body="/IGI/nbhd"
+        hunter-query: body="/IGI/nbhd"
+    name: 拓尔思-IGI
+    severity: info
+    tags: neutron,xray,converted

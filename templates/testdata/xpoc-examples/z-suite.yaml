@@ -1,0 +1,43 @@
+http:
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      redirects: true
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/404.jpg'
+      redirects: true
+      req-condition: true
+    - method: GET
+      path:
+        - '{{BaseURL}}/'
+      req-condition: true
+    - matchers:
+        - dsl:
+            - (((contains(body_1, "/bi/?proc=2&action=loadFavicon") && contains(body_1, "/bi/?proc=2&locale="))) || ((icontains(body_2, "yonghong") && (icontains(body_2, "contentdiv imgposition desw") || icontains(body_2, "YH_CONFIG")))) || ((contains(body_3, "background:url(404.jpg)")) && ((md5(body_4) == "77154f3efafe5b68423507a6658a636a"))) || (contains(favicon_hash_5, "398162124")) || ((icontains(body, "yonghong") && (icontains(body, "contentdiv imgposition desw") || icontains(body, "YH_CONFIG")))))
+          type: dsl
+      method: GET
+      path:
+        - '{{BaseURL}}/bi/?proc=1'
+      req-condition: true
+id: yonghongtech-z-suite
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "/bi/?proc=2&action=loadFavicon" AND services.http.response.body: "/bi/?proc=2&locale=" OR () OR services.http.response.body: "background:url(404.jpg)" AND <nil>="77154f3efafe5b68423507a6658a636a" OR ()'
+        cpe: yonghongtech:z-suite
+        fofa-query: body="/bi/?proc=2&action=loadFavicon" && body="/bi/?proc=2&locale=" || () || body="background:url(404.jpg)" && <nil>=="77154f3efafe5b68423507a6658a636a" || icon_hash="398162124" || ()
+        hunter-query: body="/bi/?proc=2&action=loadFavicon" && body="/bi/?proc=2&locale=" || () || body="background:url(404.jpg)" && <nil>=="77154f3efafe5b68423507a6658a636a" || icon_hash="398162124" || ()
+    name: 永洪-BI
+    severity: info
+    tags: neutron,xray,converted

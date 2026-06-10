@@ -1,0 +1,30 @@
+http:
+    - attack: pitchfork
+      extractors:
+        - dsl:
+            - entry
+          internal: true
+          name: path
+          type: dsl
+      matchers:
+        - type: word
+          words:
+            - org.geoserver.web
+      method: GET
+      path:
+        - '{{BaseURL}}{{entry}}web/'
+      payloads:
+        entry:
+            - /geoserver/
+            - /
+id: geoserver-geoserver
+info:
+    author: xray-converter
+    metadata:
+        censys-query: 'services.http.response.body: "org.geoserver.web"'
+        cpe: geoserver:geoserver
+        fofa-query: app="GeoServer" || (body="org.geoserver.web")
+        hunter-query: body="org.geoserver.web"
+    name: GeoServer
+    severity: info
+    tags: neutron,xray,converted
