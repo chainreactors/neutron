@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chainreactors/neutron/common/tlsx"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"gopkg.in/yaml.v3"
@@ -159,7 +160,7 @@ func TestSSLResponseFieldsMatchNucleiShape(t *testing.T) {
 	if data["probe_status"] != true || data["tls_connection"] != "ctls" {
 		t.Fatalf("missing nuclei status fields: %+v", data)
 	}
-	fp, ok := data["fingerprint_hash"].(certificateFingerprintHash)
+	fp, ok := data["fingerprint_hash"].(tlsx.CertificateFingerprintHash)
 	if !ok || len(fp.SHA256) != 64 || len(fp.SHA1) != 40 || len(fp.MD5) != 32 {
 		t.Fatalf("fingerprint_hash should be the tlsx object shape: %#v", data["fingerprint_hash"])
 	}
