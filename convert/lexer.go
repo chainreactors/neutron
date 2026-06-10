@@ -45,7 +45,7 @@ type xToken struct {
 }
 
 func xrayLex(input string) ([]xToken, error) {
-	s := strings.ReplaceAll(strings.ReplaceAll(input, "\r\n", " "), "\n", " ")
+	s := strings.Replace(strings.Replace(input, "\r\n", " ", -1), "\n", " ", -1)
 	runes := []rune(s)
 	var tokens []xToken
 	i := 0

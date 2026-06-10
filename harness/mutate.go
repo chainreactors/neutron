@@ -837,7 +837,7 @@ func transformedOutputValue(name, expr string, sources map[string]submatchSpec, 
 		}
 		spec.GroupName = group
 		value := ensureOutputValue(spec, resp)
-		return strings.ReplaceAll(value, old, newValue), true
+		return strings.Replace(value, old, newValue, -1), true
 	}
 	if source, group, fn, ok := parseUnaryOutputTransform(expr); ok {
 		spec, exists := sources[source]
@@ -1836,7 +1836,7 @@ func splitConcatExpr(expr string) []string {
 }
 
 func isHarnessRootURLExpression(expr string) bool {
-	compact := strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(expr), " ", ""), "'", `"`)
+	compact := strings.Replace(strings.Replace(strings.TrimSpace(expr), " ", "", -1), "'", `"`, -1)
 	switch compact {
 	case `response.url.scheme+"://"+response.url.domain`,
 		`request.url.scheme+"://"+request.url.domain`,
@@ -1849,7 +1849,7 @@ func isHarnessRootURLExpression(expr string) bool {
 }
 
 func isHarnessURLValue(expr string) bool {
-	compact := strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(expr), " ", ""), "'", `"`)
+	compact := strings.Replace(strings.Replace(strings.TrimSpace(expr), " ", "", -1), "'", `"`, -1)
 	switch compact {
 	case "request.url", "response.url", "request.url.url", "response.url.url":
 		return true
@@ -2090,11 +2090,11 @@ func headerFromContains(value string) (string, string) {
 }
 
 func headerVarName(name string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), "-", "_"))
+	return strings.ToLower(strings.Replace(strings.TrimSpace(name), "-", "_", -1))
 }
 
 func canonicalHeaderName(part string) string {
-	part = strings.ReplaceAll(part, "_", "-")
+	part = strings.Replace(part, "_", "-", -1)
 	parts := strings.Split(part, "-")
 	for i, p := range parts {
 		if p == "" {

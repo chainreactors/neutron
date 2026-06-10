@@ -974,5 +974,5 @@ func comparisonHashLiteral(node *dsl.Node) string {
 // headerVarName converts an HTTP header name to nuclei's variable convention.
 // "Content-Type" → "content_type", "Server" → "server", "Set-Cookie" → "set_cookie"
 func headerVarName(name string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), "-", "_"))
+	return strings.ToLower(strings.Replace(strings.TrimSpace(name), "-", "_", -1))
 }

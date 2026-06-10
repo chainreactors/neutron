@@ -188,8 +188,8 @@ func summarizeTrace(scenario string, index int, event *protocols.InternalWrapped
 
 func traceValue(value interface{}) string {
 	out := fmt.Sprint(value)
-	out = strings.ReplaceAll(out, "\r\n", "\\r\\n")
-	out = strings.ReplaceAll(out, "\n", "\\n")
+	out = strings.Replace(out, "\r\n", "\\r\\n", -1)
+	out = strings.Replace(out, "\n", "\\n", -1)
 	if len(out) > 240 {
 		return out[:240] + "..."
 	}

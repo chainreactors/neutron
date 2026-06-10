@@ -607,8 +607,8 @@ func xrayTemplatePath(path string) string {
 
 func normalizeRequestPath(path string, ctx *conversionContext) string {
 	path = strings.TrimSpace(strings.TrimPrefix(path, "^"))
-	path = strings.ReplaceAll(path, " ", "%20")
-	path = strings.ReplaceAll(path, "#", "%23")
+	path = strings.Replace(path, " ", "%20", -1)
+	path = strings.Replace(path, "#", "%23", -1)
 	if ctx == nil {
 		return path
 	}
@@ -618,7 +618,7 @@ func normalizeRequestPath(path string, ctx *conversionContext) string {
 		}
 		name := match[1]
 		if ctx.runtimeVars[name] {
-			path = strings.ReplaceAll(path, match[0], slashSafeRuntimePlaceholder(name))
+			path = strings.Replace(path, match[0], slashSafeRuntimePlaceholder(name), -1)
 			continue
 		}
 		if value, ok := ctx.variables[name].(string); ok && strings.HasPrefix(value, "/") {
@@ -744,7 +744,7 @@ func convertSetVariables(set map[string]interface{}, aliases map[string]string) 
 }
 
 func isRootURLSetExpression(expr string) bool {
-	compact := strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(expr), " ", ""), "'", `"`)
+	compact := strings.Replace(strings.Replace(strings.TrimSpace(expr), " ", "", -1), "'", `"`, -1)
 	switch compact {
 	case `response.url.scheme+"://"+response.url.domain`,
 		`request.url.scheme+"://"+request.url.domain`,
@@ -1637,8 +1637,8 @@ func extractInlineQuery(s string) string {
 
 func sanitizeID(name string) string {
 	id := strings.TrimPrefix(name, "fingerprint-")
-	id = strings.ReplaceAll(id, "--", "-")
-	id = strings.ReplaceAll(id, " ", "-")
+	id = strings.Replace(id, "--", "-", -1)
+	id = strings.Replace(id, " ", "-", -1)
 	return strings.ToLower(id)
 }
 

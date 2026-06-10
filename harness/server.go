@@ -128,7 +128,7 @@ func (r *Route) matches(req *http.Request) (map[string]string, bool) {
 		body, _ := readRequestBody(req)
 		bodyCaptures, ok := r.Body.match(body)
 		if !ok {
-			bodyCaptures, ok = r.Body.match(strings.ReplaceAll(body, "\r\n", "\n"))
+			bodyCaptures, ok = r.Body.match(strings.Replace(body, "\r\n", "\n", -1))
 		}
 		if !ok {
 			return nil, false
@@ -158,12 +158,12 @@ func matchPath(pattern *Pattern, path string) (map[string]string, bool) {
 		return captures, true
 	}
 	if strings.Contains(path, "%23") {
-		if captures, ok := pattern.match(strings.ReplaceAll(path, "%23", "#")); ok {
+		if captures, ok := pattern.match(strings.Replace(path, "%23", "#", -1)); ok {
 			return captures, true
 		}
 	}
 	if strings.Contains(path, "%20") {
-		if captures, ok := pattern.match(strings.ReplaceAll(path, "%20", " ")); ok {
+		if captures, ok := pattern.match(strings.Replace(path, "%20", " ", -1)); ok {
 			return captures, true
 		}
 	}
@@ -198,7 +198,7 @@ func mergeCaptures(dst, src map[string]string) {
 
 func collapseSlashes(path string) string {
 	for strings.Contains(path, "//") {
-		path = strings.ReplaceAll(path, "//", "/")
+		path = strings.Replace(path, "//", "/", -1)
 	}
 	return path
 }

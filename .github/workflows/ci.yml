@@ -27,17 +27,32 @@ jobs:
         run: echo "GO111MODULE=on" >> $GITHUB_ENV
 
       - name: Build
-        run: go build ./...
+        run: |
+          if [ "${{ matrix.go-version }}" = "1.11" ]; then
+            go build $(go list ./... | grep -v /cmd/)
+          else
+            go build ./...
+          fi
 
       - name: Vet
         if: matrix.go-version != '1.11'
         run: go vet ./...
 
       - name: Test
-        run: go test ./... -v -count=1 -timeout=180s
+        run: |
+          if [ "${{ matrix.go-version }}" = "1.11" ]; then
+            go test $(go list ./... | grep -v /cmd/) -v -count=1 -timeout=180s
+          else
+            go test ./... -v -count=1 -timeout=180s
+          fi
 
       - name: Test JSON build
-        run: go test -tags json ./... -v -count=1 -timeout=180s
+        run: |
+          if [ "${{ matrix.go-version }}" = "1.11" ]; then
+            go test -tags json $(go list ./... | grep -v /cmd/) -v -count=1 -timeout=180s
+          else
+            go test -tags json ./... -v -count=1 -timeout=180s
+          fi
 
       # operators/full requires go 1.24 (gojq, htmlquery, xmlquery).
       - name: Test operators/full submodule
