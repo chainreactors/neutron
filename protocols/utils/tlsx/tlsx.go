@@ -272,6 +272,9 @@ var registeredRevokeCheck RevokeCheckFunc
 // it. Last call wins; passing nil clears the registration.
 func RegisterRevokeCheck(f RevokeCheckFunc) { registeredRevokeCheck = f }
 
+// HasRevokeCheck reports whether a revocation backend has been registered.
+func HasRevokeCheck() bool { return registeredRevokeCheck != nil }
+
 // IsRevoked mirrors nuclei's `revoked` DSL field. With no backend registered
 // it ALWAYS returns false (safe soft-fail) so templates that read `revoked`
 // don't false-positive on stock builds. See RegisterRevokeCheck for opting in
