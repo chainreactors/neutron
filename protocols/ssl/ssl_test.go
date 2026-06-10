@@ -109,6 +109,73 @@ ssl:
 	}
 }
 
+func TestSSLCompileRejectsUnsupportedNucleiOptions(t *testing.T) {
+	cases := []struct {
+		name string
+		req  Request
+		want string
+	}{
+		{"version_enum", Request{TLSVersionEnum: true}, "tls_version_enum"},
+		{"cipher_enum", Request{TLSCipherEnum: true}, "tls_cipher_enum"},
+		{"cipher_types", Request{TLSCipherTypes: true}, "tls_cipher_types"},
+		{"ztls_scan_mode", Request{ScanMode: "ztls"}, "scan_mode=ztls"},
+		{"unknown_cipher", Request{CipherSuites: []string{"TLS_FAKE_WITH_NOTHING"}}, "unsupported tls cipher suite"},
+		{"tls13_cipher", Request{CipherSuites: []string{"TLS_AES_128_GCM_SHA256"}}, "not configurable"},
+	}
+	opts := &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.req.Compile(opts)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected compile error containing %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestSSLCompileAcceptsCipherSuitesAndCTLSMode(t *testing.T) {
+	r := &Request{
+		ScanMode:     "ctls",
+		CipherSuites: []string{"TLS_RSA_WITH_AES_128_CBC_SHA"},
+	}
+	opts := &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}
+	if err := r.Compile(opts); err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if len(r.cipherSuites) != 1 || r.cipherSuites[0] != tls.TLS_RSA_WITH_AES_128_CBC_SHA {
+		t.Fatalf("unexpected cipher ids: %#v", r.cipherSuites)
+	}
+}
+
+func TestSSLCompileRejectsRevokedWithoutBackend(t *testing.T) {
+	r := &Request{
+		Operators: operators.Operators{
+			Matchers: []*operators.Matcher{
+				{Type: "dsl", DSL: []string{`revoked == true`}},
+			},
+		},
+	}
+	opts := &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}
+	err := r.Compile(opts)
+	if err == nil || !strings.Contains(err.Error(), "no revocation backend") {
+		t.Fatalf("expected missing revocation backend error, got %v", err)
+	}
+}
+
+func TestSSLCompileDoesNotFalseRejectRevokedSubstring(t *testing.T) {
+	r := &Request{
+		Operators: operators.Operators{
+			Matchers: []*operators.Matcher{
+				{Type: "dsl", DSL: []string{`not_revoked == true`}},
+			},
+		},
+	}
+	opts := &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}
+	if err := r.Compile(opts); err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+}
+
 func TestSSLRawCertAndFingerprint(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer server.Close()

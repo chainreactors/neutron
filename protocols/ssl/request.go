@@ -183,7 +183,9 @@ func (r *Request) executeTarget(input *protocols.ScanContext, target string, dyn
 	//     so we can actually negotiate them when the target offers them.
 	// We DON'T widen when no version is pinned at all (default modern probe):
 	// the default behavior should match a normal HTTPS client.
-	if cfg.MinVersion != 0 || cfg.MaxVersion != 0 {
+	if len(r.cipherSuites) > 0 {
+		cfg.CipherSuites = append([]uint16(nil), r.cipherSuites...)
+	} else if cfg.MinVersion != 0 || cfg.MaxVersion != 0 {
 		all := cfg.CipherSuites
 		for _, c := range tls.CipherSuites() {
 			all = append(all, c.ID)
@@ -398,4 +400,49 @@ func tlsVersionValue(name string) uint16 {
 		return 0x0304
 	}
 	return 0
+}
+
+func parseCipherSuiteIDs(names []string) ([]uint16, error) {
+	ids := make([]uint16, 0, len(names))
+	seen := map[uint16]struct{}{}
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		id, ok := cipherSuiteID(name)
+		if !ok {
+			return nil, fmt.Errorf("unsupported tls cipher suite %q", raw)
+		}
+		if isTLS13CipherSuite(id) {
+			return nil, fmt.Errorf("tls 1.3 cipher suite %q is not configurable by crypto/tls CipherSuites", raw)
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("cipher_suites must contain at least one supported suite")
+	}
+	return ids, nil
+}
+
+func cipherSuiteID(name string) (uint16, bool) {
+	for _, suite := range tls.CipherSuites() {
+		if strings.EqualFold(suite.Name, name) {
+			return suite.ID, true
+		}
+	}
+	for _, suite := range tls.InsecureCipherSuites() {
+		if strings.EqualFold(suite.Name, name) {
+			return suite.ID, true
+		}
+	}
+	return 0, false
+}
+
+func isTLS13CipherSuite(id uint16) bool {
+	return id >= 0x1301 && id <= 0x1305
 }

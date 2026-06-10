@@ -17,11 +17,14 @@
 package ssl
 
 import (
+	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
+	"github.com/chainreactors/neutron/protocols/utils/tlsx"
 )
 
 // Request contains an SSL protocol request to be made from a template.
@@ -37,16 +40,33 @@ type Request struct {
 	MinVersion string `json:"min_version,omitempty" yaml:"min_version,omitempty"`
 	MaxVersion string `json:"max_version,omitempty" yaml:"max_version,omitempty"`
 
+	// CipherSuites optionally pins the offered TLS <=1.2 cipher suites by IANA
+	// name (for example TLS_RSA_WITH_AES_128_CBC_SHA). TLS 1.3 suites are not
+	// configurable through crypto/tls.
+	CipherSuites []string `json:"cipher_suites,omitempty" yaml:"cipher_suites,omitempty"`
+
+	// The following nuclei ssl options require enumeration behavior or ztls.
+	// They are declared so YAML cannot silently ignore them; Compile rejects
+	// unsupported non-zero values with a clear error.
+	ScanMode       string `json:"scan_mode,omitempty" yaml:"scan_mode,omitempty"`
+	TLSVersionEnum bool   `json:"tls_version_enum,omitempty" yaml:"tls_version_enum,omitempty"`
+	TLSCipherEnum  bool   `json:"tls_cipher_enum,omitempty" yaml:"tls_cipher_enum,omitempty"`
+	TLSCipherTypes bool   `json:"tls_cipher_types,omitempty" yaml:"tls_cipher_types,omitempty"`
+
 	operators.Operators `json:",inline,omitempty" yaml:",inline,omitempty"`
 
 	CompiledOperators *operators.Operators       `json:"-" yaml:"-" jsonschema:"-"`
 	dialer            *net.Dialer                `json:"-" yaml:"-" jsonschema:"-"`
 	options           *protocols.ExecuterOptions `json:"-" yaml:"-" jsonschema:"-"`
+	cipherSuites      []uint16                   `json:"-" yaml:"-" jsonschema:"-"`
 }
 
 // Compile compiles the protocol request for further execution.
 func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 	r.options = options
+	if err := r.validateOptions(); err != nil {
+		return err
+	}
 
 	timeout := 5
 	if options != nil && options.Options != nil && options.Options.Timeout > 0 {
@@ -65,6 +85,93 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		r.CompiledOperators = compiled
 	}
 	return nil
+}
+
+func (r *Request) validateOptions() error {
+	if r == nil {
+		return fmt.Errorf("ssl request is nil")
+	}
+	var unsupported []string
+	if r.TLSVersionEnum {
+		unsupported = append(unsupported, "tls_version_enum")
+	}
+	if r.TLSCipherEnum {
+		unsupported = append(unsupported, "tls_cipher_enum")
+	}
+	if r.TLSCipherTypes {
+		unsupported = append(unsupported, "tls_cipher_types")
+	}
+	if mode := strings.TrimSpace(r.ScanMode); mode != "" && !strings.EqualFold(mode, "ctls") {
+		unsupported = append(unsupported, "scan_mode="+mode)
+	}
+	if len(unsupported) > 0 {
+		return fmt.Errorf("unsupported nuclei ssl option(s): %s; neutron stdlib ssl supports address, min_version, max_version, scan_mode: ctls, and cipher_suites", strings.Join(unsupported, ", "))
+	}
+	if r.referencesRevoked() && !tlsx.HasRevokeCheck() {
+		return fmt.Errorf("ssl request references revoked but no revocation backend is registered; import _ \"github.com/chainreactors/neutron/protocols/utils/tlsx/full\" in the scanner binary")
+	}
+	if len(r.CipherSuites) == 0 {
+		r.cipherSuites = nil
+		return nil
+	}
+	ids, err := parseCipherSuiteIDs(r.CipherSuites)
+	if err != nil {
+		return err
+	}
+	r.cipherSuites = ids
+	return nil
+}
+
+func (r *Request) referencesRevoked() bool {
+	for _, matcher := range r.Matchers {
+		if matcher == nil {
+			continue
+		}
+		if matcher.Part == "revoked" {
+			return true
+		}
+		for _, expr := range matcher.DSL {
+			if containsIdent(expr, "revoked") {
+				return true
+			}
+		}
+	}
+	for _, extractor := range r.Extractors {
+		if extractor == nil {
+			continue
+		}
+		if extractor.Part == "revoked" {
+			return true
+		}
+		for _, expr := range extractor.DSL {
+			if containsIdent(expr, "revoked") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsIdent(expr, ident string) bool {
+	for i := 0; i < len(expr); {
+		c := expr[i]
+		if !isIdentByte(c) {
+			i++
+			continue
+		}
+		start := i
+		for i < len(expr) && isIdentByte(expr[i]) {
+			i++
+		}
+		if expr[start:i] == ident {
+			return true
+		}
+	}
+	return false
+}
+
+func isIdentByte(c byte) bool {
+	return c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
 }
 
 // Requests returns the total number of requests the rule will perform.
