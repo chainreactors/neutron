@@ -105,3 +105,56 @@ http:
 	require.True(t, result.Matched)
 	require.Contains(t, result.Request, "/first-path")
 }
+
+func TestCompileSupportsSSLRequests(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer server.Close()
+
+	yamlContent := `
+id: ssl-template
+info:
+  name: SSL Template
+  severity: info
+ssl:
+  - address: "{{Host}}:{{Port}}"
+    matchers:
+      - type: dsl
+        dsl:
+          - probe_status == true
+`
+	var tmpl Template
+	require.NoError(t, yaml.Unmarshal([]byte(yamlContent), &tmpl))
+	require.Len(t, tmpl.RequestsSSL, 1)
+	require.NoError(t, tmpl.Compile(nil))
+	require.Equal(t, 1, tmpl.TotalRequests)
+
+	result, err := tmpl.Execute(server.URL+"/path", nil)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Matched)
+}
+
+func TestCompileTLSAliasDoesNotDuplicateOnRecompile(t *testing.T) {
+	yamlContent := `
+id: tls-alias-template
+info:
+  name: TLS Alias Template
+  severity: info
+tls:
+  - address: "{{Host}}:{{Port}}"
+    matchers:
+      - type: dsl
+        dsl:
+          - probe_status == true
+`
+	var tmpl Template
+	require.NoError(t, yaml.Unmarshal([]byte(yamlContent), &tmpl))
+	require.Len(t, tmpl.RequestsTLS, 1)
+	require.NoError(t, tmpl.Compile(nil))
+	require.Equal(t, 1, tmpl.TotalRequests)
+	require.Len(t, tmpl.RequestsSSL, 1)
+
+	require.NoError(t, tmpl.Compile(nil))
+	require.Equal(t, 1, tmpl.TotalRequests)
+	require.Len(t, tmpl.RequestsSSL, 1)
+}

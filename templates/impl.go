@@ -10,6 +10,8 @@ import (
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/neutron/protocols/executer"
+	"github.com/chainreactors/neutron/protocols/network"
+	"github.com/chainreactors/neutron/protocols/ssl"
 )
 
 func (t *Template) GetTags() []string {
@@ -25,16 +27,16 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 		return errors.New("template is nil")
 	}
 	var requests []protocols.Request
-	var err error
 	options = templateExecuterOptions(options, t.Variables)
+	t.TotalRequests = 0
 
 	// Merge tcp and udp fields into RequestsNetwork (aliases support)
 	// FingerprintHub and other tools may use 'tcp' or 'udp' instead of 'network'
 	if len(t.RequestsTCP) > 0 {
-		t.RequestsNetwork = append(t.RequestsNetwork, t.RequestsTCP...)
+		t.RequestsNetwork = appendMissingNetworkRequests(t.RequestsNetwork, t.RequestsTCP)
 	}
 	if len(t.RequestsUDP) > 0 {
-		t.RequestsNetwork = append(t.RequestsNetwork, t.RequestsUDP...)
+		t.RequestsNetwork = appendMissingNetworkRequests(t.RequestsNetwork, t.RequestsUDP)
 	}
 
 	if requestHTTP := t.GetRequests(); len(requestHTTP) > 0 {
@@ -47,7 +49,6 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 			}
 			requests = append(requests, req)
 		}
-		t.Executor = executer.NewExecuter(requests, options)
 	}
 	if len(t.RequestsNetwork) > 0 {
 		for i, req := range t.RequestsNetwork {
@@ -56,19 +57,64 @@ func (t *Template) Compile(options *protocols.ExecuterOptions) error {
 			}
 			requests = append(requests, req)
 		}
-		t.Executor = executer.NewExecuter(requests, options)
+	}
+	if len(t.RequestsTLS) > 0 {
+		t.RequestsSSL = appendMissingSSLRequests(t.RequestsSSL, t.RequestsTLS)
+	}
+	if len(t.RequestsSSL) > 0 {
+		for i, req := range t.RequestsSSL {
+			if req == nil {
+				return fmt.Errorf("ssl request at index %d is nil", i)
+			}
+			requests = append(requests, req)
+		}
 	}
 
-	if t.Executor != nil {
-		err = t.Executor.Compile()
-		if err != nil {
-			return err
-		}
-		t.TotalRequests += t.Executor.Requests()
-	} else {
+	if len(requests) == 0 {
 		return errors.New("cannot compiled any executor")
 	}
+	t.Executor = executer.NewExecuter(requests, options)
+	if err := t.Executor.Compile(); err != nil {
+		return err
+	}
+	t.TotalRequests = t.Executor.Requests()
 	return nil
+}
+
+func appendMissingNetworkRequests(dst, src []*network.Request) []*network.Request {
+	if len(src) == 0 {
+		return dst
+	}
+	seen := make(map[*network.Request]struct{}, len(dst))
+	for _, req := range dst {
+		seen[req] = struct{}{}
+	}
+	for _, req := range src {
+		if _, ok := seen[req]; ok {
+			continue
+		}
+		dst = append(dst, req)
+		seen[req] = struct{}{}
+	}
+	return dst
+}
+
+func appendMissingSSLRequests(dst, src []*ssl.Request) []*ssl.Request {
+	if len(src) == 0 {
+		return dst
+	}
+	seen := make(map[*ssl.Request]struct{}, len(dst))
+	for _, req := range dst {
+		seen[req] = struct{}{}
+	}
+	for _, req := range src {
+		if _, ok := seen[req]; ok {
+			continue
+		}
+		dst = append(dst, req)
+		seen[req] = struct{}{}
+	}
+	return dst
 }
 
 // templateExecuterOptions creates the template-owned compile options. Compile
@@ -130,6 +176,21 @@ func (t *Template) ExecuteWithTransport(input string, payload map[string]interfa
 	}
 	ctx := protocols.NewScanContext(input, payload)
 	ctx.Transport = transport
+	return t.Executor.Execute(ctx)
+}
+
+// ExecuteWithTransportAndPathPrefix runs the template using the provided
+// RoundTripper and mount path prefix for this execution only. PathPrefix affects
+// RootURL generation in the HTTP request generator; BaseURL remains the literal
+// input URL.
+func (t *Template) ExecuteWithTransportAndPathPrefix(input string, payload map[string]interface{}, transport http.RoundTripper, pathPrefix string) (*operators.Result, error) {
+	if t.Executor.Options().Options.Opsec && t.Opsec {
+		common.Debug("(opsec!!!) skip template %s", t.Id)
+		return nil, protocols.OpsecError
+	}
+	ctx := protocols.NewScanContext(input, payload)
+	ctx.Transport = transport
+	ctx.PathPrefix = pathPrefix
 	return t.Executor.Execute(ctx)
 }
 
