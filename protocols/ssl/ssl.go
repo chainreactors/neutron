@@ -22,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chainreactors/neutron/common/tlsx"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 )
@@ -107,9 +106,6 @@ func (r *Request) validateOptions() error {
 	if len(unsupported) > 0 {
 		return fmt.Errorf("unsupported nuclei ssl option(s): %s; neutron stdlib ssl supports address, min_version, max_version, scan_mode: ctls, and cipher_suites", strings.Join(unsupported, ", "))
 	}
-	if r.referencesRevoked() && !tlsx.HasRevokeCheck() {
-		return fmt.Errorf("ssl request references revoked but no revocation backend is registered; import _ \"github.com/chainreactors/neutron/common/tlsx/full\" in the scanner binary")
-	}
 	if len(r.CipherSuites) == 0 {
 		r.cipherSuites = nil
 		return nil
@@ -120,58 +116,6 @@ func (r *Request) validateOptions() error {
 	}
 	r.cipherSuites = ids
 	return nil
-}
-
-func (r *Request) referencesRevoked() bool {
-	for _, matcher := range r.Matchers {
-		if matcher == nil {
-			continue
-		}
-		if matcher.Part == "revoked" {
-			return true
-		}
-		for _, expr := range matcher.DSL {
-			if containsIdent(expr, "revoked") {
-				return true
-			}
-		}
-	}
-	for _, extractor := range r.Extractors {
-		if extractor == nil {
-			continue
-		}
-		if extractor.Part == "revoked" {
-			return true
-		}
-		for _, expr := range extractor.DSL {
-			if containsIdent(expr, "revoked") {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func containsIdent(expr, ident string) bool {
-	for i := 0; i < len(expr); {
-		c := expr[i]
-		if !isIdentByte(c) {
-			i++
-			continue
-		}
-		start := i
-		for i < len(expr) && isIdentByte(expr[i]) {
-			i++
-		}
-		if expr[start:i] == ident {
-			return true
-		}
-	}
-	return false
-}
-
-func isIdentByte(c byte) bool {
-	return c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
 }
 
 // Requests returns the total number of requests the rule will perform.

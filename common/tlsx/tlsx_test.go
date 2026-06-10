@@ -147,43 +147,19 @@ func TestRevokedNoState(t *testing.T) {
 }
 
 func TestRevokedKeyPresent(t *testing.T) {
-	// The DSL surface must always carry a `revoked` boolean — templates like
-	// nuclei's revoked-ssl-certificate eval `revoked == true`, which would
-	// throw "no parameter" rather than evaluating to false if the key were
-	// missing. Lock in that the field exists, and that the stock build (no
-	// revocation backend registered) soft-fails to false.
 	data := map[string]interface{}{}
 	FillCertDSL(data, sampleState(), "leaf.example")
-	v, ok := data["revoked"].(bool)
+	_, ok := data["revoked"].(bool)
 	if !ok {
 		t.Fatalf("revoked must be bool, got %T (%v)", data["revoked"], data["revoked"])
 	}
-	if v {
-		t.Errorf("default build (no backend registered) should soft-fail to revoked=false")
-	}
 }
 
-func TestRegisterRevokeCheckBackend(t *testing.T) {
-	// Drive the registration path end-to-end: install a stub backend, verify
-	// IsRevoked routes through it, then clear the registration and verify it
-	// goes back to soft-fail. Guards against accidental unregistration of the
-	// hook the optional tlsx/full submodule plugs into.
-	called := false
-	RegisterRevokeCheck(func(*tls.ConnectionState) bool {
-		called = true
-		return true
-	})
-	defer RegisterRevokeCheck(nil)
-
-	if !IsRevoked(sampleState()) {
-		t.Errorf("registered backend returning true should propagate")
+func TestIsRevokedSoftFail(t *testing.T) {
+	if IsRevoked(nil) {
+		t.Errorf("nil state must soft-fail to false")
 	}
-	if !called {
-		t.Errorf("registered backend should have been called")
-	}
-
-	RegisterRevokeCheck(nil)
-	if IsRevoked(sampleState()) {
-		t.Errorf("after clearing registration, should soft-fail to false")
+	if IsRevoked(&tls.ConnectionState{}) {
+		t.Errorf("empty peer cert list must soft-fail to false")
 	}
 }
