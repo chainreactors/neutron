@@ -370,11 +370,21 @@ var cipherNames = map[uint16]string{
 	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
 	tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305:    "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305",
 	tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305:  "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305",
-	0x1301: "TLS_AES_128_GCM_SHA256",
-	0x1302: "TLS_AES_256_GCM_SHA384",
-	0x1303: "TLS_CHACHA20_POLY1305_SHA256",
-	0x1304: "TLS_AES_128_CCM_SHA256",
-	0x1305: "TLS_AES_128_CCM_8_SHA256",
+	// Weak/legacy suites that tls.InsecureCipherSuites() can still negotiate when
+	// a template pins an old TLS version. All present as crypto/tls constants in
+	// go1.11. Listed explicitly so a negotiated RC4/3DES suite renders as its real
+	// name (not a bare hex id) and nuclei's insecure-cipher-suite-detect can match
+	// `part: cipher` against e.g. TLS_RSA_WITH_RC4_128_SHA.
+	tls.TLS_RSA_WITH_RC4_128_SHA:            "TLS_RSA_WITH_RC4_128_SHA",
+	tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA:       "TLS_RSA_WITH_3DES_EDE_CBC_SHA",
+	tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA:      "TLS_ECDHE_RSA_WITH_RC4_128_SHA",
+	tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA: "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA",
+	tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA:    "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA",
+	0x1301:                                  "TLS_AES_128_GCM_SHA256",
+	0x1302:                                  "TLS_AES_256_GCM_SHA384",
+	0x1303:                                  "TLS_CHACHA20_POLY1305_SHA256",
+	0x1304:                                  "TLS_AES_128_CCM_SHA256",
+	0x1305:                                  "TLS_AES_128_CCM_8_SHA256",
 }
 
 // CipherName maps a cipher suite id to its IANA name, falling back to a hex id.
