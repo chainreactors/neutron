@@ -29,8 +29,18 @@ import (
 	"strings"
 	"time"
 
+	"net/http"
+
+	cflog "github.com/cloudflare/cfssl/log"
+	"github.com/cloudflare/cfssl/revoke"
+
 	"github.com/chainreactors/neutron/common"
 )
+
+func init() {
+	revoke.HTTPClient = &http.Client{Timeout: 5 * time.Second}
+	cflog.Level = cflog.LevelError
+}
 
 const xrayTimeLayout = "2006-01-02 03:04:05"
 
@@ -121,11 +131,6 @@ func NucleiCertFields(state *tls.ConnectionState, sni string) map[string]interfa
 		// validation). Mirrors nuclei's `untrusted` DSL field — the strict
 		// superset of self_signed+expired+mismatched the upstream tlsx exposes.
 		"untrusted": IsUntrusted(state, sni),
-		// revoked: CRL/OCSP-based revocation lookup. The default neutron build
-		// has NO revocation backend wired up and this always returns false
-		// (safe soft-fail). Import _ ".../common/tlsx/full" in the
-		// calling binary to register the cfssl-backed checker — that adds the
-		// heavy cfssl dependency only to consumers that actually need it.
 		"revoked":     IsRevoked(state),
 		"sni":         sni,
 		"tls_version": TLSVersionName(state.Version),
@@ -257,36 +262,17 @@ func IsUntrusted(state *tls.ConnectionState, sni string) bool {
 	return err != nil
 }
 
-// RevokeCheckFunc is the signature of a CRL/OCSP-based revocation checker.
-// Return true iff the leaf cert is positively known revoked; soft-fail (return
-// false) on any check-completion problem.
-type RevokeCheckFunc func(state *tls.ConnectionState) bool
-
-var registeredRevokeCheck RevokeCheckFunc
-
-// RegisterRevokeCheck installs a CRL/OCSP revocation backend. The default
-// neutron build registers nothing and IsRevoked always returns false, keeping
-// the main module free of the cfssl/zcrypto dependency closure. The optional
-// common/tlsx/full submodule provides a cfssl-backed implementation
-// — `import _ ".../common/tlsx/full"` in the consumer binary enables
-// it. Last call wins; passing nil clears the registration.
-func RegisterRevokeCheck(f RevokeCheckFunc) { registeredRevokeCheck = f }
-
-// HasRevokeCheck reports whether a revocation backend has been registered.
-func HasRevokeCheck() bool { return registeredRevokeCheck != nil }
-
-// IsRevoked mirrors nuclei's `revoked` DSL field. With no backend registered
-// it ALWAYS returns false (safe soft-fail) so templates that read `revoked`
-// don't false-positive on stock builds. See RegisterRevokeCheck for opting in
-// to the real implementation.
+// IsRevoked checks the leaf certificate against CRL/OCSP using cfssl.
+// Soft-fails to false when the check cannot complete.
 func IsRevoked(state *tls.ConnectionState) bool {
-	if registeredRevokeCheck == nil {
-		return false
-	}
 	if state == nil || len(state.PeerCertificates) == 0 {
 		return false
 	}
-	return registeredRevokeCheck(state)
+	revoked, ok := revoke.VerifyCertificate(state.PeerCertificates[0])
+	if !ok {
+		return false
+	}
+	return revoked
 }
 
 // IsMismatchedCert reports whether `host` is NOT covered by any of the

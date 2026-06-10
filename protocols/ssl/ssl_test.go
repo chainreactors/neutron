@@ -147,21 +147,6 @@ func TestSSLCompileAcceptsCipherSuitesAndCTLSMode(t *testing.T) {
 	}
 }
 
-func TestSSLCompileRejectsRevokedWithoutBackend(t *testing.T) {
-	r := &Request{
-		Operators: operators.Operators{
-			Matchers: []*operators.Matcher{
-				{Type: "dsl", DSL: []string{`revoked == true`}},
-			},
-		},
-	}
-	opts := &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}
-	err := r.Compile(opts)
-	if err == nil || !strings.Contains(err.Error(), "no revocation backend") {
-		t.Fatalf("expected missing revocation backend error, got %v", err)
-	}
-}
-
 func TestSSLCompileDoesNotFalseRejectRevokedSubstring(t *testing.T) {
 	r := &Request{
 		Operators: operators.Operators{
