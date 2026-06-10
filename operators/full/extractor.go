@@ -1,3 +1,22 @@
+// Package full is the optional gojq + antchfx/htmlquery + antchfx/xmlquery
+// backend for neutron's `json` and `xpath` extractor / matcher types.
+//
+// The main neutron module is intentionally go 1.11 + stdlib-only and does NOT
+// register handlers for `json` / `xpath` — a template that uses them fails at
+// CompileExtractors / CompileMatchers with "unknown extractor type: json" until
+// this submodule is imported for side-effects:
+//
+//	import _ "github.com/chainreactors/neutron/operators/full"
+//
+// The blank-import is enough — init() below calls operators.RegisterExtractorType
+// and operators.RegisterMatcherType, plugging gojq / xpath handlers into the
+// dispatch maps the main module already exposes. Same pattern as common/tlsx/full.
+//
+// This submodule lives in its own Go module (operators/full/go.mod) so its
+// dependency closure (gojq, htmlquery, xmlquery, antchfx/xpath, golang.org/x/{net,text})
+// only lands in binaries that explicitly opt in. Scanner binaries that need
+// nuclei-equivalent json/xpath support add a require + replace for
+// `.../operators/full` alongside the existing neutron require.
 package full
 
 import (
