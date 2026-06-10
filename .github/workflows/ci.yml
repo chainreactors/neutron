@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ['1.18', '1.24']
+        go-version: ['1.11', '1.17', '1.24']
 
     steps:
       - uses: actions/checkout@v4
@@ -22,10 +22,15 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      - name: Enable Go modules (go 1.11)
+        if: matrix.go-version == '1.11'
+        run: echo "GO111MODULE=on" >> $GITHUB_ENV
+
       - name: Build
         run: go build ./...
 
       - name: Vet
+        if: matrix.go-version != '1.11'
         run: go vet ./...
 
       - name: Test
@@ -38,6 +43,15 @@ jobs:
       - name: Test operators/full submodule
         if: matrix.go-version == '1.24'
         working-directory: operators/full
+        run: |
+          go build ./...
+          go vet ./...
+          go test ./... -v -count=1 -timeout=120s
+
+      # common/tlsx/full requires go 1.18+ (cfssl revocation backend).
+      - name: Test common/tlsx/full submodule
+        if: matrix.go-version == '1.24'
+        working-directory: common/tlsx/full
         run: |
           go build ./...
           go vet ./...

@@ -29,18 +29,8 @@ import (
 	"strings"
 	"time"
 
-	"net/http"
-
-	cflog "github.com/cloudflare/cfssl/log"
-	"github.com/cloudflare/cfssl/revoke"
-
 	"github.com/chainreactors/neutron/common"
 )
-
-func init() {
-	revoke.HTTPClient = &http.Client{Timeout: 5 * time.Second}
-	cflog.Level = cflog.LevelError
-}
 
 const xrayTimeLayout = "2006-01-02 03:04:05"
 
@@ -262,17 +252,26 @@ func IsUntrusted(state *tls.ConnectionState, sni string) bool {
 	return err != nil
 }
 
-// IsRevoked checks the leaf certificate against CRL/OCSP using cfssl.
-// Soft-fails to false when the check cannot complete.
+// RevokeCheckFunc checks whether the leaf cert is revoked via CRL/OCSP.
+type RevokeCheckFunc func(state *tls.ConnectionState) bool
+
+var registeredRevokeCheck RevokeCheckFunc
+
+// RegisterRevokeCheck installs a revocation backend. Without registration
+// IsRevoked always returns false (safe soft-fail). Import
+// _ "github.com/chainreactors/neutron/common/tlsx/full" to enable cfssl.
+func RegisterRevokeCheck(f RevokeCheckFunc) { registeredRevokeCheck = f }
+
+// IsRevoked returns true only when a registered backend positively confirms
+// the leaf cert is revoked. Soft-fails to false without a backend.
 func IsRevoked(state *tls.ConnectionState) bool {
+	if registeredRevokeCheck == nil {
+		return false
+	}
 	if state == nil || len(state.PeerCertificates) == 0 {
 		return false
 	}
-	revoked, ok := revoke.VerifyCertificate(state.PeerCertificates[0])
-	if !ok {
-		return false
-	}
-	return revoked
+	return registeredRevokeCheck(state)
 }
 
 // IsMismatchedCert reports whether `host` is NOT covered by any of the

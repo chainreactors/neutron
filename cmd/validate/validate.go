@@ -1,15 +1,14 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/neutron/templates"
-	"github.com/invopop/jsonschema"
-	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/chainreactors/neutron/protocols"
+	"github.com/chainreactors/neutron/templates"
+	"gopkg.in/yaml.v3"
 )
 
 var ExecuterOptions *protocols.ExecuterOptions
@@ -31,30 +30,20 @@ func main() {
 				return err
 			}
 
-			// Step 1: Generate JSONSchema from Template struct
-			reflector := jsonschema.Reflector{}
-			schema := reflector.Reflect(&templates.Template{})
-			_, err = json.Marshal(schema)
-			if err != nil {
-				fmt.Printf("Error generating schema for %s: %s\n", path, err.Error())
-				return nil
-			}
-			// Step 4: Unmarshal into template struct for structural validation
 			t := &templates.Template{}
 			err = yaml.Unmarshal(content, &t)
 			if err != nil {
-				fmt.Printf("❌ %s - YAML unmarshalling failed: %s\n", path, err.Error())
+				fmt.Printf("FAIL %s - YAML unmarshalling failed: %s\n", path, err.Error())
 				return nil
 			}
 
-			// Step 5: Compile template for content validation
 			err = t.Compile(ExecuterOptions)
 			if err != nil {
-				fmt.Printf("❌ %s - Template compilation failed: %s\n", path, err.Error())
+				fmt.Printf("FAIL %s - Template compilation failed: %s\n", path, err.Error())
 				return nil
 			}
 
-			fmt.Printf("✅ %s - All validations passed\n", path)
+			fmt.Printf("OK   %s\n", path)
 		}
 		return nil
 	})
