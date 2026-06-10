@@ -5,6 +5,7 @@ import (
 	"github.com/chainreactors/neutron/protocols/executer"
 	"github.com/chainreactors/neutron/protocols/http"
 	"github.com/chainreactors/neutron/protocols/network"
+	"github.com/chainreactors/neutron/protocols/ssl"
 )
 
 // Classification contains the vulnerability classification data for a template.
@@ -80,6 +81,12 @@ type Template struct {
 
 	// Network contains the network request to make in the template
 	RequestsNetwork []*network.Request `json:"network,omitempty" yaml:"network,omitempty"`
+
+	// SSL contains TLS certificate/handshake probes for nuclei-style ssl templates.
+	RequestsSSL []*ssl.Request `json:"ssl,omitempty" yaml:"ssl,omitempty"`
+
+	// TLS contains TLS certificate/handshake probes (alias for ssl).
+	RequestsTLS []*ssl.Request `json:"tls,omitempty" yaml:"tls,omitempty"`
 
 	// TCP contains the TCP network request to make in the template (alias for network)
 	RequestsTCP []*network.Request `json:"tcp,omitempty" yaml:"tcp,omitempty"`
