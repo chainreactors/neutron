@@ -35,43 +35,23 @@ func (r *Request) getMatchPart(part string, data protocols.InternalEvent) (strin
 	return common.ToString(item), true
 }
 
-// Match matches a generic data response against a given matcher.
+// Match dispatches through protocols.MakeDefaultMatchFunc — the shared matrix
+// covers size/words/regex/binary/dsl and falls through to MatchWithHandler for
+// json/xpath, so this protocol stays aligned with nuclei's ssl by construction
+// (one matrix, no per-protocol switch to forget). The partResolver carries the
+// ssl-specific body/all→response fold that xray-converter templates rely on.
 func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []string) {
-	if matcher.GetType() == operators.DSLMatcher {
-		return matcher.Result(matcher.MatchDSL(data)), nil
-	}
-	itemStr, ok := r.getMatchPart(matcher.Part, data)
-	if !ok {
-		return false, []string{}
-	}
-	switch matcher.GetType() {
-	case operators.SizeMatcher:
-		return matcher.Result(matcher.MatchSize(len(itemStr))), []string{}
-	case operators.WordsMatcher:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchWords(itemStr, data))
-	case operators.RegexMatcher:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchRegex(itemStr))
-	case operators.BinaryMatcher:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchBinary(itemStr))
-	}
-	return false, []string{}
+	return protocols.MakeDefaultMatchFunc(data, matcher, func(part string) (string, bool) {
+		return r.getMatchPart(part, data)
+	})
 }
 
-// Extract performs an extracting operation for an extractor on data.
+// Extract dispatches through protocols.MakeDefaultExtractFunc; see Match for
+// rationale.
 func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extractor) map[string]struct{} {
-	item, ok := r.getMatchPart(extractor.Part, data)
-	if !ok && extractor.GetType() != operators.DSLExtractor {
-		return nil
-	}
-	switch extractor.GetType() {
-	case operators.RegexExtractor:
-		return extractor.ExtractRegex(item)
-	case operators.KValExtractor:
-		return extractor.ExtractKval(data)
-	case operators.DSLExtractor:
-		return extractor.ExtractDSL(data)
-	}
-	return nil
+	return protocols.MakeDefaultExtractFunc(data, extractor, func(part string) (string, bool) {
+		return r.getMatchPart(part, data)
+	})
 }
 
 // ExecuteWithResults connects to each target, performs the TLS handshake and
