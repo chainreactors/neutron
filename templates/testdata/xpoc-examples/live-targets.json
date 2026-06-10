@@ -1,0 +1,74 @@
+{
+  "sslvpn_4": {
+    "product": "Array-SSL-VPN",
+    "url": "https://vpn8.ciccwm.com/prx/000/"
+  },
+  "goahead": {
+    "product": "Embedthis GoAhead",
+    "url": "https://50.235.81.52/"
+  },
+  "springboot": {
+    "product": "SpringBoot",
+    "url": "https://222.84.136.178:24001/portal/"
+  },
+  "actuator": {
+    "product": "SpringBoot Actuator",
+    "url": "https://data.guizhou.gov.cn/api/statistics/"
+  },
+  "tongweb": {
+    "product": "TongWeb-东方通应用服务器",
+    "url": "http://www.benxixh.jcy.cn:9060/console/"
+  },
+  "weblogic": {
+    "product": "WebLogic-Server",
+    "url": "http://103.202.146.35:8080/"
+  },
+  "wordpress": {
+    "product": "WordPress",
+    "url": "https://car.58.com/wenda/detail2474/"
+  },
+  "aisite_search": {
+    "product": "中科汇联-爱觅桔智能检索系统",
+    "url": "https://ir.shengjingbank.com.cn/prospectus/index/"
+  },
+  "empirecms": {
+    "product": "帝国CMS",
+    "url": "http://42.228.5.82:8090/search/"
+  },
+  "igi": {
+    "product": "拓尔思-IGI",
+    "url": "https://sndrc.shaanxi.gov.cn/hdjl/"
+  },
+  "wcm": {
+    "product": "拓尔思-WCM",
+    "url": "https://mwr.guizhou.gov.cn/IGI/opinion/"
+  },
+  "haiyun": {
+    "product": "拓尔思-政府网站集约化",
+    "url": "https://fzggw.nx.gov.cn/IGI/nbhd/"
+  },
+  "z-suite": {
+    "product": "永洪-BI",
+    "url": "https://lqdm-scrm.dflzm.com/bi/"
+  },
+  "weaver_e_office": {
+    "product": "泛微-EOffice",
+    "url": "http://tjwc.hcsfby.com:8010/"
+  },
+  "yonyou_u8_oa": {
+    "product": "用友-OA",
+    "url": "http://121.40.95.47:8088/"
+  },
+  "iam": {
+    "product": "竹云-IAM",
+    "url": "https://wms.dynanonic.com:8898/login/"
+  },
+  "facial_love_cloud_platform": {
+    "product": "脸爱云一脸通智慧管理平台",
+    "url": "http://hanwang.haoyehuagong.com:6100/"
+  },
+  "erds": {
+    "product": "讯投-ERDS",
+    "url": "https://simuyuntest.thinkfunds.cn:8088/login/"
+  }
+}
