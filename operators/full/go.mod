@@ -12,7 +12,7 @@ require (
 )
 
 require (
-	github.com/Knetic/govaluate v3.0.0+incompatible // indirect
+	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
 	github.com/antchfx/xpath v1.3.6 // indirect
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
