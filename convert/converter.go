@@ -81,7 +81,7 @@ func Convert(xrayYAML []byte) ([]byte, error) {
 	}
 	var poc XrayPOC
 	if err := yaml.Unmarshal(xrayYAML, &poc); err != nil {
-		return nil, fmt.Errorf("parse xray yaml: %w", err)
+		return nil, fmt.Errorf("parse xray yaml: %v", err)
 	}
 	poc.Comments = extractComments(string(xrayYAML))
 	return ConvertPOC(&poc)

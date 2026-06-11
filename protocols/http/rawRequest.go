@@ -37,7 +37,7 @@ func parseRaw(request, baseURL string, unsafe bool) (*rawRequest, error) {
 read_line:
 	s, err := reader.ReadString('\n')
 	if err != nil {
-		return nil, fmt.Errorf("could not read request: %w", err)
+		return nil, fmt.Errorf("could not read request: %v", err)
 	}
 	// ignore all annotations
 	if common.HasPrefixAny(s, "@") {

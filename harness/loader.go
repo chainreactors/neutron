@@ -62,7 +62,7 @@ func loadFile(path string) (*POCFile, error) {
 	}
 	var poc convert.XrayPOC
 	if err := yaml.Unmarshal(data, &poc); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%s: %v", path, err)
 	}
 	return &POCFile{Path: path, Data: data, POC: &poc}, nil
 }

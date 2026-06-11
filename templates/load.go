@@ -60,14 +60,14 @@ func Load(data []byte) (*Template, error) {
 		}
 		converted, err := c.Convert(data)
 		if err != nil {
-			return nil, fmt.Errorf("convert %s poc: %w", c.Name(), err)
+			return nil, fmt.Errorf("convert %s poc: %v", c.Name(), err)
 		}
 		data = converted
 		break
 	}
 	tmpl := &Template{}
 	if err := yaml.Unmarshal(data, tmpl); err != nil {
-		return nil, fmt.Errorf("unmarshal template: %w", err)
+		return nil, fmt.Errorf("unmarshal template: %v", err)
 	}
 	return tmpl, nil
 }

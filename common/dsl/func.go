@@ -49,7 +49,7 @@ func (d dslFunction) Exec(args ...interface{}) (interface{}, error) {
 		if len(args) != d.NumberOfArgs {
 			signatures := d.GetSignatures()
 			if len(signatures) > 0 {
-				return nil, fmt.Errorf("%w. correct method signature %q", ErrInvalidDslFunction, signatures[0])
+				return nil, fmt.Errorf("%v. correct method signature %q", ErrInvalidDslFunction, signatures[0])
 			}
 			return nil, ErrInvalidDslFunction
 		}

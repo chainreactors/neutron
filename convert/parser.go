@@ -13,7 +13,7 @@ import (
 func ParseToAST(expr string) (*dsl.Node, error) {
 	tokens, err := xrayLex(expr)
 	if err != nil {
-		return nil, fmt.Errorf("lex: %w", err)
+		return nil, fmt.Errorf("lex: %v", err)
 	}
 	return parseTokensToAST(tokens)
 }
@@ -21,7 +21,7 @@ func ParseToAST(expr string) (*dsl.Node, error) {
 func ParseToASTWithAliases(expr string, aliases map[string]string) (*dsl.Node, error) {
 	tokens, err := xrayLex(expr)
 	if err != nil {
-		return nil, fmt.Errorf("lex: %w", err)
+		return nil, fmt.Errorf("lex: %v", err)
 	}
 	rewriteIdentifierTokens(tokens, aliases)
 	return parseTokensToAST(tokens)

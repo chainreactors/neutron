@@ -322,7 +322,7 @@ func executeXrayRuntime(pocYAML, baseURL string) (bool, error) {
 		rule := poc.Rules[ruleName]
 		matched, err := executeXrayRule(baseURL, &rule, vars, payloadRows)
 		if err != nil {
-			return false, fmt.Errorf("%s: %w", ruleName, err)
+			return false, fmt.Errorf("%s: %v", ruleName, err)
 		}
 		ruleResults[ruleName] = matched
 	}
