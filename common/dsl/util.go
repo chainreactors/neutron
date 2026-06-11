@@ -209,10 +209,8 @@ func appendSingleDigitZero(value string) string {
 
 func stringNumberToDecimal(args []interface{}, prefix string, base int) (interface{}, error) {
 	input := toString(args[0])
-	if strings.HasPrefix(input, prefix) {
-		base = 0
-	}
-	if number, err := strconv.ParseInt(input, base, 64); err == nil {
+	clean := strings.TrimPrefix(strings.TrimPrefix(input, prefix), strings.ToUpper(prefix))
+	if number, err := strconv.ParseInt(clean, base, 64); err == nil {
 		return float64(number), err
 	}
 	return nil, fmt.Errorf("invalid number: %s", input)
