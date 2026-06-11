@@ -7,7 +7,7 @@ toolchain go1.24.3
 require (
 	github.com/antchfx/htmlquery v1.3.6
 	github.com/antchfx/xmlquery v1.5.1
-	github.com/chainreactors/neutron v0.0.0
+	github.com/chainreactors/neutron v0.0.0-20260611015444-55dd3cf86e5b
 	github.com/itchyny/gojq v0.12.19
 )
 
@@ -22,5 +22,3 @@ require (
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 )
-
-replace github.com/chainreactors/neutron => ../..
