@@ -2,7 +2,7 @@ package http
 
 import (
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -53,7 +53,7 @@ func TestResponseToDSLMap(t *testing.T) {
 
 func TestResponseToDSLMapWithRequestBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		body, _ := ioutil.ReadAll(r.Body)
 		fmt.Fprintf(w, "echo: %s", body)
 	}))
 	defer server.Close()
@@ -244,7 +244,7 @@ func TestExecuteSkipsUnresolvedDynamicPath(t *testing.T) {
 func TestExecuteKeepsLiteralDoubleBracePayload(t *testing.T) {
 	var receivedBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		body, _ := ioutil.ReadAll(r.Body)
 		receivedBody = string(body)
 		w.WriteHeader(200)
 		fmt.Fprint(w, receivedBody)
@@ -281,7 +281,7 @@ func TestExecuteKeepsLiteralDoubleBracePayload(t *testing.T) {
 func TestExecuteRequestWithPOSTBody(t *testing.T) {
 	var receivedBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		body, _ := ioutil.ReadAll(r.Body)
 		receivedBody = string(body)
 		w.WriteHeader(200)
 		fmt.Fprint(w, "ok")
@@ -320,7 +320,7 @@ func TestExecuteRequestWithPOSTBody(t *testing.T) {
 
 func TestTemplateVariableOverridesGlobalRandstrInRequestBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		body, _ := ioutil.ReadAll(r.Body)
 		fmt.Fprint(w, string(body))
 	}))
 	defer server.Close()

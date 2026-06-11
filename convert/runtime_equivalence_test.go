@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"html"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -404,7 +404,7 @@ func requestXrayRule(baseURL string, rule *XrayRule, values map[string]string) (
 		return mockResponse{}, err
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	data, _ := ioutil.ReadAll(resp.Body)
 	headers := map[string]string{}
 	for key, values := range resp.Header {
 		headers[key] = strings.Join(values, ", ")
@@ -446,7 +446,7 @@ func xrayRuntimeIconHashes(client *http.Client, base *url.URL, body, bodyHash st
 		if err != nil {
 			continue
 		}
-		iconBody, _ := io.ReadAll(resp.Body)
+		iconBody, _ := ioutil.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		addHash(xrayRuntimeFaviconHash(iconBody))
 	}

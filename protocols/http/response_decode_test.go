@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"testing"
 	"time"
@@ -24,7 +24,7 @@ func TestResponseToDSLMapDecodesGzipBody(t *testing.T) {
 			"Content-Encoding": []string{"gzip"},
 			"Content-Type":     []string{"text/plain"},
 		},
-		Body: io.NopCloser(bytes.NewReader(gzipBody(t, "vulnexists"))),
+		Body: ioutil.NopCloser(bytes.NewReader(gzipBody(t, "vulnexists"))),
 	}
 
 	data := (&Request{}).responseToDSLMap(req, resp, "https://example.com", "https://example.com", time.Second, nil, nil, nil)
@@ -44,7 +44,7 @@ func TestResponseToDSLMapDecodesDeflateBody(t *testing.T) {
 			"Content-Encoding": []string{"deflate"},
 			"Content-Type":     []string{"text/plain"},
 		},
-		Body: io.NopCloser(bytes.NewReader(deflateBody(t, "vulnexists"))),
+		Body: ioutil.NopCloser(bytes.NewReader(deflateBody(t, "vulnexists"))),
 	}
 
 	data := (&Request{}).responseToDSLMap(req, resp, "https://example.com", "https://example.com", time.Second, nil, nil, nil)
@@ -64,7 +64,7 @@ func TestResponseToDSLMapFallsBackWhenGzipHeaderIsInvalid(t *testing.T) {
 			"Content-Encoding": []string{"gzip"},
 			"Content-Type":     []string{"text/plain"},
 		},
-		Body: io.NopCloser(bytes.NewReader([]byte("plain-body"))),
+		Body: ioutil.NopCloser(bytes.NewReader([]byte("plain-body"))),
 	}
 
 	data := (&Request{}).responseToDSLMap(req, resp, "https://example.com", "https://example.com", time.Second, nil, nil, nil)
