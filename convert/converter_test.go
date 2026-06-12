@@ -319,6 +319,47 @@ expression: payload_rule() || set_rule()
 	}
 }
 
+// xray payload values are often wrapped in the string(...) cast, e.g.
+// entry: string("/"). Those are substituted verbatim into the request path, so
+// the cast must be unwrapped to the bare literal or the runtime URL is corrupted
+// (".../host:8848string(\"/\")" -> invalid port).
+func TestConvertXrayPayloadStringCast(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--payload-string-cast
+detail:
+  fingerprint:
+    name: Payload String Cast
+transport: http
+payloads:
+  payloads:
+    default:
+      entry: string("/")
+    nacos:
+      entry: string("/nacos/")
+rules:
+  r0:
+    request:
+      method: GET
+      path: '{{entry}}'
+    expression: response.body_string.contains("<title>Nacos")
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+	if strings.Contains(s, "string(") {
+		t.Fatalf("string(...) cast leaked into payload values:\n%s", s)
+	}
+	for _, want := range []string{"- /", "- /nacos/"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing unwrapped payload value %q:\n%s", want, s)
+		}
+	}
+}
+
 func TestConvertXraySetExpressionSemantics(t *testing.T) {
 	xrayYAML := `
 name: fingerprint-test--set-expression-semantics

@@ -977,6 +977,15 @@ func normalizeXrayScalar(value string) string {
 	if err == nil && len(tokens) >= 2 && tokens[0].Type == xTString && tokens[1].Type == xTEOF {
 		return strings.TrimSpace(tokens[0].Val)
 	}
+	// xray's string(...) cast wrapping a bare literal, e.g. string("/") -> /.
+	// Payload values are substituted verbatim into the request path/headers, so an
+	// un-evaluated string("/") would otherwise be emitted literally and break the URL.
+	if err == nil && len(tokens) == 5 &&
+		tokens[0].Type == xTIdent && tokens[0].Val == "string" &&
+		tokens[1].Type == xTLParen && tokens[2].Type == xTString &&
+		tokens[3].Type == xTRParen && tokens[4].Type == xTEOF {
+		return strings.TrimSpace(tokens[2].Val)
+	}
 	return value
 }
 
