@@ -1,10 +1,12 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +51,84 @@ func TestResponseToDSLMap(t *testing.T) {
 	require.Contains(t, reqStr, "GET")
 	require.Contains(t, reqStr, "/path")
 	require.Contains(t, reqStr, "HTTP/1.1")
+}
+
+func TestFetchFaviconUsesFreshRequestContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/favicon.ico" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte("icon"))
+	}))
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/", nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req = req.WithContext(ctx)
+
+	request := &Request{
+		options: &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}},
+	}
+	body, ok := request.fetchFavicon(req, server.URL+"/favicon.ico", server.Client())
+	require.True(t, ok)
+	require.Equal(t, []byte("icon"), body)
+}
+
+func TestDiscoverIconURLsSupportsUnquotedAttrs(t *testing.T) {
+	base, err := url.Parse("http://example.test/systemcenter/index.html")
+	require.NoError(t, err)
+
+	urls := discoverIconURLs(base, `<html><head><link rel=icon href=/systemcenter/static/favicon.ico></head></html>`)
+
+	require.Contains(t, urls, "http://example.test/systemcenter/static/favicon.ico")
+}
+
+func TestDiscoverIconURLsFallbackUsesCurrentDirectory(t *testing.T) {
+	base, err := url.Parse("http://example.test/portal/")
+	require.NoError(t, err)
+
+	urls := discoverIconURLs(base, `<html><head></head><body></body></html>`)
+
+	require.Contains(t, urls, "http://example.test/portal/favicon.ico")
+	require.NotContains(t, urls, "http://example.test/favicon.ico")
+}
+
+func TestResponseToDSLMapUsesFinalRedirectURLForFaviconDiscovery(t *testing.T) {
+	iconBody := []byte("redirected-icon")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.Redirect(w, r, "/app/index.html", http.StatusFound)
+		case "/app/index.html":
+			fmt.Fprint(w, `<html><head><link rel=icon href=static/favicon.ico></head></html>`)
+		case "/app/static/favicon.ico":
+			_, _ = w.Write(iconBody)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/start", nil)
+	require.NoError(t, err)
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+
+	request := &Request{
+		Operators: operators.Operators{
+			Matchers: []*operators.Matcher{{Type: "favicon", Hash: []string{xrayFaviconHash(iconBody)}}},
+		},
+		options: &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}},
+	}
+	event := request.responseToDSLMap(req, resp, server.URL, server.URL+"/app/index.html", 100*time.Millisecond, nil, nil, server.Client())
+
+	faviconData, ok := event["favicon"].(map[string]interface{})
+	require.True(t, ok)
+	require.Contains(t, faviconData, server.URL+"/app/static/favicon.ico")
+	require.Contains(t, event["favicon_hash"], xrayFaviconHash(iconBody))
 }
 
 func TestResponseToDSLMapWithRequestBody(t *testing.T) {
@@ -126,6 +206,80 @@ func TestExecuteRequestWithRequestResponse(t *testing.T) {
 	require.NotEmpty(t, capturedEvent.Results)
 	require.NotEmpty(t, capturedEvent.Results[0].Request)
 	require.NotEmpty(t, capturedEvent.Results[0].Response)
+}
+
+func TestRedirectsCarrySetCookieWithinRedirectChain(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "redirect-cookie", Path: "/"})
+			http.Redirect(w, r, "/final", http.StatusFound)
+		case "/final":
+			if cookie, err := r.Cookie("sid"); err == nil && cookie.Value == "redirect-cookie" {
+				fmt.Fprint(w, "cookie-carried")
+				return
+			}
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, "missing-cookie")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:      []string{"{{BaseURL}}/start"},
+		Method:    "GET",
+		Redirects: true,
+	}
+	r.Matchers = append(r.Matchers, &operators.Matcher{
+		Type:  "word",
+		Words: []string{"cookie-carried"},
+	})
+	require.NoError(t, r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}))
+
+	var matched bool
+	err := r.ExecuteWithResults(protocols.NewScanContext(server.URL, nil), map[string]interface{}{}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
+		if event.OperatorsResult != nil {
+			matched = event.OperatorsResult.Matched
+		}
+	})
+	require.NoError(t, err)
+	require.True(t, matched)
+}
+
+func TestRedirectCookieJarIsIsolatedWhenCookieReuseFalse(t *testing.T) {
+	var checkSawCookie bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "redirect-cookie", Path: "/"})
+			http.Redirect(w, r, "/final", http.StatusFound)
+		case "/final":
+			_, _ = w.Write([]byte("ok"))
+		case "/check":
+			if cookie, err := r.Cookie("sid"); err == nil && cookie.Value == "redirect-cookie" {
+				checkSawCookie = true
+			}
+			_, _ = w.Write([]byte("checked"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:      []string{"{{BaseURL}}/start", "{{BaseURL}}/check"},
+		Method:    "GET",
+		Redirects: true,
+	}
+	require.NoError(t, r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}))
+
+	input := protocols.NewScanContext(server.URL, nil)
+	input.TraceAll = true
+	err := r.ExecuteWithResults(input, map[string]interface{}{}, map[string]interface{}{}, func(*protocols.InternalWrappedEvent) {})
+	require.NoError(t, err)
+	require.False(t, checkSawCookie, "redirect cookies must not leak into the next path without cookie-reuse")
 }
 
 func TestExecuteRootURLUsesScanContextPathPrefix(t *testing.T) {
