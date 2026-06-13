@@ -42,6 +42,10 @@ func createClient(opt *Configuration) *http.Client {
 	return &http.Client{Transport: &Transport{DialContext: opt.DialContext}}
 }
 
+func newCookieJar() http.CookieJar {
+	return nil
+}
+
 type nopCloser struct{}
 
 func (nopCloser) Close() error { return nil }

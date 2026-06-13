@@ -65,7 +65,7 @@ func createClient(opt *Configuration) *http.Client {
 
 	var jar *cookiejar.Jar
 	if opt.CookieReuse {
-		jar, _ = cookiejar.New(nil)
+		jar = newCookieJar()
 	}
 	client := &http.Client{
 		Transport:     tr,
@@ -75,6 +75,11 @@ func createClient(opt *Configuration) *http.Client {
 		client.Jar = jar
 	}
 	return client
+}
+
+func newCookieJar() *cookiejar.Jar {
+	jar, _ := cookiejar.New(nil)
+	return jar
 }
 
 const defaultMaxRedirects = 10
