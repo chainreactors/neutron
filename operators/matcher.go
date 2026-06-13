@@ -204,11 +204,13 @@ func (matcher *Matcher) MatchWords(corpus string, data map[string]interface{}) (
 		}
 
 		var err error
-		word, err = common.Evaluate(word, data)
-		if err != nil {
-			common.Logger().Warnf("Error while evaluating word matcher: %q", word)
-			if matcher.condition == ANDCondition {
-				return false, []string{}
+		if strings.Contains(word, common.ParenthesisOpen) || strings.Contains(word, common.General) {
+			word, err = common.Evaluate(word, data)
+			if err != nil {
+				common.Logger().Warnf("Error while evaluating word matcher: %q", word)
+				if matcher.condition == ANDCondition {
+					return false, []string{}
+				}
 			}
 		}
 		// Continue if the word doesn't match
@@ -312,15 +314,23 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 
 	// Iterate over all the expressions accepted as valid
 	for i, expression := range m.dslCompiled {
-		resolvedExpression, err := common.Evaluate(expression.String(), data)
-		if err != nil {
-			common.Logger().Errorf(m.Name, err)
-			return false
-		}
-		expression, err = govaluate.NewEvaluableExpressionWithFunctions(resolvedExpression, common.GetHelperFunctions())
-		if err != nil {
-			common.Logger().Errorf(m.Name, err)
-			return false
+		// Fast path: an expression with no template markers ({{...}} / §...§) is
+		// returned unchanged by common.Evaluate, so re-resolving and recompiling it
+		// on every response — across thousands of fingerprint templates — is pure
+		// CPU waste. Reuse the already-compiled expression directly. Only expressions
+		// that embed runtime markers take the slow resolve+recompile path.
+		exprStr := expression.String()
+		if strings.Contains(exprStr, common.ParenthesisOpen) || strings.Contains(exprStr, common.General) {
+			resolvedExpression, err := common.Evaluate(exprStr, data)
+			if err != nil {
+				common.Logger().Errorf(m.Name, err)
+				return false
+			}
+			expression, err = govaluate.NewEvaluableExpressionWithFunctions(resolvedExpression, common.GetHelperFunctions())
+			if err != nil {
+				common.Logger().Errorf(m.Name, err)
+				return false
+			}
 		}
 
 		result, err := expression.Evaluate(data)
