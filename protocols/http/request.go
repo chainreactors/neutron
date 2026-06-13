@@ -442,6 +442,15 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 			client = input.Client
 		}
 	}
+	if r.needsIsolatedRedirectJar() && client != nil && client.Jar == nil {
+		// xray/nuclei-style redirect following carries Set-Cookie values within
+		// a single redirect chain. Keep the jar per request execution so
+		// cookie-reuse:false does not leak cookies across template requests,
+		// targets, or concurrent active matches.
+		c := *client
+		c.Jar = newCookieJar()
+		client = &c
+	}
 	resp, err := client.Do(request.request)
 	common.Debug("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
 	common.Dump(request.request)
@@ -513,6 +522,13 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 	return err
 }
 
+func (r *Request) needsIsolatedRedirectJar() bool {
+	if r == nil || r.CookieReuse {
+		return false
+	}
+	return r.Redirects || r.HostRedirects
+}
+
 // responseToDSLMap converts an HTTP response to a map for use in DSL matching
 func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host, matched string, duration time.Duration, extra map[string]interface{}, reqBody []byte, client *http.Client) protocols.InternalEvent {
 	data := make(protocols.InternalEvent, 12+len(extra)+len(resp.Header)+len(resp.Cookies()))
@@ -575,7 +591,11 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 		data["stop-at-first-match"] = true
 	}
 	if r.NeedsFaviconData() || r.NeedsRequestCondition() {
-		r.populateFaviconData(data, req, body, client)
+		faviconReq := req
+		if resp != nil && resp.Request != nil && resp.Request.URL != nil {
+			faviconReq = resp.Request
+		}
+		r.populateFaviconData(data, faviconReq, body, client)
 	}
 	return data
 }
@@ -719,7 +739,11 @@ func (r *Request) fetchFavicon(baseReq *http.Request, iconURL string, client *ht
 	if err != nil {
 		return nil, false
 	}
-	iconReq = iconReq.WithContext(baseReq.Context())
+	// Favicon fetch is a separate probe. Reusing the page request context makes
+	// the icon request inherit whatever time budget the page request already
+	// consumed, and often turns valid xray-style favicon rules into false
+	// negatives on slow sites.
+	iconReq = iconReq.WithContext(r.Context())
 	iconReq.Header = cloneHeader(baseReq.Header)
 	if iconReq.Header.Get("User-Agent") == "" {
 		iconReq.Header.Set("User-Agent", ua)
@@ -765,17 +789,20 @@ func discoverIconURLs(base *url.URL, body string) []string {
 		}
 		add(attrValue(tag, "href"))
 	}
-	add("/favicon.ico")
+	add("favicon.ico")
 	return urls
 }
 
 func attrValue(tag, name string) string {
 	for _, match := range attrRE.FindAllStringSubmatch(tag, -1) {
-		if len(match) >= 4 && strings.EqualFold(match[1], name) {
+		if len(match) >= 5 && strings.EqualFold(match[1], name) {
 			if match[2] != "" {
 				return match[2]
 			}
-			return match[3]
+			if match[3] != "" {
+				return match[3]
+			}
+			return match[4]
 		}
 	}
 	return ""
@@ -841,7 +868,7 @@ func checkRequestConditionExpressions(expressions ...string) bool {
 
 var (
 	linkTagRE = regexp.MustCompile(`(?is)<link\b[^>]*>`)
-	attrRE    = regexp.MustCompile(`(?is)\b([a-z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')`)
+	attrRE    = regexp.MustCompile(`(?is)\b([a-z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>` + "`" + `]+))`)
 	titleRE   = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 )
 
