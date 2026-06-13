@@ -49,7 +49,7 @@ type XrayRule struct {
 		Path            string            `yaml:"path"`
 		Headers         map[string]string `yaml:"headers"`
 		Body            string            `yaml:"body"`
-		FollowRedirects bool              `yaml:"follow_redirects"`
+		FollowRedirects *bool             `yaml:"follow_redirects"`
 		Cache           bool              `yaml:"cache"`
 	} `yaml:"request"`
 	Expression string                 `yaml:"expression"`
@@ -338,7 +338,7 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 				path:       path,
 				headers:    headers,
 				body:       body,
-				redirects:  rule.Request.FollowRedirects,
+				redirects:  followRedirectsOrDefault(rule.Request.FollowRedirects),
 				rules:      []string{ruleName},
 				exprs:      []string{expr},
 				extractors: extractors,
@@ -1459,6 +1459,20 @@ func appendGeneratedQueries(yamlData []byte, tmpl map[string]interface{}) []byte
 	return yamlData
 }
 
+// followRedirectsOrDefault maps an xray rule's follow_redirects flag to the
+// neutron redirect policy. xray follows redirects BY DEFAULT (omitted == true);
+// you opt out with an explicit follow_redirects: false. neutron is the opposite
+// (defaults to no-follow). An omitted flag therefore must convert to true, or the
+// product signature behind a 30x (GeoServer Wicket /web/?0, Druid console, Spring
+// Boot whitelabel) is silently lost. An explicit false (Location-header matchers)
+// is preserved as no-follow.
+func followRedirectsOrDefault(flag *bool) bool {
+	if flag == nil {
+		return true
+	}
+	return *flag
+}
+
 func convertGroup(method, path string, headers map[string]string, body string, redirects bool, exprs []string) map[string]interface{} {
 	if len(exprs) == 0 {
 		return nil
@@ -1656,7 +1670,7 @@ func hasXrayRequest(rule XrayRule, expr string) bool {
 		rule.Request.Path != "" ||
 		rule.Request.Body != "" ||
 		len(rule.Request.Headers) > 0 ||
-		rule.Request.FollowRedirects ||
+		rule.Request.FollowRedirects != nil ||
 		rule.Request.Cache {
 		return true
 	}
