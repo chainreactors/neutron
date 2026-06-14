@@ -177,8 +177,8 @@ func TestOperatorsExecute(t *testing.T) {
 	})
 }
 
-func TestMatcherDSLMissingVariablesDefaultEmpty(t *testing.T) {
-	t.Run("missing header variable does not abort later OR branch", func(t *testing.T) {
+func TestMatcherDSLMissingVariablesAreNotDefaulted(t *testing.T) {
+	t.Run("missing history variable fails the expression instead of masking it", func(t *testing.T) {
 		matcher := &Matcher{
 			Type: "dsl",
 			DSL:  []string{`contains(location_3, "resource/anonym.jsp") || ((status_code_4 == 404) && contains(body_5, "CurrentUserId"))`},
@@ -189,15 +189,17 @@ func TestMatcherDSLMissingVariablesDefaultEmpty(t *testing.T) {
 			"status_code_4": 404,
 			"body_5":        "CurrentUserId Com_Parameter StylePath",
 		})
-		require.True(t, ok)
+		require.False(t, ok)
 	})
 
-	t.Run("missing variable alone is a non-match", func(t *testing.T) {
+	t.Run("present history variable still matches", func(t *testing.T) {
 		matcher := &Matcher{
 			Type: "dsl",
 			DSL:  []string{`contains(location_3, "resource/anonym.jsp")`},
 		}
 		require.NoError(t, matcher.CompileMatchers())
-		require.False(t, matcher.MatchDSL(map[string]interface{}{}))
+		require.True(t, matcher.MatchDSL(map[string]interface{}{
+			"location_3": "/resource/anonym.jsp",
+		}))
 	})
 }
