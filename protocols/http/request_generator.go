@@ -155,7 +155,6 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 		trailingSlash = true
 	}
 	mountPrefix := pathPrefix(r.input)
-	usesRootURL := strings.Contains(reqdata, "{{RootURL}}")
 	targetValues := generateVariables(parsed, trailingSlash, mountPrefix)
 	var globalVars map[string]interface{}
 	if r.input != nil {
@@ -179,7 +178,7 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 			values = common.MergeMaps(targetValues, allVars)
 		}
 	}
-	reqdata, err = common.Evaluate(reqdata, common.MergeMaps(values, targetValues))
+	reqdata, err = evaluateRequestData(reqdata, values, targetValues, mountPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -189,9 +188,6 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 
 	if isRawRequest {
 		return r.makeHTTPRequestFromRaw(parsed.String(), reqdata, values, allVars)
-	}
-	if usesRootURL {
-		reqdata = dedupeRootURLRepeatedPathPrefix(reqdata, mountPrefix)
 	}
 
 	return r.makeHTTPRequestFromModel(reqdata, values, allVars)
@@ -460,22 +456,48 @@ func normalizePathPrefix(prefix string) string {
 	return strings.TrimRight(prefix, "/")
 }
 
-func dedupeRootURLRepeatedPathPrefix(rawURL, mountPrefix string) string {
+const rootURLExpansionSentinel = "\x00NEUTRON_ROOT_URL\x00"
+
+func evaluateRequestData(data string, values, targetValues map[string]interface{}, mountPrefix string) (string, error) {
+	evalValues := common.MergeMaps(values, targetValues)
+	if !strings.Contains(data, "RootURL") {
+		return common.Evaluate(data, evalValues)
+	}
+
+	protectedValues := common.MergeMaps(evalValues, map[string]interface{}{"RootURL": rootURLExpansionSentinel})
+	data, err := common.Evaluate(data, protectedValues)
+	if err != nil {
+		return "", err
+	}
+
+	rootURL := common.ToString(evalValues["RootURL"])
+	if rootURLPathStartsWithMountPrefix(data, mountPrefix) {
+		rootURL = trimRootURLMountPrefix(rootURL, mountPrefix)
+	}
+	return strings.Replace(data, rootURLExpansionSentinel, rootURL, -1), nil
+}
+
+func rootURLPathStartsWithMountPrefix(data, mountPrefix string) bool {
 	prefix := normalizePathPrefix(mountPrefix)
 	if prefix == "" {
-		return rawURL
+		return false
 	}
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return rawURL
-	}
-
-	duplicatePrefix := prefix + "/" + strings.TrimPrefix(prefix, "/")
-	if parsed.Path != duplicatePrefix && !strings.HasPrefix(parsed.Path, duplicatePrefix+"/") {
-		return rawURL
+	idx := strings.Index(data, rootURLExpansionSentinel)
+	if idx < 0 {
+		return false
 	}
 
-	parsed.Path = prefix + strings.TrimPrefix(parsed.Path, duplicatePrefix)
-	parsed.RawPath = ""
-	return parsed.String()
+	pathAfterRootURL := data[idx+len(rootURLExpansionSentinel):]
+	if queryIdx := strings.IndexAny(pathAfterRootURL, "?#"); queryIdx >= 0 {
+		pathAfterRootURL = pathAfterRootURL[:queryIdx]
+	}
+	return pathAfterRootURL == prefix || strings.HasPrefix(pathAfterRootURL, prefix+"/")
+}
+
+func trimRootURLMountPrefix(rootURL, mountPrefix string) string {
+	prefix := normalizePathPrefix(mountPrefix)
+	if prefix == "" || !strings.HasSuffix(rootURL, prefix) {
+		return rootURL
+	}
+	return strings.TrimSuffix(rootURL, prefix)
 }

@@ -325,14 +325,14 @@ func TestExecuteRootURLUsesScanContextPathPrefix(t *testing.T) {
 	require.Contains(t, strings.Join(requested, ","), "/apis/IGI/")
 }
 
-func TestExecuteRootURLDedupesRepeatedPathPrefix(t *testing.T) {
+func TestExecuteRootURLSemanticJoinSkipsRepeatedPathPrefix(t *testing.T) {
 	var requested []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requested = append(requested, r.URL.Path)
 		switch r.URL.Path {
 		case "/vpn/index.html":
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, "mounted-dedupe-match")
+			fmt.Fprint(w, "mounted-semantic-match")
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "miss: %s", r.URL.Path)
@@ -346,7 +346,7 @@ func TestExecuteRootURLDedupesRepeatedPathPrefix(t *testing.T) {
 	}
 	r.Matchers = append(r.Matchers, &operators.Matcher{
 		Type:  "word",
-		Words: []string{"mounted-dedupe-match"},
+		Words: []string{"mounted-semantic-match"},
 	})
 	err := r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}})
 	require.NoError(t, err)
@@ -356,6 +356,46 @@ func TestExecuteRootURLDedupesRepeatedPathPrefix(t *testing.T) {
 
 	var capturedEvent *protocols.InternalWrappedEvent
 	err = r.ExecuteWithResults(input, map[string]interface{}{}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
+		capturedEvent = event
+	})
+	require.NoError(t, err)
+	require.NotNil(t, capturedEvent)
+	require.True(t, capturedEvent.OperatorsResult.Matched)
+	require.Contains(t, strings.Join(requested, ","), "/vpn/index.html")
+	require.NotContains(t, strings.Join(requested, ","), "/vpn/vpn/index.html")
+}
+
+func TestExecuteRootURLSemanticJoinAfterVariableExpansion(t *testing.T) {
+	var requested []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		switch r.URL.Path {
+		case "/vpn/index.html":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "mounted-dynamic-match")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "miss: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:   []string{`{{RootURL}}/{{trim_prefix(p, "/")}}`},
+		Method: "GET",
+	}
+	r.Matchers = append(r.Matchers, &operators.Matcher{
+		Type:  "word",
+		Words: []string{"mounted-dynamic-match"},
+	})
+	err := r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}})
+	require.NoError(t, err)
+
+	input := protocols.NewScanContext(server.URL, nil)
+	input.PathPrefix = "/vpn/"
+
+	var capturedEvent *protocols.InternalWrappedEvent
+	err = r.ExecuteWithResults(input, map[string]interface{}{"p": "/vpn/index.html"}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
 		capturedEvent = event
 	})
 	require.NoError(t, err)
