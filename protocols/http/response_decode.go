@@ -8,10 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
-
-	"golang.org/x/text/encoding/charmap"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 )
 
 func readResponseBody(resp *http.Response) ([]byte, error) {
@@ -31,7 +27,7 @@ func readResponseBody(resp *http.Response) ([]byte, error) {
 		return rawBody, nil
 	}
 
-	return decodeResponseTextBytes(decodedBody, resp.Header.Get("Content-Type"))
+	return decodedBody, nil
 }
 
 func decodeResponseBody(body []byte, contentEncoding string) ([]byte, error) {
@@ -96,25 +92,3 @@ func decodeBodyWithEncoding(body []byte, encoding string) ([]byte, error) {
 	return ioutil.ReadAll(reader)
 }
 
-func decodeResponseTextBytes(body []byte, contentType string) ([]byte, error) {
-	if len(body) == 0 {
-		return body, nil
-	}
-
-	var reader io.Reader
-	contentType = strings.ToLower(contentType)
-	switch {
-	case strings.Contains(contentType, "gbk"), strings.Contains(contentType, "gb2312"), strings.Contains(contentType, "gb18030"):
-		reader = transform.NewReader(bytes.NewReader(body), simplifiedchinese.GBK.NewDecoder())
-	case strings.Contains(contentType, "windows-1251"), strings.Contains(contentType, "cp1251"), strings.Contains(contentType, "cp-1251"):
-		reader = transform.NewReader(bytes.NewReader(body), charmap.Windows1251.NewDecoder())
-	default:
-		return body, nil
-	}
-
-	decoded, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return body, nil
-	}
-	return decoded, nil
-}
