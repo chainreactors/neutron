@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/Knetic/govaluate"
 	"github.com/chainreactors/neutron/common"
-	"os"
 	"regexp"
 	"strings"
 )
@@ -312,8 +311,6 @@ func (m *Matcher) MatchBinary(corpus string) (bool, []string) {
 
 // MatchDSL matches on a generic map result
 func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
-	debugDSL := m.dslDebugEnabled(data)
-
 	// Iterate over all the expressions accepted as valid
 	for i, expression := range m.dslCompiled {
 		// Fast path: an expression with no template markers ({{...}} / §...§) is
@@ -325,29 +322,17 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 		if strings.Contains(exprStr, common.ParenthesisOpen) || strings.Contains(exprStr, common.General) {
 			resolvedExpression, err := common.Evaluate(exprStr, data)
 			if err != nil {
-				if debugDSL {
-					common.Debug("dsl resolve error template=%v matcher=%q expr=%q err=%v vars=%s",
-						data["template-id"], m.Name, exprStr, err, dslDebugVars(data))
-				}
 				common.Logger().Errorf(m.Name, err)
 				return false
 			}
 			expression, err = govaluate.NewEvaluableExpressionWithFunctions(resolvedExpression, common.GetHelperFunctions())
 			if err != nil {
-				if debugDSL {
-					common.Debug("dsl compile error template=%v matcher=%q expr=%q resolved=%q err=%v vars=%s",
-						data["template-id"], m.Name, exprStr, resolvedExpression, err, dslDebugVars(data))
-				}
 				common.Logger().Errorf(m.Name, err)
 				return false
 			}
 		}
 
 		result, err := expression.Evaluate(data)
-		if debugDSL {
-			common.Debug("dsl eval template=%v matcher=%q index=%d condition=%d expr=%q result=%#v err=%v vars=%s",
-				data["template-id"], m.Name, i, m.condition, exprStr, result, err, dslDebugVars(data))
-		}
 		if err != nil {
 			if m.condition == ANDCondition {
 				return false
@@ -380,64 +365,6 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 		}
 	}
 	return false
-}
-
-func (m *Matcher) dslDebugEnabled(data map[string]interface{}) bool {
-	filter := strings.TrimSpace(os.Getenv("NEUTRON_DSL_DEBUG"))
-	if filter == "" {
-		return false
-	}
-	if filter == "1" || filter == "*" || strings.EqualFold(filter, "true") {
-		return true
-	}
-	filter = strings.ToLower(filter)
-	for _, v := range []string{
-		m.Name,
-		common.ToString(data["template-id"]),
-		common.ToString(data["template-path"]),
-		common.ToString(data["BaseURL"]),
-		common.ToString(data["RootURL"]),
-		common.ToString(data["Host"]),
-		common.ToString(data["Hostname"]),
-	} {
-		if strings.Contains(strings.ToLower(v), filter) {
-			return true
-		}
-	}
-	return false
-}
-
-func dslDebugVars(data map[string]interface{}) string {
-	keysEnv := strings.TrimSpace(os.Getenv("NEUTRON_DSL_DEBUG_VARS"))
-	if keysEnv == "" {
-		keysEnv = "BaseURL,RootURL,matched,matched_5,status_code,status_code_4,status_code_5,location,location_3,location_6,favicon_hash,body,body_1,body_4,body_5,body_7"
-	}
-	keys := strings.Split(keysEnv, ",")
-	parts := make([]string, 0, len(keys))
-	for _, key := range keys {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		value, ok := data[key]
-		if !ok {
-			parts = append(parts, key+"=<missing>")
-			continue
-		}
-		parts = append(parts, fmt.Sprintf("%s=%s", key, dslDebugValue(value)))
-	}
-	return strings.Join(parts, " ")
-}
-
-func dslDebugValue(value interface{}) string {
-	s := common.ToString(value)
-	s = strings.Replace(s, "\r", "\\r", -1)
-	s = strings.Replace(s, "\n", "\\n", -1)
-	s = strings.Replace(s, "\x00", "\\x00", -1)
-	if len(s) > 220 {
-		return fmt.Sprintf("%q(len=%d)", s[:220]+"...", len(s))
-	}
-	return fmt.Sprintf("%q(len=%d)", s, len(s))
 }
 
 // MatchFavicon matches a favicon hash check against a corpus of favicon hashes
