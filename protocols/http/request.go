@@ -425,32 +425,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 	}
 
 	timeStart := time.Now()
-	// Per-execution overrides: Transport takes precedence over Client.
-	// Transport-only override shallow-clones r.httpClient so CheckRedirect, Jar,
-	// and Timeout from the template's Compile() are preserved — only the
-	// RoundTripper is swapped (e.g. for active-match caching transports).
-	// Client override remains for back-compat but replaces the whole client
-	// (drops redirect policy) — see ScanContext docs.
-	client := r.httpClient
-	if input != nil {
-		switch {
-		case input.Transport != nil:
-			c := *r.httpClient
-			c.Transport = input.Transport
-			client = &c
-		case input.Client != nil:
-			client = input.Client
-		}
-	}
-	if r.needsIsolatedRedirectJar() && client != nil && client.Jar == nil {
-		// xray/nuclei-style redirect following carries Set-Cookie values within
-		// a single redirect chain. Keep the jar per request execution so
-		// cookie-reuse:false does not leak cookies across template requests,
-		// targets, or concurrent active matches.
-		c := *client
-		c.Jar = newCookieJar()
-		client = &c
-	}
+	client := r.clientForExecution(input)
 	resp, err := client.Do(request.request)
 	common.Debug("request %s %v %v", request.request.Method, request.request.URL, request.dynamicValues)
 	common.Dump(request.request)
@@ -522,11 +497,49 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 	return err
 }
 
-func (r *Request) needsIsolatedRedirectJar() bool {
-	if r == nil || r.CookieReuse {
-		return false
+func (r *Request) clientForExecution(input *protocols.ScanContext) *http.Client {
+	return r.withIsolatedRedirectCookieJar(r.baseClientForExecution(input))
+}
+
+func (r *Request) baseClientForExecution(input *protocols.ScanContext) *http.Client {
+	if r == nil {
+		return nil
 	}
-	return r.Redirects || r.HostRedirects
+
+	client := r.httpClient
+	if input == nil {
+		return client
+	}
+
+	// Transport takes precedence over Client. A transport-only override keeps
+	// the template's redirect policy, timeout, and long-lived cookie jar when
+	// cookie-reuse:true is enabled; only the RoundTripper is swapped.
+	switch {
+	case input.Transport != nil && r.httpClient != nil:
+		c := *r.httpClient
+		c.Transport = input.Transport
+		return &c
+	case input.Transport != nil:
+		return &http.Client{Transport: input.Transport}
+	case input.Client != nil:
+		return input.Client
+	}
+
+	return client
+}
+
+func (r *Request) withIsolatedRedirectCookieJar(client *http.Client) *http.Client {
+	if r == nil || client == nil || client.Jar != nil || r.CookieReuse || !(r.Redirects || r.HostRedirects) {
+		return client
+	}
+
+	// xray/nuclei-style redirect following carries Set-Cookie values within a
+	// single redirect chain. Keep the jar scoped to one request execution so
+	// cookie-reuse:false does not leak cookies across template requests, targets,
+	// or concurrent active matches.
+	c := *client
+	c.Jar = newCookieJar()
+	return &c
 }
 
 // responseToDSLMap converts an HTTP response to a map for use in DSL matching
