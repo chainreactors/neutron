@@ -11,25 +11,35 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 	"time"
 )
 
 var ua = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0;"
 
+// RedirectPolicy controls how the HTTP client follows redirects, mirroring
+// nuclei's RedirectFlow semantics.
+type RedirectPolicy uint8
+
+const (
+	DontFollowRedirect       RedirectPolicy = iota // default — return 3xx as-is
+	FollowAllRedirect                              // follow all redirects
+	FollowSameHostRedirect                         // follow only when host matches the initial request
+)
+
 type Configuration struct {
-	Timeout         int
-	FollowRedirects bool
-	MaxRedirects    int
-	CookieReuse     bool
-	Proxy           func(*http.Request) (*url.URL, error)
-	// DialContext 非 nil 时作为该 client 专属 transport 的 DialContext（可为代理）。
-	DialContext func(ctx context.Context, network, address string) (net.Conn, error)
+	Timeout        int
+	RedirectPolicy RedirectPolicy
+	MaxRedirects   int
+	CookieReuse    bool
+	Proxy          func(*http.Request) (*url.URL, error)
+	DialContext    func(ctx context.Context, network, address string) (net.Conn, error)
 }
 
 var DefaultOption = Configuration{
-	Timeout:         5,
-	FollowRedirects: true,
-	MaxRedirects:    3,
+	Timeout:        5,
+	RedirectPolicy: FollowAllRedirect,
+	MaxRedirects:   3,
 }
 
 // DefaultTransport 仅作为不可变的默认配置参考保留；createClient 不再共享它，
@@ -69,7 +79,7 @@ func createClient(opt *Configuration) *http.Client {
 	}
 	client := &http.Client{
 		Transport:     tr,
-		CheckRedirect: makeCheckRedirectFunc(opt.FollowRedirects, opt.MaxRedirects),
+		CheckRedirect: makeCheckRedirectFunc(opt.RedirectPolicy, opt.MaxRedirects),
 	}
 	if jar != nil {
 		client.Jar = jar
@@ -86,23 +96,48 @@ const defaultMaxRedirects = 10
 
 type checkRedirectFunc func(req *http.Request, via []*http.Request) error
 
-func makeCheckRedirectFunc(followRedirects bool, maxRedirects int) checkRedirectFunc {
+func makeCheckRedirectFunc(policy RedirectPolicy, maxRedirects int) checkRedirectFunc {
 	return func(req *http.Request, via []*http.Request) error {
-		if !followRedirects {
+		if policy == DontFollowRedirect {
 			return http.ErrUseLastResponse
 		}
-		if maxRedirects == 0 {
-			if len(via) > defaultMaxRedirects {
+
+		if policy == FollowSameHostRedirect && len(via) > 0 {
+			newHost := normalizeHost(req.URL)
+			var oldHost string
+			if via[0].Host != "" {
+				oldHost = normalizeHost(&url.URL{Scheme: via[0].URL.Scheme, Host: via[0].Host})
+			} else {
+				oldHost = normalizeHost(via[0].URL)
+			}
+			if newHost != oldHost {
 				return http.ErrUseLastResponse
 			}
-			return nil
 		}
 
-		if len(via) > maxRedirects {
+		limit := maxRedirects
+		if limit == 0 {
+			limit = defaultMaxRedirects
+		}
+		if len(via) > limit {
 			return http.ErrUseLastResponse
 		}
 		return nil
 	}
+}
+
+func normalizeHost(u *url.URL) string {
+	host, port, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		return strings.ToLower(u.Host)
+	}
+	if (u.Scheme == "http" && port == "80") || (u.Scheme == "https" && port == "443") {
+		if strings.Contains(host, ":") {
+			return "[" + strings.ToLower(host) + "]"
+		}
+		return strings.ToLower(host)
+	}
+	return strings.ToLower(u.Host)
 }
 
 type nopCloser struct{}

@@ -254,14 +254,19 @@ func (r *Request) Requests() int {
 func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 	r.options = options
 
+	policy := DontFollowRedirect
+	if r.Redirects {
+		policy = FollowAllRedirect
+	} else if r.HostRedirects {
+		policy = FollowSameHostRedirect
+	}
 	connectionConfiguration := &Configuration{
-		//Threads:         r.Threads,
-		Timeout:         options.Options.Timeout,
-		MaxRedirects:    r.MaxRedirects,
-		FollowRedirects: r.Redirects || r.HostRedirects,
-		CookieReuse:     r.CookieReuse,
-		DialContext:     options.Options.DialContext,
-		Proxy:           options.Options.Proxy,
+		Timeout:        options.Options.Timeout,
+		MaxRedirects:   r.MaxRedirects,
+		RedirectPolicy: policy,
+		CookieReuse:    r.CookieReuse,
+		DialContext:    options.Options.DialContext,
+		Proxy:          options.Options.Proxy,
 	}
 	r.httpClient = createClient(connectionConfiguration)
 
