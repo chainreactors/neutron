@@ -479,9 +479,9 @@ func dslDebugVars(data map[string]interface{}) string {
 
 func dslDebugValue(value interface{}) string {
 	s := common.ToString(value)
-	s = strings.ReplaceAll(s, "\r", "\\r")
-	s = strings.ReplaceAll(s, "\n", "\\n")
-	s = strings.ReplaceAll(s, "\x00", "\\x00")
+	s = strings.Replace(s, "\r", "\\r", -1)
+	s = strings.Replace(s, "\n", "\\n", -1)
+	s = strings.Replace(s, "\x00", "\\x00", -1)
 	if len(s) > 220 {
 		return fmt.Sprintf("%q(len=%d)", s[:220]+"...", len(s))
 	}
