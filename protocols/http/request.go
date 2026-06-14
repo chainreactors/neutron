@@ -792,6 +792,7 @@ func discoverIconURLs(base *url.URL, body string) []string {
 		add(attrValue(tag, "href"))
 	}
 	add("favicon.ico")
+	add("/favicon.ico")
 	return urls
 }
 
