@@ -176,3 +176,28 @@ func TestOperatorsExecute(t *testing.T) {
 		require.Nil(t, result)
 	})
 }
+
+func TestMatcherDSLMissingVariablesDefaultEmpty(t *testing.T) {
+	t.Run("missing header variable does not abort later OR branch", func(t *testing.T) {
+		matcher := &Matcher{
+			Type: "dsl",
+			DSL:  []string{`contains(location_3, "resource/anonym.jsp") || ((status_code_4 == 404) && contains(body_5, "CurrentUserId"))`},
+		}
+		require.NoError(t, matcher.CompileMatchers())
+
+		ok := matcher.MatchDSL(map[string]interface{}{
+			"status_code_4": 404,
+			"body_5":        "CurrentUserId Com_Parameter StylePath",
+		})
+		require.True(t, ok)
+	})
+
+	t.Run("missing variable alone is a non-match", func(t *testing.T) {
+		matcher := &Matcher{
+			Type: "dsl",
+			DSL:  []string{`contains(location_3, "resource/anonym.jsp")`},
+		}
+		require.NoError(t, matcher.CompileMatchers())
+		require.False(t, matcher.MatchDSL(map[string]interface{}{}))
+	})
+}
