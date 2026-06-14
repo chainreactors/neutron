@@ -13,19 +13,27 @@ import (
 
 var ua = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0;"
 
+type RedirectPolicy uint8
+
+const (
+	DontFollowRedirect       RedirectPolicy = iota
+	FollowAllRedirect
+	FollowSameHostRedirect
+)
+
 type Configuration struct {
-	Timeout         int
-	FollowRedirects bool
-	MaxRedirects    int
-	CookieReuse     bool
-	Proxy           func(*http.Request) (*url.URL, error)
-	DialContext     func(ctx context.Context, network, address string) (net.Conn, error)
+	Timeout        int
+	RedirectPolicy RedirectPolicy
+	MaxRedirects   int
+	CookieReuse    bool
+	Proxy          func(*http.Request) (*url.URL, error)
+	DialContext    func(ctx context.Context, network, address string) (net.Conn, error)
 }
 
 var DefaultOption = Configuration{
-	Timeout:         5,
-	FollowRedirects: true,
-	MaxRedirects:    3,
+	Timeout:        5,
+	RedirectPolicy: FollowAllRedirect,
+	MaxRedirects:   3,
 }
 
 type Transport struct {
