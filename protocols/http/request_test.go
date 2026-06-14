@@ -86,14 +86,23 @@ func TestDiscoverIconURLsSupportsUnquotedAttrs(t *testing.T) {
 	require.Contains(t, urls, "http://example.test/systemcenter/static/favicon.ico")
 }
 
-func TestDiscoverIconURLsFallbackUsesCurrentDirectory(t *testing.T) {
+func TestDiscoverIconURLsFallbackIncludesCurrentDirectoryAndRoot(t *testing.T) {
 	base, err := url.Parse("http://example.test/portal/")
 	require.NoError(t, err)
 
 	urls := discoverIconURLs(base, `<html><head></head><body></body></html>`)
 
 	require.Contains(t, urls, "http://example.test/portal/favicon.ico")
-	require.NotContains(t, urls, "http://example.test/favicon.ico")
+	require.Contains(t, urls, "http://example.test/favicon.ico")
+}
+
+func TestDiscoverIconURLsFallbackDedupesRootPath(t *testing.T) {
+	base, err := url.Parse("http://example.test/")
+	require.NoError(t, err)
+
+	urls := discoverIconURLs(base, `<html><head></head><body></body></html>`)
+
+	require.Equal(t, []string{"http://example.test/favicon.ico"}, urls)
 }
 
 func TestResponseToDSLMapUsesFinalRedirectURLForFaviconDiscovery(t *testing.T) {
