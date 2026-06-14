@@ -325,6 +325,46 @@ func TestExecuteRootURLUsesScanContextPathPrefix(t *testing.T) {
 	require.Contains(t, strings.Join(requested, ","), "/apis/IGI/")
 }
 
+func TestExecuteRootURLDedupesRepeatedPathPrefix(t *testing.T) {
+	var requested []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		switch r.URL.Path {
+		case "/vpn/index.html":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "mounted-dedupe-match")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, "miss: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:   []string{"{{RootURL}}/vpn/index.html"},
+		Method: "GET",
+	}
+	r.Matchers = append(r.Matchers, &operators.Matcher{
+		Type:  "word",
+		Words: []string{"mounted-dedupe-match"},
+	})
+	err := r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}})
+	require.NoError(t, err)
+
+	input := protocols.NewScanContext(server.URL, nil)
+	input.PathPrefix = "/vpn/"
+
+	var capturedEvent *protocols.InternalWrappedEvent
+	err = r.ExecuteWithResults(input, map[string]interface{}{}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
+		capturedEvent = event
+	})
+	require.NoError(t, err)
+	require.NotNil(t, capturedEvent)
+	require.True(t, capturedEvent.OperatorsResult.Matched)
+	require.Contains(t, strings.Join(requested, ","), "/vpn/index.html")
+	require.NotContains(t, strings.Join(requested, ","), "/vpn/vpn/index.html")
+}
+
 func TestExecutePathPrefixDoesNotChangeBaseURL(t *testing.T) {
 	// BaseURL must stay the literal scan input even when PathPrefix is set.
 	// Templates that use {{BaseURL}} (e.g. the standard nuclei vuln idiom)

@@ -154,7 +154,9 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 	if !isRawRequest && strings.HasSuffix(parsed.Path, "/") && strings.Contains(reqdata, "{{BaseURL}}/") {
 		trailingSlash = true
 	}
-	targetValues := generateVariables(parsed, trailingSlash, pathPrefix(r.input))
+	mountPrefix := pathPrefix(r.input)
+	usesRootURL := strings.Contains(reqdata, "{{RootURL}}")
+	targetValues := generateVariables(parsed, trailingSlash, mountPrefix)
 	var globalVars map[string]interface{}
 	if r.input != nil {
 		globalVars = r.input.GlobalVars
@@ -187,6 +189,9 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 
 	if isRawRequest {
 		return r.makeHTTPRequestFromRaw(parsed.String(), reqdata, values, allVars)
+	}
+	if usesRootURL {
+		reqdata = dedupeRootURLRepeatedPathPrefix(reqdata, mountPrefix)
 	}
 
 	return r.makeHTTPRequestFromModel(reqdata, values, allVars)
@@ -453,4 +458,24 @@ func normalizePathPrefix(prefix string) string {
 		prefix = "/" + prefix
 	}
 	return strings.TrimRight(prefix, "/")
+}
+
+func dedupeRootURLRepeatedPathPrefix(rawURL, mountPrefix string) string {
+	prefix := normalizePathPrefix(mountPrefix)
+	if prefix == "" {
+		return rawURL
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return rawURL
+	}
+
+	duplicatePrefix := prefix + "/" + strings.TrimPrefix(prefix, "/")
+	if parsed.Path != duplicatePrefix && !strings.HasPrefix(parsed.Path, duplicatePrefix+"/") {
+		return rawURL
+	}
+
+	parsed.Path = prefix + strings.TrimPrefix(parsed.Path, duplicatePrefix)
+	parsed.RawPath = ""
+	return parsed.String()
 }
