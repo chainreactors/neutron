@@ -556,8 +556,9 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	data["header"] = headerBuilder.String()
 
 	body, _ := readResponseBody(resp)
-	data["body"] = string(body)
-	data["title"] = extractHTMLTitle(string(body))
+	bodyText := string(body)
+	data["body"] = bodyText
+	data["title"] = extractHTMLTitle(bodyText)
 	addTLSCertFields(data, resp)
 	if strings.TrimSpace(resp.Header.Get("Content-Encoding")) != "" {
 		data["content_length"] = len(body)
@@ -575,6 +576,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	respRaw.WriteString("\r\n")
 	respRaw.Write(body)
 	data["response"] = respRaw.String()
+	data["raw"] = data["response"]
 
 	var reqRaw bytes.Buffer
 	reqRaw.WriteString(fmt.Sprintf("%s %s HTTP/1.1\r\n", req.Method, req.URL.String()))
