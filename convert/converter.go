@@ -315,7 +315,15 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 		headers := rewriteHeaderPlaceholders(rule.Request.Headers, ctx.variableAlias)
 		body := rewriteTemplatePlaceholders(rule.Request.Body, ctx.variableAlias)
 
-		key := method + ":" + path + ":" + headersKey(headers) + ":" + body
+		redirects := followRedirectsOrDefault(rule.Request.FollowRedirects)
+		// A rule that asserts the redirect response itself must see the 30x
+		// response. If xray omitted follow_redirects, prefer preserving Location
+		// over following to the final body; explicit user flags still win.
+		if rule.Request.FollowRedirects == nil && xrayRuleDependsOnRedirectResponse(rule) {
+			redirects = false
+		}
+
+		key := method + ":" + path + ":" + headersKey(headers) + ":" + body + ":redirects=" + strconv.FormatBool(redirects)
 		if preserveRuleOrder {
 			key = key + ":" + ruleName
 		}
@@ -338,7 +346,7 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 				path:       path,
 				headers:    headers,
 				body:       body,
-				redirects:  followRedirectsOrDefault(rule.Request.FollowRedirects),
+				redirects:  redirects,
 				rules:      []string{ruleName},
 				exprs:      []string{expr},
 				extractors: extractors,
@@ -1471,15 +1479,49 @@ func appendGeneratedQueries(yamlData []byte, tmpl map[string]interface{}) []byte
 // followRedirectsOrDefault maps an xray rule's follow_redirects flag to the
 // neutron redirect policy. xray follows redirects BY DEFAULT (omitted == true);
 // you opt out with an explicit follow_redirects: false. neutron is the opposite
-// (defaults to no-follow). An omitted flag therefore must convert to true, or the
-// product signature behind a 30x (GeoServer Wicket /web/?0, Druid console, Spring
-// Boot whitelabel) is silently lost. An explicit false (Location-header matchers)
-// is preserved as no-follow.
+// (defaults to no-follow). An omitted flag therefore normally converts to true,
+// or the product signature behind a 30x (GeoServer Wicket /web/?0, Druid console,
+// Spring Boot whitelabel) is silently lost. groupRules applies a narrow exception
+// for rules that assert the redirect response itself.
 func followRedirectsOrDefault(flag *bool) bool {
 	if flag == nil {
 		return true
 	}
 	return *flag
+}
+
+var (
+	xrayLocationHeaderAccessRE  = regexp.MustCompile(`(?i)response\.headers\s*\[\s*['"]location['"]\s*\]`)
+	xrayLocationHeaderInRE      = regexp.MustCompile(`(?i)['"]location['"]\s+in\s+response\.headers`)
+	xrayRedirectStatusLiteralRE = regexp.MustCompile(`\b3[0-9]{2}\b`)
+)
+
+func xrayRuleDependsOnRedirectResponse(rule XrayRule) bool {
+	if xrayExpressionDependsOnRedirectResponse(rule.Expression) {
+		return true
+	}
+	for _, raw := range rule.Output {
+		if xrayExpressionDependsOnRedirectResponse(fmt.Sprint(raw)) {
+			return true
+		}
+	}
+	return false
+}
+
+func xrayExpressionDependsOnRedirectResponse(expr string) bool {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return false
+	}
+	if xrayLocationHeaderAccessRE.MatchString(expr) || xrayLocationHeaderInRE.MatchString(expr) {
+		return true
+	}
+
+	lower := strings.ToLower(expr)
+	if strings.Contains(lower, "response.raw_header") && strings.Contains(lower, "location:") {
+		return true
+	}
+	return strings.Contains(lower, "response.status") && xrayRedirectStatusLiteralRE.MatchString(lower)
 }
 
 func convertGroup(method, path string, headers map[string]string, body string, redirects bool, exprs []string) map[string]interface{} {

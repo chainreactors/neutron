@@ -283,6 +283,142 @@ expression: first() && second()
 	}
 }
 
+func TestEndToEnd_ReqConditionLocationHistoryKeepsRedirectResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/one":
+			fmt.Fprint(w, "one")
+		case "/two":
+			fmt.Fprint(w, "two")
+		case "/jump":
+			w.Header().Set("Location", "/resource/anonym.jsp")
+			w.WriteHeader(http.StatusFound)
+			fmt.Fprint(w, "jump")
+		case "/resource/anonym.jsp":
+			fmt.Fprint(w, "followed")
+		case "/done":
+			fmt.Fprint(w, "done")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	xrayYAML := `
+name: fingerprint-test--history-location-redirect
+detail:
+  fingerprint:
+    name: History Location Redirect
+transport: http
+rules:
+  first:
+    request:
+      method: GET
+      path: /one
+    expression: response.status == 200
+  second:
+    request:
+      method: GET
+      path: /two
+    expression: response.status == 200
+  redirect:
+    request:
+      method: GET
+      path: /jump
+    expression: response.headers["Location"].contains("resource/anonym.jsp")
+  final:
+    request:
+      method: GET
+      path: /done
+    expression: response.status == 200
+expression: first() && second() && redirect() && final()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	if !strings.Contains(string(out), `contains(location_3, "resource/anonym.jsp")`) {
+		t.Fatalf("converted req-condition should reference the third response Location:\n%s", out)
+	}
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if err := tmpl.Compile(nil); err != nil {
+		t.Fatalf("compile: %v\n%s", err, out)
+	}
+	result, err := tmpl.Execute(server.URL, nil)
+	if err != nil {
+		t.Fatalf("execute: %v\n%s", err, out)
+	}
+	if result == nil || !result.Matched {
+		t.Fatalf("expected converted template to match using location_3 from the 302 response\n%s", out)
+	}
+}
+
+func TestEndToEnd_GroupRulesSeparatesRedirectPolicies(t *testing.T) {
+	var jumpHits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/jump":
+			jumpHits++
+			http.Redirect(w, r, "/final", http.StatusFound)
+		case "/final":
+			fmt.Fprint(w, "final-body")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	xrayYAML := `
+name: fingerprint-test--same-path-redirect-policies
+detail:
+  fingerprint:
+    name: Same Path Redirect Policies
+transport: http
+rules:
+  final_body:
+    request:
+      method: GET
+      path: /jump
+    expression: response.body_string.contains("final-body")
+  redirect_header:
+    request:
+      method: GET
+      path: /jump
+      follow_redirects: false
+    expression: response.headers["Location"].contains("/final")
+expression: final_body() && redirect_header()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(tmpl.GetRequests()) != 2 {
+		t.Fatalf("same request shape with different redirect policies must stay split:\n%s", out)
+	}
+	if err := tmpl.Compile(nil); err != nil {
+		t.Fatalf("compile: %v\n%s", err, out)
+	}
+	result, err := tmpl.Execute(server.URL, nil)
+	if err != nil {
+		t.Fatalf("execute: %v\n%s", err, out)
+	}
+	if result == nil || !result.Matched {
+		t.Fatalf("expected converted template to match both redirect policies\n%s", out)
+	}
+	if jumpHits != 2 {
+		t.Fatalf("expected /jump to be requested once per redirect policy, got %d\n%s", jumpHits, out)
+	}
+}
+
 func TestEndToEnd_NoComment(t *testing.T) {
 	xrayYAML := `
 name: fingerprint-test--nocomment
