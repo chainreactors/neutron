@@ -343,10 +343,10 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 			}
 		}
 
-		result, err, filled := evaluateDSLWithMissingDefaults(expression, data)
+		result, err := expression.Evaluate(data)
 		if debugDSL {
-			common.Debug("dsl eval template=%v matcher=%q index=%d condition=%d expr=%q result=%#v err=%v filled=%v vars=%s",
-				data["template-id"], m.Name, i, m.condition, exprStr, result, err, filled, dslDebugVars(data))
+			common.Debug("dsl eval template=%v matcher=%q index=%d condition=%d expr=%q result=%#v err=%v vars=%s",
+				data["template-id"], m.Name, i, m.condition, exprStr, result, err, dslDebugVars(data))
 		}
 		if err != nil {
 			if m.condition == ANDCondition {
@@ -380,54 +380,6 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 		}
 	}
 	return false
-}
-
-func evaluateDSLWithMissingDefaults(expression *govaluate.EvaluableExpression, data map[string]interface{}) (interface{}, error, []string) {
-	result, err := expression.Evaluate(data)
-	if err == nil {
-		return result, nil, nil
-	}
-
-	var evalData map[string]interface{}
-	var filled []string
-	for attempts := 0; attempts < 32; attempts++ {
-		name, ok := missingDSLParameter(err)
-		if !ok {
-			return result, err, filled
-		}
-		if evalData == nil {
-			evalData = make(map[string]interface{}, len(data)+1)
-			for k, v := range data {
-				evalData[k] = v
-			}
-		}
-		if _, exists := evalData[name]; !exists {
-			evalData[name] = ""
-			filled = append(filled, name)
-		}
-		result, err = expression.Evaluate(evalData)
-		if err == nil {
-			return result, nil, filled
-		}
-	}
-	return result, err, filled
-}
-
-func missingDSLParameter(err error) (string, bool) {
-	if err == nil {
-		return "", false
-	}
-	const prefix = "No parameter '"
-	const suffix = "' found."
-	msg := err.Error()
-	if !strings.HasPrefix(msg, prefix) || !strings.HasSuffix(msg, suffix) {
-		return "", false
-	}
-	name := strings.TrimSuffix(strings.TrimPrefix(msg, prefix), suffix)
-	if name == "" {
-		return "", false
-	}
-	return name, true
 }
 
 func (m *Matcher) dslDebugEnabled(data map[string]interface{}) bool {
