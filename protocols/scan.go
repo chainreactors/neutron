@@ -8,6 +8,11 @@ import (
 	"sync"
 )
 
+// CookieJarFactory is set by the http package at init time to avoid an import
+// cycle (protocols cannot import protocols/http). The factory returns a fresh,
+// empty http.CookieJar suitable for a single scan execution.
+var CookieJarFactory func() http.CookieJar
+
 type ScanContext struct {
 	context.Context
 	// exported / configurable fields
@@ -27,6 +32,12 @@ type ScanContext struct {
 	// the whole client drops the template's `redirects:` policy and silently
 	// turns `redirects: false` templates into follow-302 templates.
 	Transport http.RoundTripper
+	// CookieJar is a per-execution cookie jar. NewScanContext creates one
+	// automatically so redirect chains carry Set-Cookie values, while
+	// different scan executions stay isolated (matching nuclei's contextargs
+	// pattern). When cookie-reuse:true the template's compiled jar takes
+	// precedence; this jar is only injected when the client has no jar yet.
+	CookieJar http.CookieJar
 	// Client, when non-nil, overrides the per-request default HTTP client for
 	// this execution only. It lets active-match engines inject a client/transport
 	// without mutating the shared, compiled template (which is concurrency-unsafe).
@@ -57,9 +68,15 @@ type ScanContext struct {
 	m sync.Mutex
 }
 
-// NewScanContext creates a new scan context using input
+// NewScanContext creates a new scan context using input. Each context gets its
+// own CookieJar so redirect chains within one execution carry cookies, while
+// separate executions stay isolated (matching nuclei's contextargs pattern).
 func NewScanContext(input string, payloads map[string]interface{}) *ScanContext {
-	return &ScanContext{Input: input, Payloads: payloads}
+	ctx := &ScanContext{Input: input, Payloads: payloads}
+	if CookieJarFactory != nil {
+		ctx.CookieJar = CookieJarFactory()
+	}
+	return ctx
 }
 
 // GenerateResult returns final results slice from all events

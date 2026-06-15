@@ -503,10 +503,6 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 }
 
 func (r *Request) clientForExecution(input *protocols.ScanContext) *http.Client {
-	return r.withIsolatedRedirectCookieJar(r.baseClientForExecution(input))
-}
-
-func (r *Request) baseClientForExecution(input *protocols.ScanContext) *http.Client {
 	if r == nil {
 		return nil
 	}
@@ -516,35 +512,29 @@ func (r *Request) baseClientForExecution(input *protocols.ScanContext) *http.Cli
 		return client
 	}
 
-	// Transport takes precedence over Client. A transport-only override keeps
-	// the template's redirect policy, timeout, and long-lived cookie jar when
-	// cookie-reuse:true is enabled; only the RoundTripper is swapped.
 	switch {
 	case input.Transport != nil && r.httpClient != nil:
 		c := *r.httpClient
 		c.Transport = input.Transport
-		return &c
+		client = &c
 	case input.Transport != nil:
-		return &http.Client{Transport: input.Transport}
+		client = &http.Client{Transport: input.Transport}
 	case input.Client != nil:
 		return input.Client
 	}
 
-	return client
-}
-
-func (r *Request) withIsolatedRedirectCookieJar(client *http.Client) *http.Client {
-	if r == nil || client == nil || client.Jar != nil || r.CookieReuse || !(r.Redirects || r.HostRedirects) {
-		return client
+	// Inject the per-execution CookieJar from the ScanContext when the
+	// client has no jar yet (i.e. cookie-reuse is false). This matches
+	// nuclei's pattern: each execution context carries its own jar so
+	// redirect chains carry Set-Cookie values, while different executions
+	// stay isolated.
+	if client != nil && client.Jar == nil && input.CookieJar != nil {
+		c := *client
+		c.Jar = input.CookieJar
+		client = &c
 	}
 
-	// xray/nuclei-style redirect following carries Set-Cookie values within a
-	// single redirect chain. Keep the jar scoped to one request execution so
-	// cookie-reuse:false does not leak cookies across template requests, targets,
-	// or concurrent active matches.
-	c := *client
-	c.Jar = newCookieJar()
-	return &c
+	return client
 }
 
 // responseToDSLMap converts an HTTP response to a map for use in DSL matching

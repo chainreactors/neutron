@@ -13,7 +13,16 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/chainreactors/neutron/protocols"
 )
+
+func init() {
+	protocols.CookieJarFactory = func() http.CookieJar {
+		jar, _ := cookiejar.New(nil)
+		return jar
+	}
+}
 
 var ua = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0;"
 
