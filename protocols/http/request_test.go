@@ -257,7 +257,7 @@ func TestRedirectsCarrySetCookieWithinRedirectChain(t *testing.T) {
 	require.True(t, matched)
 }
 
-func TestRedirectCookieJarIsIsolatedWhenCookieReuseFalse(t *testing.T) {
+func TestPerContextCookieJarSharedWithinExecution(t *testing.T) {
 	var checkSawCookie bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -288,7 +288,47 @@ func TestRedirectCookieJarIsIsolatedWhenCookieReuseFalse(t *testing.T) {
 	input.TraceAll = true
 	err := r.ExecuteWithResults(input, map[string]interface{}{}, map[string]interface{}{}, func(*protocols.InternalWrappedEvent) {})
 	require.NoError(t, err)
-	require.False(t, checkSawCookie, "redirect cookies must not leak into the next path without cookie-reuse")
+	require.True(t, checkSawCookie, "per-context jar should carry cookies within the same execution")
+}
+
+func TestPerContextCookieJarIsolatedAcrossExecutions(t *testing.T) {
+	var secondSawCookie bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/login":
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "exec-cookie", Path: "/"})
+			fmt.Fprint(w, "logged-in")
+		case "/check":
+			if cookie, err := r.Cookie("sid"); err == nil && cookie.Value == "exec-cookie" {
+				secondSawCookie = true
+			}
+			fmt.Fprint(w, "checked")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	r := &Request{
+		Path:   []string{"{{BaseURL}}/login"},
+		Method: "GET",
+	}
+	require.NoError(t, r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}))
+
+	ctx1 := protocols.NewScanContext(server.URL, nil)
+	err := r.ExecuteWithResults(ctx1, map[string]interface{}{}, map[string]interface{}{}, func(*protocols.InternalWrappedEvent) {})
+	require.NoError(t, err)
+
+	r2 := &Request{
+		Path:   []string{"{{BaseURL}}/check"},
+		Method: "GET",
+	}
+	require.NoError(t, r2.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}))
+
+	ctx2 := protocols.NewScanContext(server.URL, nil)
+	err = r2.ExecuteWithResults(ctx2, map[string]interface{}{}, map[string]interface{}{}, func(*protocols.InternalWrappedEvent) {})
+	require.NoError(t, err)
+	require.False(t, secondSawCookie, "cookies must not leak across separate scan contexts")
 }
 
 func TestExecuteRootURLUsesScanContextPathPrefix(t *testing.T) {
