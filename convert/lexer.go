@@ -213,7 +213,7 @@ func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 	}
 
 	i := start + 1
-	var buf []rune
+	var buf []byte
 
 	simpleClose := -1
 	for j := i; j < len(runes); j++ {
@@ -255,7 +255,8 @@ func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 	for j := i; j < end; j++ {
 		if runes[j] == '\\' && j+1 < end {
 			if raw {
-				buf = append(buf, runes[j], runes[j+1])
+				buf = append(buf, []byte(string(runes[j]))...)
+				buf = append(buf, []byte(string(runes[j+1]))...)
 			} else {
 				next := runes[j+1]
 				switch next {
@@ -264,12 +265,12 @@ func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 						hi := hexDigitVal(runes[j+2])
 						lo := hexDigitVal(runes[j+3])
 						if hi >= 0 && lo >= 0 {
-							buf = append(buf, rune(hi<<4|lo))
+							buf = append(buf, byte(hi<<4|lo))
 							j += 3
 							continue
 						}
 					}
-					buf = append(buf, next)
+					buf = append(buf, []byte(string(next))...)
 				case 'n':
 					buf = append(buf, '\n')
 				case 'r':
@@ -279,13 +280,13 @@ func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 				case '0':
 					buf = append(buf, 0)
 				default:
-					buf = append(buf, next)
+					buf = append(buf, []byte(string(next))...)
 				}
 			}
 			j++
 			continue
 		}
-		buf = append(buf, runes[j])
+		buf = append(buf, []byte(string(runes[j]))...)
 	}
 	return string(buf), end + 1, nil
 }
@@ -304,7 +305,7 @@ func hexDigitVal(r rune) int {
 }
 
 func lexTripleQuoteString(runes []rune, start int, raw bool, quote rune) (string, int, error) {
-	var buf []rune
+	var buf []byte
 	for j := start; j < len(runes); j++ {
 		if runes[j] == quote && j+2 < len(runes) && runes[j+1] == quote && runes[j+2] == quote {
 			return string(buf), j + 3, nil
@@ -318,12 +319,12 @@ func lexTripleQuoteString(runes []rune, start int, raw bool, quote rune) (string
 					hi := hexDigitVal(runes[j+1])
 					lo := hexDigitVal(runes[j+2])
 					if hi >= 0 && lo >= 0 {
-						buf = append(buf, rune(hi<<4|lo))
+						buf = append(buf, byte(hi<<4|lo))
 						j += 2
 						continue
 					}
 				}
-				buf = append(buf, next)
+				buf = append(buf, []byte(string(next))...)
 			case 'n':
 				buf = append(buf, '\n')
 			case 'r':
@@ -333,16 +334,17 @@ func lexTripleQuoteString(runes []rune, start int, raw bool, quote rune) (string
 			case '0':
 				buf = append(buf, 0)
 			default:
-				buf = append(buf, next)
+				buf = append(buf, []byte(string(next))...)
 			}
 			continue
 		}
 		if runes[j] == '\\' && j+1 < len(runes) && raw {
-			buf = append(buf, runes[j], runes[j+1])
+			buf = append(buf, []byte(string(runes[j]))...)
+			buf = append(buf, []byte(string(runes[j+1]))...)
 			j++
 			continue
 		}
-		buf = append(buf, runes[j])
+		buf = append(buf, []byte(string(runes[j]))...)
 	}
 	return "", 0, fmt.Errorf("unterminated triple-quoted string at position %d", start-3)
 }

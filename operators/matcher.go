@@ -38,8 +38,6 @@ type Matcher struct {
 	Binary []string `json:"binary,omitempty" yaml:"binary,omitempty"`
 	// DSL are the dsl queries
 	DSL []string `json:"dsl,omitempty" yaml:"dsl,omitempty"`
-	// Hash are the favicon hashes (md5 or mmh3) to match
-	Hash []string `json:"hash,omitempty" yaml:"hash,omitempty"`
 	// JSON contains jq-style expressions used for matching json response
 	JSON []string `json:"json,omitempty" yaml:"json,omitempty"`
 	// XPath contains xpath expressions used for matching html/xml response
@@ -365,93 +363,6 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 		}
 	}
 	return false
-}
-
-// MatchFavicon matches a favicon hash check against a corpus of favicon hashes
-// faviconData should be a map[string]interface{} where keys are URLs and values are hash arrays
-func (m *Matcher) MatchFavicon(faviconData map[string]interface{}) (bool, []string) {
-	var matchedHashes []string
-
-	// Iterate over all favicon URLs and their hashes
-	for url, hashData := range faviconData {
-		var hashes []string
-
-		// Handle different hash data formats
-		switch v := hashData.(type) {
-		case []string:
-			hashes = v
-		case []interface{}:
-			for _, h := range v {
-				if hashStr, ok := h.(string); ok {
-					hashes = append(hashes, hashStr)
-				}
-			}
-		default:
-			continue
-		}
-
-		// Check if any template hash matches any favicon hash
-		for _, templateHash := range m.Hash {
-			for _, faviconHash := range hashes {
-				if templateHash == faviconHash {
-					matchedHashes = append(matchedHashes, faviconHash, url)
-					// If OR condition and not match_all, return immediately
-					if m.condition == ORCondition && !m.MatchAll {
-						return true, matchedHashes
-					}
-				}
-			}
-		}
-	}
-
-	// If we have matches and we're in match_all mode or AND condition
-	if len(matchedHashes) > 0 {
-		if m.MatchAll || m.condition == ANDCondition {
-			// For AND condition, check if we matched all template hashes
-			if m.condition == ANDCondition && len(matchedHashes)/2 < len(m.Hash) {
-				return false, []string{}
-			}
-			return true, matchedHashes
-		}
-		return true, matchedHashes
-	}
-
-	return false, []string{}
-}
-
-// MatchHashValues matches hash strings against matcher.Hash.
-func (m *Matcher) MatchHashValues(values []string) (bool, []string) {
-	if len(m.Hash) == 0 || len(values) == 0 {
-		return false, []string{}
-	}
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-		seen[value] = struct{}{}
-	}
-
-	var matched []string
-	for _, templateHash := range m.Hash {
-		if _, ok := seen[templateHash]; ok {
-			matched = append(matched, templateHash)
-			if m.condition == ORCondition && !m.MatchAll {
-				return true, matched
-			}
-			continue
-		}
-		if m.condition == ANDCondition || m.MatchAll {
-			return false, []string{}
-		}
-	}
-	if len(matched) == 0 {
-		return false, []string{}
-	}
-	if m.condition == ANDCondition || m.MatchAll {
-		return len(matched) == len(m.Hash), matched
-	}
-	return true, matched
 }
 
 func (m *Matcher) SetCompiledData(data interface{}) { m.compiledData = data }

@@ -22,10 +22,10 @@ expression: r0()
 		t.Fatalf("convert: %v", err)
 	}
 	converted := string(out)
-	if strings.Contains(converted, "{{RootURL}}^/admin") {
+	if strings.Contains(converted, "^/admin") {
 		t.Fatalf("path anchor was not stripped:\n%s", converted)
 	}
-	if !strings.Contains(converted, "{{RootURL}}/admin") {
+	if !strings.Contains(converted, `{{BaseURL}}/admin`) {
 		t.Fatalf("normalized path missing:\n%s", converted)
 	}
 }

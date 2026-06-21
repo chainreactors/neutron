@@ -106,8 +106,8 @@ expression: discover() && fetch_asset()
 	if err != nil {
 		t.Fatalf("convert: %v", err)
 	}
-	if strings.Contains(string(out), "{{RootURL}}/{{asset_path}}") {
-		t.Fatalf("dynamic path with leading-slash extractor should not keep an extra slash:\n%s", string(out))
+	if !strings.Contains(string(out), `{{BaseURL}}/{{xray_dedupe_path(BaseURL, asset_path)}}`) {
+		t.Fatalf("expected dynamic path to use xray BaseURL dedupe form:\n%s", string(out))
 	}
 
 	var tmpl templates.Template
@@ -249,6 +249,7 @@ expression: first() && second()
 	for _, want := range []string{
 		`status_code_1 == 302`,
 		`contains(body_1, "redirect")`,
+		`contains(all_headers_1, "location:")`,
 		`contains(location_1, "/login")`,
 	} {
 		if !strings.Contains(s, want) {
@@ -340,6 +341,9 @@ expression: first() && second() && redirect() && final()
 	if !strings.Contains(string(out), `contains(location_3, "resource/anonym.jsp")`) {
 		t.Fatalf("converted req-condition should reference the third response Location:\n%s", out)
 	}
+	if !strings.Contains(string(out), `contains(all_headers_3, "location:")`) {
+		t.Fatalf("converted req-condition should guard the third response Location:\n%s", out)
+	}
 
 	var tmpl templates.Template
 	if err := yaml.Unmarshal(out, &tmpl); err != nil {
@@ -354,6 +358,74 @@ expression: first() && second() && redirect() && final()
 	}
 	if result == nil || !result.Matched {
 		t.Fatalf("expected converted template to match using location_3 from the 302 response\n%s", out)
+	}
+}
+
+func TestEndToEnd_StaticHeaderMissingDoesNotAbortAlternateBranch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.Header().Set("X-Test", "present")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, "root")
+		case "/ekp":
+			fmt.Fprint(w, "CurrentUserId Com_Parameter StylePath")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	xrayYAML := `
+name: fingerprint-test--missing-location-branch
+detail:
+  fingerprint:
+    name: Missing Location Branch
+transport: http
+rules:
+  redirect:
+    request:
+      method: GET
+      path: /
+      follow_redirects: false
+    expression: response.headers["Location"].contains("resource/anonym.jsp")
+  before:
+    request:
+      method: GET
+      path: /
+    expression: response.status in [401, 403, 404] || response.body_string.contains("/sys-ui/ui/style.css")
+  ekp:
+    request:
+      method: GET
+      path: /ekp
+    expression: |-
+      response.body_string.contains("CurrentUserId")
+      && response.body_string.contains("Com_Parameter")
+      && response.body_string.contains("StylePath")
+expression: redirect() || (before() && ekp())
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	if !strings.Contains(string(out), `contains(all_headers_1, "location:")`) &&
+		!strings.Contains(string(out), `contains(all_headers_2, "location:")`) {
+		t.Fatalf("converted template should guard static Location access:\n%s", out)
+	}
+
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if err := tmpl.Compile(nil); err != nil {
+		t.Fatalf("compile: %v\n%s", err, out)
+	}
+	result, err := tmpl.Execute(server.URL, nil)
+	if err != nil {
+		t.Fatalf("execute: %v\n%s", err, out)
+	}
+	if result == nil || !result.Matched {
+		t.Fatalf("expected missing Location to evaluate false and continue to the body branch\n%s", out)
 	}
 }
 
@@ -468,11 +540,11 @@ func TestXrayTemplatePath(t *testing.T) {
 		path string
 		want string
 	}{
-		{"/admin", "{{RootURL}}/admin"},
-		{"/", "{{RootURL}}/"},
-		{"/druid/index.html", "{{RootURL}}/druid/index.html"},
-		{"", "{{BaseURL}}"},
-		{"/{{trim_prefix(path, \"/\")}}", "{{RootURL}}/{{trim_prefix(path, \"/\")}}"},
+		{"/admin", `{{BaseURL}}/admin`},
+		{"/", `{{BaseURL}}/`},
+		{"/druid/index.html", `{{BaseURL}}/druid/index.html`},
+		{"", `{{BaseURL}}`},
+		{"/{{trim_prefix(path, \"/\")}}", `{{BaseURL}}/{{trim_prefix(path, "/")}}`},
 	}
 	for _, tt := range tests {
 		got := xrayTemplatePath(tt.path)
@@ -482,17 +554,15 @@ func TestXrayTemplatePath(t *testing.T) {
 	}
 }
 
-func TestEndToEnd_XrayPathBindsToRootURL(t *testing.T) {
-	// xray POC paths and the implicit default request are both relative to the
-	// application root. converter emits {{RootURL}}+path so the call site's
-	// mount-path prefix (PathPrefix on ScanContext, joined into RootURL) is
-	// honoured. When no PathPrefix is set, RootURL falls back to scheme://host
-	// and the converted template hits the server-root path the POC author wrote.
+func TestEndToEnd_XrayPathUsesXappURLResolveSemantics(t *testing.T) {
+	// xray/xapp paths resolve against the scan input like URL references. A
+	// file-like input path resolves from the parent directory, while a
+	// directory-like input path keeps that directory.
 	xrayYAML := `
-name: fingerprint-test--rooturl-path
+name: fingerprint-test--baseurl-path
 detail:
   fingerprint:
-    name: RootURL Path Test
+    name: BaseURL Path Test
 transport: http
 rules:
   r0:
@@ -507,11 +577,8 @@ expression: r0()
 		t.Fatalf("convert: %v", err)
 	}
 	s := string(out)
-	if !strings.Contains(s, "{{RootURL}}/druid/index.html") {
-		t.Fatalf("expected RootURL in converted path:\n%s", s)
-	}
-	if strings.Contains(s, "{{BaseURL}}/druid") {
-		t.Fatalf("xray absolute path should not use BaseURL:\n%s", s)
+	if !strings.Contains(s, `{{BaseURL}}/druid/index.html`) {
+		t.Fatalf("expected xray resolver in converted path:\n%s", s)
 	}
 
 	var tmpl templates.Template
@@ -521,7 +588,12 @@ expression: r0()
 	tmpl.Compile(nil)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/druid/index.html" {
+		switch r.URL.Path {
+		case "/druid/index.html":
+			w.WriteHeader(200)
+			fmt.Fprint(w, "druid dashboard")
+			return
+		case "/entry/druid/index.html":
 			w.WriteHeader(200)
 			fmt.Fprint(w, "druid dashboard")
 			return
@@ -531,12 +603,19 @@ expression: r0()
 	}))
 	defer server.Close()
 
-	// Bare root → RootURL = server.URL, request hits /druid/index.html.
-	result, err := tmpl.Execute(server.URL, nil)
+	result, err := tmpl.Execute(server.URL+"/entry", nil)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	if result == nil || !result.Matched {
-		t.Fatalf("expected match against /druid/index.html via RootURL")
+		t.Fatalf("expected file-like input to match /druid/index.html")
+	}
+
+	result, err = tmpl.Execute(server.URL+"/entry/", nil)
+	if err != nil {
+		t.Fatalf("execute directory input: %v", err)
+	}
+	if result == nil || !result.Matched {
+		t.Fatalf("expected directory-like input to match /entry/druid/index.html")
 	}
 }

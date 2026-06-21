@@ -117,6 +117,22 @@ func TestGenerateWarnings(t *testing.T) {
 	}
 }
 
+func TestGenerateStaticHexDecodeValue(t *testing.T) {
+	e := &FOFAEmitter{}
+
+	node, err := Parse(`starts_with(body, hex_decode("504b0304"))`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Generate(node, e)
+	if r.Query != `body="PK\x03\x04"` {
+		t.Errorf("got %q, want escaped zip magic", r.Query)
+	}
+	if r.HasErrors() {
+		t.Errorf("unexpected errors: %v", r.Errors)
+	}
+}
+
 func TestGenerateUnsupportedFunction(t *testing.T) {
 	e := &FOFAEmitter{}
 
@@ -333,6 +349,11 @@ func TestGenerateHistoryVariablesNormalizeForQueries(t *testing.T) {
 			`contains(location_1, "/login") && status_code_1 != "404"`,
 			`header="location: /login" && !(status_code="404")`,
 			`services.http.response.headers: "location: /login" AND NOT services.http.response.status_code: 404`,
+		},
+		{
+			`mmh3(base64_py(body_1)) == "733091897"`,
+			`icon_hash="733091897"`,
+			``,
 		},
 	}
 

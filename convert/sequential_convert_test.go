@@ -39,10 +39,10 @@ expression: create() && check_created() && delete() && check_deleted()
 		t.Fatalf("convert: %v", err)
 	}
 	converted := string(out)
-	if got := strings.Count(converted, "{{RootURL}}/toggle"); got != 2 {
+	if got := strings.Count(converted, `{{BaseURL}}/toggle`); got != 2 {
 		t.Fatalf("expected two toggle requests, got %d:\n%s", got, converted)
 	}
-	if got := strings.Count(converted, "{{RootURL}}/flag"); got != 2 {
+	if got := strings.Count(converted, `{{BaseURL}}/flag`); got != 2 {
 		t.Fatalf("expected two flag requests, got %d:\n%s", got, converted)
 	}
 	if !strings.Contains(converted, "status_code_2 == 200") || !strings.Contains(converted, "status_code == 404") {

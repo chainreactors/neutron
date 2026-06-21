@@ -38,41 +38,6 @@ expression: r0()
 	}
 }
 
-func TestConvertSkipsRootURLSetWhenItMapsToBuiltin(t *testing.T) {
-	xray := `
-name: root-url-builtin
-transport: http
-set:
-  RootURL: response.url.scheme + "://" + response.url.domain
-rules:
-  r0:
-    request:
-      method: GET
-      path: /
-      headers:
-        Origin: "{{RootURL}}"
-    expression: response.status == 200
-expression: r0()
-`
-	out, err := Convert([]byte(xray))
-	if err != nil {
-		t.Fatalf("convert: %v", err)
-	}
-	converted := string(out)
-	if strings.Contains(converted, "true://true") {
-		t.Fatalf("RootURL expression converted to invalid literal:\n%s", converted)
-	}
-	if strings.Contains(converted, "variables:") {
-		t.Fatalf("RootURL should use neutron builtin instead of set variable:\n%s", converted)
-	}
-	if strings.Contains(converted, "xray_RootURL") {
-		t.Fatalf("RootURL builtin should not be rewritten to a missing alias:\n%s", converted)
-	}
-	if !strings.Contains(converted, "Origin: '{{RootURL}}'") {
-		t.Fatalf("expected RootURL placeholder to keep neutron builtin:\n%s", converted)
-	}
-}
-
 func TestConvertRenamesBuiltinSetVariable(t *testing.T) {
 	xray := `
 name: builtin-variable-collision
@@ -103,8 +68,8 @@ expression: r0()
 	if !strings.Contains(converted, "Origin: https://{{xray_BaseURL}}") {
 		t.Fatalf("expected original header placeholder to use renamed variable:\n%s", converted)
 	}
-	if !strings.Contains(converted, "{{RootURL}}/admin/auth/reset-password") {
-		t.Fatalf("expected converted request path to use RootURL:\n%s", converted)
+	if !strings.Contains(converted, `{{BaseURL}}/admin/auth/reset-password`) {
+		t.Fatalf("expected converted request path to use xray resolver:\n%s", converted)
 	}
 }
 

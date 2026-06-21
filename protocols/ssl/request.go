@@ -127,7 +127,6 @@ func (r *Request) resolveTarget(input string, vars map[string]interface{}) strin
 		"Hostname": hostname,
 		"Port":     port,
 		"BaseURL":  input,
-		"RootURL":  hostname,
 	}
 	merged := common.MergeMaps(vars, targetVars)
 

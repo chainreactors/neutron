@@ -499,12 +499,9 @@ http:
 	require.True(t, result.Matched)
 }
 
-func TestExecuteFaviconContentDSL(t *testing.T) {
+func TestExecuteExplicitFaviconBodyHashDSL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/":
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, `<html><head><link rel="icon" href="/custom.ico"></head></html>`)
 		case "/custom.ico":
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, "ICON-CONTENT-BYTES")
@@ -515,19 +512,19 @@ func TestExecuteFaviconContentDSL(t *testing.T) {
 	defer server.Close()
 
 	yamlContent := `
-id: favicon-content-dsl-test
+id: explicit-favicon-body-hash-dsl-test
 info:
-  name: Favicon Content DSL Test
+  name: Explicit Favicon Body Hash DSL Test
   author: test
   severity: info
 http:
   - method: GET
     path:
-      - '{{BaseURL}}/'
+      - '{{BaseURL}}/custom.ico'
     matchers:
       - type: dsl
         dsl:
-          - 'contains(favicon_content, "ICON-CONTENT-BYTES")'
+          - 'mmh3(base64_py(body)) == "592422342"'
 `
 	var tmpl Template
 	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)

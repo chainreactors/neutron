@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+// readResponseBody decodes HTTP content encodings only. Legacy text charset
+// normalization is a CyberHub transport-layer concern, not a nuclei behavior.
 func readResponseBody(resp *http.Response) ([]byte, error) {
 	if resp == nil || resp.Body == nil {
 		return nil, nil
@@ -91,4 +93,3 @@ func decodeBodyWithEncoding(body []byte, encoding string) ([]byte, error) {
 
 	return ioutil.ReadAll(reader)
 }
-

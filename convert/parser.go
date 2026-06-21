@@ -360,7 +360,7 @@ func (p *parser) parseResponseAccess() (*dsl.Node, error) {
 					p.next()
 				}
 				varName := headerVarName(hdrName)
-				return p.maybeMethodCall(dsl.Variable(varName))
+				return p.maybeMethodCallForHeader(varName)
 			}
 			if tok.Type == xTIdent {
 				p.next() // consume the variable name
@@ -463,15 +463,18 @@ func (p *parser) parseCertAccess() (*dsl.Node, error) {
 	return nil, fmt.Errorf("unsupported xray response.cert.%s field", field)
 }
 
-// caseFoldCertMatch makes substring matching on X.509 DN fields case-insensitive
-// (contains -> icontains). Certificate field casing (PA-820 vs pa-820, DigiCert
-// vs digicert) is not semantic and varies across CAs/devices, so xray's
-// case-sensitive contains() on cert.* is a common false-negative source;
-// fingerprint practice treats these as case-insensitive. raw_cert (byte
-// matching) is unaffected: it is not a structured field and never reaches here.
+// caseFoldCertMatch makes substring matching on X.509 DN fields case-insensitive.
+// Certificate field casing (PA-820 vs pa-820, DigiCert vs digicert) is not
+// semantic and varies across CAs/devices, so xray's case-sensitive contains()
+// on cert.* is a common false-negative source; fingerprint practice treats
+// these as case-insensitive. raw_cert (byte matching) is unaffected: it is not a
+// structured field and never reaches here.
 func caseFoldCertMatch(node *dsl.Node) *dsl.Node {
-	if node != nil && node.Type == dsl.NodeCall && node.FuncName == "contains" {
-		node.FuncName = "icontains"
+	if node != nil && node.Type == dsl.NodeCall && node.FuncName == "contains" && len(node.Children) == 2 {
+		if isToLowerCall(node.Children[0]) || isToLowerCall(node.Children[1]) {
+			return node
+		}
+		return caseInsensitiveContains(node.Children[0], node.Children[1])
 	}
 	return node
 }
@@ -563,7 +566,7 @@ func (p *parser) maybeMethodCallForAllHeaders() (*dsl.Node, error) {
 	if fn == "starts_with" || fn == "ends_with" {
 		fn = "contains"
 	}
-	return dsl.Call(fn, receiver, arg), nil
+	return buildMethodCall(fn, receiver, arg), nil
 }
 
 // maybeRawHeaderCall handles response.raw_header method calls.
@@ -593,12 +596,16 @@ func (p *parser) maybeRawHeaderCall() (*dsl.Node, error) {
 		return nil, err
 	}
 
+	if isVersionMethod(method) {
+		return p.maybeMethodCall(versionMethodCall(method, receiver, arg))
+	}
+
 	fn := methodMap[method]
 
 	if fn == "regex" {
 		return dsl.Call("regex", arg, receiver), nil
 	}
-	return dsl.Call(fn, receiver, arg), nil
+	return buildMethodCall(fn, receiver, arg), nil
 }
 
 func (p *parser) maybeMethodCall(receiver *dsl.Node) (*dsl.Node, error) {
@@ -633,14 +640,7 @@ func (p *parser) maybeMethodCall(receiver *dsl.Node) (*dsl.Node, error) {
 	}
 
 	if isVersionMethod(method) {
-		switch method {
-		case "versionLess":
-			return p.maybeMethodCall(dsl.Call("xray_version_less", receiver, arg))
-		case "versionGreater":
-			return p.maybeMethodCall(dsl.Call("xray_version_greater", receiver, arg))
-		case "versionEqual":
-			return p.maybeMethodCall(dsl.Call("xray_version_equal", receiver, arg))
-		}
+		return p.maybeMethodCall(versionMethodCall(method, receiver, arg))
 	}
 
 	fn := methodMap[method]
@@ -648,7 +648,28 @@ func (p *parser) maybeMethodCall(receiver *dsl.Node) (*dsl.Node, error) {
 		pattern, corpus := regexCallArgs(receiver, arg)
 		return dsl.Call("regex", pattern, corpus), nil
 	}
-	return dsl.Call(fn, receiver, arg), nil
+	return buildMethodCall(fn, receiver, arg), nil
+}
+
+func (p *parser) maybeMethodCallForHeader(varName string) (*dsl.Node, error) {
+	receiver := dsl.Variable(varName)
+	if p.peek().Type != xTDot {
+		return receiver, nil
+	}
+	if p.lookAhead(1).Type != xTIdent || (!isMethodName(p.lookAhead(1).Val) && !isVersionMethod(p.lookAhead(1).Val)) {
+		return receiver, nil
+	}
+	if p.lookAhead(2).Type != xTLParen {
+		return receiver, nil
+	}
+	node, err := p.maybeMethodCall(receiver)
+	if err != nil {
+		return nil, err
+	}
+	return dsl.BinaryOp("&&",
+		dsl.Call("contains", dsl.Variable("all_headers"), dsl.Literal(varName+":")),
+		node,
+	), nil
 }
 
 func regexCallArgs(receiver, arg *dsl.Node) (*dsl.Node, *dsl.Node) {
@@ -656,6 +677,58 @@ func regexCallArgs(receiver, arg *dsl.Node) (*dsl.Node, *dsl.Node) {
 		return receiver, arg
 	}
 	return arg, receiver
+}
+
+func buildMethodCall(fn string, receiver, arg *dsl.Node) *dsl.Node {
+	if fn == "icontains" {
+		return caseInsensitiveContains(receiver, arg)
+	}
+	return dsl.Call(fn, receiver, arg)
+}
+
+func caseInsensitiveContains(left, right *dsl.Node) *dsl.Node {
+	return dsl.Call("contains", lowerStringNode(left), lowerStringNode(right))
+}
+
+func lowerStringNode(node *dsl.Node) *dsl.Node {
+	if node != nil && node.Type == dsl.NodeLiteral {
+		if s, ok := node.Value.(string); ok {
+			return dsl.Literal(strings.ToLower(s))
+		}
+	}
+	if isToLowerCall(node) {
+		return node
+	}
+	return dsl.Call("to_lower", node)
+}
+
+func isToLowerCall(node *dsl.Node) bool {
+	return node != nil && node.Type == dsl.NodeCall && node.FuncName == "to_lower" && len(node.Children) == 1
+}
+
+func versionMethodCall(method string, receiver, arg *dsl.Node) *dsl.Node {
+	switch method {
+	case "versionLess":
+		return dsl.Call("compare_versions", receiver, versionConstraint("<", arg))
+	case "versionGreater":
+		return dsl.Call("compare_versions", receiver, versionConstraint(">", arg))
+	case "versionEqual":
+		return dsl.Call("compare_versions", receiver, versionConstraint("=", arg))
+	default:
+		return dsl.Call(method, receiver, arg)
+	}
+}
+
+func versionConstraint(prefix string, value *dsl.Node) *dsl.Node {
+	if value != nil && value.Type == dsl.NodeLiteral {
+		switch v := value.Value.(type) {
+		case string:
+			return dsl.Literal(prefix + v)
+		default:
+			return dsl.Literal(prefix + fmt.Sprintf("%v", v))
+		}
+	}
+	return dsl.Call("concat", dsl.Literal(prefix), dsl.Call("to_string", value))
 }
 
 func isRegexPatternReceiver(node *dsl.Node) bool {
@@ -757,10 +830,8 @@ func convertFunctionCall(name string, args []*dsl.Node) *dsl.Node {
 		return dsl.Call("len", args...)
 	case "dir":
 		// xray's dir(x) trims everything after the last "/" but keeps that "/".
-		// Expand to neutron's replace_regex (registered in common/dsl/dsl.go) so
-		// the produced template no longer relies on a neutron-private dir()
-		// helper. Note: upstream nuclei spells this regex_replace; templates that
-		// hit this branch run on neutron, not stock nuclei.
+		// Expand to nuclei-compatible replace_regex so the produced template no
+		// longer relies on an xray/neutron-private dir() helper.
 		if len(args) == 1 {
 			return dsl.Call("replace_regex", args[0], dsl.Literal("/[^/]*$"), dsl.Literal("/"))
 		}
@@ -807,17 +878,43 @@ func convertFunctionCall(name string, args []*dsl.Node) *dsl.Node {
 	case "urlencode", "urlEncode", "urlencodeall", "urlEncodeAll", "url_encode":
 		return dsl.Call("url_encode", args...)
 	case "sha":
-		return dsl.Call("xray_sha", args...)
+		return shaCall(args)
 	case "now":
 		return dsl.Call("unix_time", args...)
 	case "sleep":
 		return dsl.Call("wait_for", args...)
 	case "versionIn":
-		return dsl.Call("xray_version_in", args...)
+		return dsl.Call("compare_versions", args...)
 	case "isValidPage":
-		return dsl.Call("xray_valid_page", dsl.Variable("status_code"), dsl.Variable("body"))
+		return validPageExpression()
 	}
 	return dsl.Call(name, args...)
+}
+
+func shaCall(args []*dsl.Node) *dsl.Node {
+	if len(args) == 2 && args[1] != nil && args[1].Type == dsl.NodeLiteral {
+		if alg, ok := args[1].Value.(string); ok {
+			switch strings.ToLower(strings.TrimSpace(alg)) {
+			case "sha1", "sha-1":
+				return dsl.Call("sha1", args[0])
+			case "sha256", "sha-256":
+				return dsl.Call("sha256", args[0])
+			case "sha512", "sha-512":
+				return dsl.Call("sha512", args[0])
+			}
+		}
+	}
+	return dsl.Call("sha", args...)
+}
+
+func validPageExpression() *dsl.Node {
+	return dsl.BinaryOp("&&",
+		dsl.BinaryOp("&&",
+			dsl.BinaryOp(">=", dsl.Variable("status_code"), dsl.Literal(200)),
+			dsl.BinaryOp("<", dsl.Variable("status_code"), dsl.Literal(400)),
+		),
+		dsl.BinaryOp(">", dsl.Call("len", dsl.Call("trim_space", dsl.Variable("body"))), dsl.Literal(0)),
+	)
 }
 
 func convertVariableName(name string) string {

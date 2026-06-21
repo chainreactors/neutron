@@ -20,11 +20,11 @@ http:
       req-condition: true
     - method: GET
       path:
-        - '{{BaseURL}}/'
+        - '{{BaseURL}}/favicon.ico'
       req-condition: true
     - matchers:
         - dsl:
-            - (((contains(body_1, "/bi/?proc=2&action=loadFavicon") && contains(body_1, "/bi/?proc=2&locale="))) || ((icontains(body_2, "yonghong") && (icontains(body_2, "contentdiv imgposition desw") || icontains(body_2, "YH_CONFIG")))) || ((contains(body_3, "background:url(404.jpg)")) && ((md5(body_4) == "77154f3efafe5b68423507a6658a636a"))) || (contains(favicon_hash_5, "398162124")) || ((icontains(body, "yonghong") && (icontains(body, "contentdiv imgposition desw") || icontains(body, "YH_CONFIG")))))
+            - (((contains(body_1, "/bi/?proc=2&action=loadFavicon") && contains(body_1, "/bi/?proc=2&locale="))) || ((contains(to_lower(body_2), "yonghong") && (contains(to_lower(body_2), "contentdiv imgposition desw") || contains(to_lower(body_2), "yh_config")))) || ((contains(body_3, "background:url(404.jpg)")) && ((md5(body_4) == "77154f3efafe5b68423507a6658a636a"))) || (mmh3(base64_py(body_5)) == "398162124") || ((contains(to_lower(body), "yonghong") && (contains(to_lower(body), "contentdiv imgposition desw") || contains(to_lower(body), "yh_config")))))
           type: dsl
       method: GET
       path:

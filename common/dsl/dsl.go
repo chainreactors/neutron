@@ -267,6 +267,9 @@ func registerDefaultFunctions() {
 	MustAddFunction(NewWithPositionalArgs("trim_prefix", 2, false, func(args ...interface{}) (interface{}, error) {
 		return strings.TrimPrefix(toString(args[0]), toString(args[1])), nil
 	}))
+	MustAddFunction(NewWithPositionalArgs("xray_dedupe_path", 2, false, func(args ...interface{}) (interface{}, error) {
+		return xrayDedupePath(toString(args[0]), toString(args[1])), nil
+	}))
 	MustAddFunction(NewWithPositionalArgs("trim_suffix", 2, false, func(args ...interface{}) (interface{}, error) {
 		return strings.TrimSuffix(toString(args[0]), toString(args[1])), nil
 	}))
@@ -434,18 +437,6 @@ func registerDefaultFunctions() {
 	MustAddFunction(NewWithPositionalArgs("sha1", 1, false, func(args ...interface{}) (interface{}, error) {
 		return toHexEncodedHash(sha1.New(), toString(args[0]))
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_sha", 2, false, func(args ...interface{}) (interface{}, error) {
-		switch strings.ToLower(strings.TrimSpace(toString(args[1]))) {
-		case "sha1", "sha-1":
-			return toHexEncodedHash(sha1.New(), toString(args[0]))
-		case "sha256", "sha-256":
-			return toHexEncodedHash(sha256.New(), toString(args[0]))
-		case "sha512", "sha-512":
-			return toHexEncodedHash(sha512.New(), toString(args[0]))
-		default:
-			return nil, ErrInvalidDslFunction
-		}
-	}))
 	MustAddFunction(NewWithPositionalArgs("mmh3", 1, false, func(args ...interface{}) (interface{}, error) {
 		hasher := murmur3.New32WithSeed(0)
 		hasher.Write([]byte(fmt.Sprint(args[0])))
@@ -453,9 +444,6 @@ func registerDefaultFunctions() {
 	}))
 	MustAddFunction(NewWithPositionalArgs("contains", 2, false, func(args ...interface{}) (interface{}, error) {
 		return strings.Contains(toString(args[0]), toString(args[1])), nil
-	}))
-	MustAddFunction(NewWithPositionalArgs("icontains", 2, false, func(args ...interface{}) (interface{}, error) {
-		return strings.Contains(strings.ToLower(toString(args[0])), strings.ToLower(toString(args[1]))), nil
 	}))
 	MustAddFunction(NewWithPositionalArgs("time_convert", 2, false, func(args ...interface{}) (interface{}, error) {
 		value := strings.TrimSpace(toString(args[0]))
@@ -993,26 +981,6 @@ func registerDefaultFunctions() {
 		}
 		return matches[0], nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_version_in", 2, false, func(args ...interface{}) (interface{}, error) {
-		return xrayVersionCheck(args[0], toString(args[1]))
-	}))
-	MustAddFunction(NewWithPositionalArgs("xray_version_less", 2, false, func(args ...interface{}) (interface{}, error) {
-		return xrayVersionCheck(args[0], "<"+toString(args[1]))
-	}))
-	MustAddFunction(NewWithPositionalArgs("xray_version_greater", 2, false, func(args ...interface{}) (interface{}, error) {
-		return xrayVersionCheck(args[0], ">"+toString(args[1]))
-	}))
-	MustAddFunction(NewWithPositionalArgs("xray_version_equal", 2, false, func(args ...interface{}) (interface{}, error) {
-		return xrayVersionCheck(args[0], "="+toString(args[1]))
-	}))
-	MustAddFunction(NewWithPositionalArgs("xray_valid_page", 2, false, func(args ...interface{}) (interface{}, error) {
-		status, ok := xrayNumber(args[0])
-		if !ok {
-			return false, nil
-		}
-		body := toString(args[1])
-		return status >= 200 && status < 400 && strings.TrimSpace(body) != "", nil
-	}))
 	MustAddFunction(NewWithPositionalArgs("padding", 3, false, func(args ...interface{}) (interface{}, error) {
 		// padding('Test String','A',50) // will pad "Test String" up to 50 characters with "A" as padding byte.
 		bLen := 0
@@ -1530,32 +1498,6 @@ func xrayCompare(left, right interface{}, op string) bool {
 	default:
 		return false
 	}
-}
-
-func xrayVersionCheck(input interface{}, constraints string) (bool, error) {
-	versionText := strings.TrimSpace(toString(input))
-	if versionText == "" {
-		return false, nil
-	}
-	parsed, err := version.NewVersion(versionText)
-	if err != nil {
-		return false, nil
-	}
-	parts := strings.Split(constraints, ",")
-	normalized := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if trimmed := strings.TrimSpace(part); trimmed != "" {
-			normalized = append(normalized, trimmed)
-		}
-	}
-	if len(normalized) == 0 {
-		return false, nil
-	}
-	constraint, err := version.NewConstraint(strings.Join(normalized, ","))
-	if err != nil {
-		return false, nil
-	}
-	return constraint.Check(parsed), nil
 }
 
 func NewWithSingleSignature(name, signature string, cacheable bool, logic govaluate.ExpressionFunction) dslFunction {

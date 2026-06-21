@@ -24,7 +24,7 @@ http:
       req-condition: true
     - matchers:
         - dsl:
-            - ((icontains(server_1, "TongWeb Server")) || (icontains(server_2, "TongWeb Server")) || ((icontains(server_3, "webserver")) && ((regex("(?i)<title>\\s*TongWeb\\s*</title>", body_4) || (contains(body_4, "/console/rest/i18n?locale=") && contains(body_4, "/console/notinrealm/rest/commons"))))) || ((((len(body_5) == 0) && (status_code_5 == 200))) && ((status_code == 404))))
+            - ((contains(to_lower(server_1), "tongweb server")) || (contains(to_lower(server_2), "tongweb server")) || ((contains(to_lower(server_3), "webserver")) && ((regex("(?i)<title>\\s*TongWeb\\s*</title>", body_4) || (contains(body_4, "/console/rest/i18n?locale=") && contains(body_4, "/console/notinrealm/rest/commons"))))) || ((((len(body_5) == 0) && (status_code_5 == 200))) && ((status_code == 404))))
           type: dsl
       method: GET
       path:

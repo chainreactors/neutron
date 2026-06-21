@@ -160,7 +160,7 @@ expression: discover() && follow()
 	assertRuntimeEquivalent(t, xray, server.URL)
 }
 
-func TestRuntimeEquivalence_FaviconHashLink(t *testing.T) {
+func TestRuntimeEquivalence_FaviconHashDefaultPath(t *testing.T) {
 	iconBody := []byte("equivalence-icon")
 	iconHash := xrayRuntimeFaviconHash(iconBody)
 	xray := fmt.Sprintf(`
@@ -180,8 +180,8 @@ expression: favicon_hash()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/":
-			fmt.Fprint(w, `<html><head><link rel="shortcut icon" href="/custom.ico"></head></html>`)
-		case "/custom.ico":
+			fmt.Fprint(w, `<html><head></head></html>`)
+		case "/favicon.ico":
 			_, _ = w.Write(iconBody)
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -213,6 +213,43 @@ expression: favicon_hash()
 		switch r.URL.Path {
 		case "/":
 			fmt.Fprint(w, `<html><body>no explicit icon</body></html>`)
+		case "/favicon.ico":
+			_, _ = w.Write(iconBody)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	assertRuntimeEquivalent(t, xray, server.URL)
+}
+
+func TestRuntimeEquivalence_BodyAndExplicitFaviconHash(t *testing.T) {
+	iconBody := []byte("and-icon")
+	iconHash := xrayRuntimeFaviconHash(iconBody)
+	xray := fmt.Sprintf(`
+name: fingerprint-test--runtime-body-and-favicon
+detail:
+  fingerprint:
+    name: Runtime Body And Favicon
+transport: http
+rules:
+  body_rule:
+    request:
+      method: GET
+      path: /
+    expression: response.body_string.contains("home-marker")
+  favicon_rule:
+    request:
+      method: GET
+      path: /
+    expression: faviconHash(response.getIconContent()) == %s
+expression: body_rule() && favicon_rule()
+`, iconHash)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			fmt.Fprint(w, "home-marker")
 		case "/favicon.ico":
 			_, _ = w.Write(iconBody)
 		default:

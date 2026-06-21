@@ -11,7 +11,7 @@ http:
       req-condition: true
     - matchers:
         - dsl:
-            - (((contains(body_1, "search/pcRender") && contains(body_1, "pageId"))) || ((icontains(body_2, "eprotal")) && ((contains(body, "aisearch") || contains(body, "/search/admin/onlySearch.htm")))))
+            - (((contains(body_1, "search/pcRender") && contains(body_1, "pageId"))) || ((contains(to_lower(body_2), "eprotal")) && ((contains(body, "aisearch") || contains(body, "/search/admin/onlySearch.htm")))))
           type: dsl
       method: GET
       path:

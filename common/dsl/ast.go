@@ -1,8 +1,10 @@
 package dsl
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 type NodeType int
@@ -47,6 +49,9 @@ func (n *Node) String() string {
 }
 
 func quoteStringLiteral(s string) string {
+	if needsHexDecodeLiteral(s) {
+		return fmt.Sprintf("hex_decode(%q)", hex.EncodeToString([]byte(s)))
+	}
 	if isGovaluateDateLikeLiteral(s) {
 		parts := make([]string, 0, len(s))
 		for _, r := range s {
@@ -55,6 +60,18 @@ func quoteStringLiteral(s string) string {
 		return "concat(" + strings.Join(parts, ", ") + ")"
 	}
 	return quoteStringLiteralPlain(s)
+}
+
+func needsHexDecodeLiteral(s string) bool {
+	if !utf8.ValidString(s) {
+		return true
+	}
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 func quoteStringLiteralPlain(s string) string {

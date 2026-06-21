@@ -120,7 +120,7 @@ func NucleiCertFields(state *tls.ConnectionState, sni string) map[string]interfa
 		// (using the presented intermediates as candidates and the SNI for DNS
 		// validation). Mirrors nuclei's `untrusted` DSL field — the strict
 		// superset of self_signed+expired+mismatched the upstream tlsx exposes.
-		"untrusted": IsUntrusted(state, sni),
+		"untrusted":   IsUntrusted(state, sni),
 		"revoked":     IsRevoked(state),
 		"sni":         sni,
 		"tls_version": TLSVersionName(state.Version),

@@ -16,7 +16,7 @@ var ua = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0;"
 type RedirectPolicy uint8
 
 const (
-	DontFollowRedirect       RedirectPolicy = iota
+	DontFollowRedirect RedirectPolicy = iota
 	FollowAllRedirect
 	FollowSameHostRedirect
 )
@@ -26,6 +26,7 @@ type Configuration struct {
 	RedirectPolicy RedirectPolicy
 	MaxRedirects   int
 	CookieReuse    bool
+	DisableCookie  bool
 	Proxy          func(*http.Request) (*url.URL, error)
 	DialContext    func(ctx context.Context, network, address string) (net.Conn, error)
 }

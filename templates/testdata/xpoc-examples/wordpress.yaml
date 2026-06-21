@@ -12,13 +12,12 @@ http:
       path:
         - '{{BaseURL}}/'
     - matchers:
-        - hash:
-            - "1198047028"
-          part: favicon_hash
-          type: favicon
+        - dsl:
+            - mmh3(base64_py(body)) == "1198047028"
+          type: dsl
       method: GET
       path:
-        - '{{BaseURL}}/'
+        - '{{BaseURL}}/favicon.ico'
 id: wordpress-wordpress
 info:
     author: xray-converter

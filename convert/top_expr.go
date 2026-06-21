@@ -400,6 +400,7 @@ func replaceRuleCalls(node *dsl.Node, ruleExprs map[string]string, suffixFor fun
 				return nil, false, false
 			}
 			ruleAST = TransformTitleToBodyRegex(ruleAST)
+			ruleAST = TransformBodyFaviconRuntimeFieldsToBody(ruleAST)
 			if suffixFor != nil {
 				if suffix := suffixFor(name); suffix != "" {
 					ruleAST = suffixRequestVariables(ruleAST, suffix, noSuffixVars)
