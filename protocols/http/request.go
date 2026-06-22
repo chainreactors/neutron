@@ -554,7 +554,12 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 		normalizedHeaderBuilder.WriteString(fmt.Sprintf("%s: %s\r\n", normalizedKey, joinedValue))
 	}
 	data["header"] = headerBuilder.String()
-	data["all_headers"] = headerBuilder.String() + normalizedHeaderBuilder.String()
+	// all_headers holds the normalized header block (lowercase, "_" for "-").
+	// The xray converter emits header existence checks as normalized needles
+	// (e.g. contains(all_headers, "content_type:")) because HTTP header names
+	// are case-insensitive and the runtime case is unknown; matching against the
+	// raw block would miss. data["header"] keeps the original-case raw block.
+	data["all_headers"] = normalizedHeaderBuilder.String()
 
 	body, _ := readResponseBody(resp)
 	bodyText := string(body)

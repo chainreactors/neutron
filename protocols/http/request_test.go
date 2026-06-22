@@ -68,7 +68,6 @@ func TestResponseToDSLMapAllHeadersIncludesRawAndNormalizedHeaders(t *testing.T)
 	event := (&Request{}).responseToDSLMap(req, resp, server.URL, server.URL+"/", time.Millisecond, nil, nil)
 
 	require.Contains(t, event["header"], "X-Jenkins: 2.440")
-	require.Contains(t, event["all_headers"], "X-Jenkins: 2.440")
 	require.Contains(t, event["all_headers"], "x_jenkins: 2.440")
 	require.Contains(t, event["all_headers"], "content_type: application/json")
 	require.Equal(t, "2.440", event["x_jenkins"])
