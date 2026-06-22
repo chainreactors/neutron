@@ -62,6 +62,17 @@ func quoteStringLiteral(s string) string {
 	return quoteStringLiteralPlain(s)
 }
 
+// needsHexDecodeLiteral reports whether a string literal must be emitted as
+// hex_decode(...) instead of a plain quoted literal. Any control byte (incl.
+// \t \n \r) or invalid UTF-8 must take this path.
+//
+// This looks stricter than nuclei's own DSL emission, but it is forced by the
+// evaluation engine: govaluate (nuclei's DSL evaluator) only honours \" as an
+// escape; for \n, \t, \r and every other \x it silently drops the backslash and
+// keeps the following character. So a literal written as "a\nb" evaluates to the
+// three runes a,n,b — it would match the letters "anb", never a real newline.
+// hex_decode (a standard nuclei DSL function) is therefore the only way to make
+// such bytes match correctly, and the emitted template stays nuclei-portable.
 func needsHexDecodeLiteral(s string) bool {
 	if !utf8.ValidString(s) {
 		return true

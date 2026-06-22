@@ -1,6 +1,7 @@
 package dsl
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Knetic/govaluate"
@@ -72,5 +73,39 @@ func TestNodeStringUsesHexDecodeForBinaryStringLiterals(t *testing.T) {
 	}
 	if got != true {
 		t.Fatalf("expected match, got %#v from %s", got, expr)
+	}
+}
+
+// Control bytes including standard whitespace (\n \r \t) MUST be emitted via
+// hex_decode, not as a quoted "...\n..." literal. govaluate only honours \" as
+// an escape; \n \t \r silently drop the backslash, so a quoted form would match
+// the wrong bytes. This locks that invariant so it is not "optimised" away.
+func TestNodeStringHexWrapsControlBytesAndWhitespace(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{"newline", "line1\nline2"},
+		{"tab", "a\tb"},
+		{"carriage_return", "a\rb"},
+		{"null", "a\x00b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expr := Call("contains", Variable("body"), Literal(tc.value)).String()
+			if !strings.Contains(expr, "hex_decode(") {
+				t.Fatalf("control byte %q must be hex-wrapped, got: %s", tc.value, expr)
+			}
+			compiled, err := govaluate.NewEvaluableExpressionWithFunctions(expr, HelperFunctions())
+			if err != nil {
+				t.Fatalf("compile generated DSL: %v", err)
+			}
+			got, err := compiled.Evaluate(map[string]interface{}{"body": tc.value})
+			if err != nil {
+				t.Fatalf("evaluate generated DSL: %v", err)
+			}
+			if got != true {
+				t.Fatalf("expected match, got %#v from %s", got, expr)
+			}
+		})
 	}
 }
