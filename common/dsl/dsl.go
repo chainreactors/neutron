@@ -884,7 +884,14 @@ func registerDefaultFunctions() {
 
 			firstParsed, parseErr := version.NewVersion(toString(args[0]))
 			if parseErr != nil {
-				return nil, errors.New(parseErr.Error())
+				// xray's versionIn tolerates unparseable/empty versions and just
+				// returns false. Returning an error here makes govaluate abort the
+				// *entire* expression — including the other side of an `||`. The
+				// matcher split in convert/matcher.go (distributeOrOverAnd) fixes
+				// this for single-request expressions by lifting the OR to the
+				// matcher level; this fallback covers the rest (multi-request /
+				// cross-request expressions that go through buildReqConditionDSL).
+				return false, nil
 			}
 
 			var versionConstraints []string

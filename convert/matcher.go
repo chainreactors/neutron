@@ -38,6 +38,14 @@ func astToMatchers(node *dsl.Node) *ConvertResult {
 	if node == nil {
 		return &ConvertResult{MatchersCondition: "or"}
 	}
+	// Lift a top-level OR out of an AND (distributive expansion) so each branch
+	// becomes its own matcher under matchers-condition: or, instead of one DSL
+	// matcher holding the OR. govaluate aborts the *whole* expression when one
+	// branch's function errors (e.g. compare_versions on an empty version
+	// extract from xray_regex_group); splitting lets nuclei evaluate each
+	// branch as an independent matcher, so one side erroring can't kill the
+	// other. A && (B || C) -> (A && B) || (A && C). Guarded in distributeOrOverAnd.
+	node = distributeOrOverAnd(node)
 	r := &ConvertResult{MatchersCondition: "or"}
 
 	topOp, children := flattenBinaryOp(node)
@@ -90,6 +98,63 @@ func flattenBinaryOp(node *dsl.Node) (string, []*dsl.Node) {
 	}
 	collect(node)
 	return op, result
+}
+
+// distributeOrOverAnd rewrites a top-level AND that has an OR subtree so the OR
+// becomes the top-level operator: A && (B || C) -> (A && B) || (A && C). After
+// this, astToMatchers emits one matcher per branch under matchers-condition:
+// "or", evaluated by nuclei independently rather than as one govaluate
+// expression (where a single branch's function error aborts the rest).
+//
+// Guarded against combinatorial blowup: only a single OR subtree under a
+// top-level AND is expanded (multiple would cartesian-product), and the OR must
+// flatten to between 2 and 8 branches. Anything else is returned unchanged and
+// falls back to the single-DSL-matcher path (tolerated by compare_versions).
+func distributeOrOverAnd(node *dsl.Node) *dsl.Node {
+	if node == nil || node.Type != dsl.NodeBinaryOp || node.Op != "&&" {
+		return node
+	}
+	_, andChildren := flattenBinaryOp(node)
+
+	orIdx := -1
+	for i, c := range andChildren {
+		if c.Type == dsl.NodeBinaryOp && c.Op == "||" {
+			if orIdx != -1 {
+				return node // more than one OR subtree under the AND: would explode
+			}
+			orIdx = i
+		}
+	}
+	if orIdx == -1 {
+		return node // no OR nested under this AND: nothing to distribute
+	}
+
+	_, orBranches := flattenBinaryOp(andChildren[orIdx])
+	if len(orBranches) < 2 || len(orBranches) > 8 {
+		return node // cap the number of emitted matchers
+	}
+
+	var common []*dsl.Node
+	for i, c := range andChildren {
+		if i != orIdx {
+			common = append(common, c)
+		}
+	}
+
+	var result *dsl.Node
+	for _, b := range orBranches {
+		branch := b
+		// reattach the shared AND conditions in front of this OR branch
+		for i := len(common) - 1; i >= 0; i-- {
+			branch = dsl.BinaryOp("&&", common[i], branch)
+		}
+		if result == nil {
+			result = branch
+		} else {
+			result = dsl.BinaryOp("||", result, branch)
+		}
+	}
+	return result
 }
 
 func mergeCompatibleNodes(nodes []*dsl.Node, topOp string) []*dsl.Node {
