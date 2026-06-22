@@ -134,7 +134,7 @@ expression: r0()
 	if strings.Contains(s, `concat("/", 404Path)`) || strings.Contains(s, "  404Path:") {
 		t.Fatalf("unaliased 404Path leaked into converted output:\n%s", s)
 	}
-	if !strings.Contains(s, `{{BaseURL}}/{{xray_dedupe_path(BaseURL, xray_404Path)}}`) {
+	if !strings.Contains(s, `{{BaseURL}}/{{trim_prefix(xray_404Path, "/")}}`) {
 		t.Fatalf("numeric-leading path variable was not aliased in path expression:\n%s", s)
 	}
 }
@@ -424,7 +424,7 @@ expression: payload_rule() || set_rule()
 	if !strings.Contains(s, "payloads:") || !strings.Contains(s, "value:") || !strings.Contains(s, "admin/login") {
 		t.Fatalf("missing converted payload values:\n%s", s)
 	}
-	if !strings.Contains(s, `{{BaseURL}}/{{xray_dedupe_path(BaseURL, value)}}`) {
+	if !strings.Contains(s, `{{BaseURL}}/{{trim_prefix(value, "/")}}`) {
 		t.Fatalf("payload placeholder path was not preserved:\n%s", s)
 	}
 }
@@ -468,7 +468,7 @@ expression: r0()
 			t.Fatalf("missing unwrapped payload value %q:\n%s", want, s)
 		}
 	}
-	if !strings.Contains(s, `{{BaseURL}}/{{xray_dedupe_path(BaseURL, entry)}}`) {
+	if !strings.Contains(s, `{{BaseURL}}/{{trim_prefix(entry, "/")}}`) {
 		t.Fatalf("leading payload path was not converted to slash-safe form:\n%s", s)
 	}
 	if strings.Contains(s, `{{BaseURL}}{{entry}}`) {
@@ -651,7 +651,7 @@ expression: discover() && fetch_js()
 		"extractors:",
 		"name: js_path",
 		"internal: true",
-		`{{BaseURL}}/{{xray_dedupe_path(BaseURL, js_path)}}`,
+		`{{BaseURL}}/{{trim_prefix(js_path, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
@@ -691,7 +691,7 @@ expression: upload() && fetch()
 		"name: path_raw",
 		"name: path",
 		`replace(path_raw, "\\", "")`,
-		`{{BaseURL}}/{{xray_dedupe_path(BaseURL, path)}}`,
+		`{{BaseURL}}/{{trim_prefix(path, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
@@ -731,7 +731,7 @@ expression: discover() && follow()
 
 	for _, want := range []string{
 		`location="(?P<nextpath>[\/\w]+)`,
-		`{{BaseURL}}/{{xray_dedupe_path(BaseURL, nextpath)}}`,
+		`{{BaseURL}}/{{trim_prefix(nextpath, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)

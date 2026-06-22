@@ -106,7 +106,7 @@ expression: discover() && fetch_asset()
 	if err != nil {
 		t.Fatalf("convert: %v", err)
 	}
-	if !strings.Contains(string(out), `{{BaseURL}}/{{xray_dedupe_path(BaseURL, asset_path)}}`) {
+	if !strings.Contains(string(out), `{{BaseURL}}/{{trim_prefix(asset_path, "/")}}`) {
 		t.Fatalf("expected dynamic path to use xray BaseURL dedupe form:\n%s", string(out))
 	}
 

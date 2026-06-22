@@ -709,11 +709,11 @@ func rewriteLeadingTemplatePathExpression(path string, ctx *conversionContext) s
 
 func isSlashSafePathExpression(expr string) bool {
 	trimmed := strings.TrimSpace(expr)
-	return strings.HasPrefix(trimmed, "trim_prefix(") || strings.HasPrefix(trimmed, "xray_dedupe_path(")
+	return strings.HasPrefix(trimmed, "trim_prefix(")
 }
 
 func slashSafePathExpression(expr string) string {
-	return fmt.Sprintf(`/{{xray_dedupe_path(BaseURL, %s)}}`, expr)
+	return fmt.Sprintf(`/{{trim_prefix(%s, "/")}}`, expr)
 }
 
 func flattenPayloads(root XrayPayloadRoot, aliases map[string]string) map[string][]string {

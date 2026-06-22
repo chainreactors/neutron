@@ -267,9 +267,6 @@ func registerDefaultFunctions() {
 	MustAddFunction(NewWithPositionalArgs("trim_prefix", 2, false, func(args ...interface{}) (interface{}, error) {
 		return strings.TrimPrefix(toString(args[0]), toString(args[1])), nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_dedupe_path", 2, false, func(args ...interface{}) (interface{}, error) {
-		return xrayDedupePath(toString(args[0]), toString(args[1])), nil
-	}))
 	MustAddFunction(NewWithPositionalArgs("trim_suffix", 2, false, func(args ...interface{}) (interface{}, error) {
 		return strings.TrimSuffix(toString(args[0]), toString(args[1])), nil
 	}))

@@ -9,7 +9,6 @@ import (
 	"hash"
 	"io"
 	"math/rand"
-	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -95,64 +94,6 @@ func toStringSlice(v interface{}) (m []string) {
 		}
 	}
 	return
-}
-
-func xrayDedupePath(baseURL, childPath string) string {
-	child := normalizeXrayChildPath(childPath)
-	if child == "" {
-		return ""
-	}
-	basePath := normalizeXrayBasePath(baseURL)
-	if basePath == "" {
-		return child
-	}
-
-	childOnly, suffix := splitXrayPathSuffix(child)
-	childComparable := strings.TrimLeft(childOnly, "/")
-	if childComparable == basePath {
-		return suffix
-	}
-	prefix := basePath + "/"
-	if strings.HasPrefix(childComparable, prefix) {
-		return strings.TrimPrefix(childComparable, prefix) + suffix
-	}
-	return child
-}
-
-func normalizeXrayChildPath(raw string) string {
-	text := strings.TrimSpace(raw)
-	if text == "" {
-		return ""
-	}
-	if parsed, err := url.Parse(text); err == nil && parsed.Scheme != "" && parsed.Host != "" {
-		text = parsed.EscapedPath()
-		if text == "" {
-			text = "/"
-		}
-		if parsed.RawQuery != "" {
-			text += "?" + parsed.RawQuery
-		}
-		if parsed.Fragment != "" {
-			text += "#" + parsed.Fragment
-		}
-	}
-	return strings.TrimLeft(text, "/")
-}
-
-func normalizeXrayBasePath(raw string) string {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return ""
-	}
-	return strings.Trim(parsed.EscapedPath(), "/")
-}
-
-func splitXrayPathSuffix(pathValue string) (string, string) {
-	idx := strings.IndexAny(pathValue, "?#")
-	if idx < 0 {
-		return pathValue, ""
-	}
-	return pathValue[:idx], pathValue[idx:]
 }
 
 func insertInto(s string, interval int, sep rune) string {
