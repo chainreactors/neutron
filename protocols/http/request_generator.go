@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -411,6 +412,7 @@ func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface
 
 	httpVariables := map[string]interface{}{
 		"BaseURL":  parsed.String(),
+		"RootURL":  fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host),
 		"Hostname": parsed.Host,
 		"Host":     domain,
 		"Port":     port,
