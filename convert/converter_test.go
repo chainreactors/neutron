@@ -383,6 +383,49 @@ expression: kw_in_home() || kw_in_server() || favicon_hash()
 	}
 }
 
+func TestConvertMapsRootURLHeaderToBaseURL(t *testing.T) {
+	// xray rule references {{RootURL}} in headers with NO `set:` block, so the
+	// alias map is empty — this exercises the len(aliases)==0 path that used to
+	// short-circuit and leave {{RootURL}} untouched. Runtime no longer resolves
+	// {{RootURL}}, so the converter must map every {{RootURL}} reference to
+	// {{BaseURL}} (Origin/Referer here mirror the WordPress/泛微/Terramaster rules
+	// that previously leaked RootURL into pocs.raw_content_draft).
+	xrayYAML := `
+name: fingerprint-test--rooturl-header
+detail:
+  fingerprint:
+    name: Test-RootURL-Header
+transport: http
+rules:
+  r0:
+    request:
+      method: POST
+      path: /wp-admin/admin.php?page=vfb-export
+      headers:
+        Content-Type: application/x-www-form-urlencoded
+        Origin: '{{RootURL}}'
+        Referer: '{{RootURL}}/wp-admin/admin.php?page=vfb-export'
+    expression: response.body_string.contains("ok")
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+
+	if strings.Contains(s, "{{RootURL}}") {
+		t.Errorf("output still references {{RootURL}}:\n%s", s)
+	}
+	if !strings.Contains(s, "Origin: '{{BaseURL}}'") {
+		t.Errorf("Origin header not mapped to {{BaseURL}}:\n%s", s)
+	}
+	if !strings.Contains(s, "Referer: '{{BaseURL}}/wp-admin/admin.php?page=vfb-export") {
+		t.Errorf("Referer header not mapped to {{BaseURL}}:\n%s", s)
+	}
+}
+
 func TestConvertXraySetAndPayloadVariables(t *testing.T) {
 	xrayYAML := `
 name: fingerprint-test--variables

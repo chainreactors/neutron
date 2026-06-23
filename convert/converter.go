@@ -618,7 +618,7 @@ func collectASTVariables(node *dsl.Node, out map[string]bool) {
 }
 
 func rewriteHeaderPlaceholders(headers map[string]string, aliases map[string]string) map[string]string {
-	if len(headers) == 0 || len(aliases) == 0 {
+	if len(headers) == 0 {
 		return headers
 	}
 	rewritten := make(map[string]string, len(headers))
@@ -629,13 +629,20 @@ func rewriteHeaderPlaceholders(headers map[string]string, aliases map[string]str
 }
 
 func rewriteTemplatePlaceholders(value string, aliases map[string]string) string {
-	if value == "" || len(aliases) == 0 || !strings.Contains(value, "{{") {
+	if value == "" || !strings.Contains(value, "{{") {
 		return value
 	}
 	return placeholderRE.ReplaceAllStringFunc(value, func(match string) string {
 		parts := placeholderRE.FindStringSubmatch(match)
 		if len(parts) < 2 {
 			return match
+		}
+		// xray 的 {{RootURL}} 引用统一映射到 nuclei {{BaseURL}}：运行时已下线
+		// RootURL 变量，xray 的 set:RootURL 定义由 convertSetVariables 跳过，这里覆盖
+		// path/header/body 中所有对 {{RootURL}} 的引用。放在 alias 查找之前，因为
+		// RootURL 是内置变量、不会出现在 alias 表里。
+		if parts[1] == "RootURL" {
+			return "{{BaseURL}}"
 		}
 		if alias, ok := aliases[parts[1]]; ok {
 			return "{{" + alias + "}}"
