@@ -31,12 +31,20 @@ func TestNodeStringEscapesSingleQuotesInStringLiterals(t *testing.T) {
 	}
 }
 
-func TestNodeStringKeepsDateLikeStringsAsStrings(t *testing.T) {
+// Date-like literals must go through hex_decode, not a plain quoted literal.
+// govaluate does not error on "1970-01-01 12:00:00" — it silently returns the
+// wrong boolean (verified: the quoted form evaluates to false even when body
+// contains it). This also locks in that the old per-rune concat() form was
+// replaced by the same hex_decode path used for control bytes / invalid UTF-8.
+func TestNodeStringHexWrapsDateLikeLiterals(t *testing.T) {
 	node := Call("contains",
 		Variable("body"),
 		Literal("1970-01-01 12:00:00"),
 	)
 	expr := node.String()
+	if !strings.Contains(expr, "hex_decode(") {
+		t.Fatalf("date-like literal must be hex-wrapped, got: %s", expr)
+	}
 	compiled, err := govaluate.NewEvaluableExpressionWithFunctions(expr, HelperFunctions())
 	if err != nil {
 		t.Fatalf("compile generated DSL: %v", err)

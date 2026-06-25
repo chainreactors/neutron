@@ -29,7 +29,7 @@ func TestParseToAST(t *testing.T) {
 		{"string_title_contains", `string(response.title).contains("Sindoh")`, `contains(title, "Sindoh")`},
 		{"literal_contains", `"a".contains("b")`, `contains("a", "b")`},
 		{"cert_subject", `response.cert.issuer.contains("test")`, `contains(to_lower(cert_issuer), "test")`},
-		{"cert_time_convert", `timeConvert(response.cert.not_before, "2006-01-02 03:04:05").icontains("2020")`, `contains(to_lower(time_convert(cert_not_before, concat("2", "0", "0", "6", "-", "0", "1", "-", "0", "2", " ", "0", "3", ":", "0", "4", ":", "0", "5"))), "2020")`},
+		{"cert_time_convert", `timeConvert(response.cert.not_before, "2006-01-02 03:04:05").icontains("2020")`, `contains(to_lower(time_convert(cert_not_before, hex_decode("323030362d30312d30322030333a30343a3035"))), "2020")`},
 		// cert subfields beyond subject/issuer used to be silently dropped; they
 		// now resolve via common.XrayCertFields (the single source of truth).
 		// contains() on cert.* is folded to case-insensitive contains because

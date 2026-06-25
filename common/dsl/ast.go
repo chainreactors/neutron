@@ -52,19 +52,12 @@ func quoteStringLiteral(s string) string {
 	if needsHexDecodeLiteral(s) {
 		return fmt.Sprintf("hex_decode(%q)", hex.EncodeToString([]byte(s)))
 	}
-	if isGovaluateDateLikeLiteral(s) {
-		parts := make([]string, 0, len(s))
-		for _, r := range s {
-			parts = append(parts, quoteStringLiteralPlain(string(r)))
-		}
-		return "concat(" + strings.Join(parts, ", ") + ")"
-	}
 	return quoteStringLiteralPlain(s)
 }
 
 // needsHexDecodeLiteral reports whether a string literal must be emitted as
 // hex_decode(...) instead of a plain quoted literal. Any control byte (incl.
-// \t \n \r) or invalid UTF-8 must take this path.
+// \t \n \r), invalid UTF-8, or a date-like literal must take this path.
 //
 // This looks stricter than nuclei's own DSL emission, but it is forced by the
 // evaluation engine: govaluate (nuclei's DSL evaluator) only honours \" as an
@@ -73,6 +66,11 @@ func quoteStringLiteral(s string) string {
 // three runes a,n,b — it would match the letters "anb", never a real newline.
 // hex_decode (a standard nuclei DSL function) is therefore the only way to make
 // such bytes match correctly, and the emitted template stays nuclei-portable.
+//
+// Date-like literals ("2006-01-02 03:04:05") are even nastier: govaluate does
+// NOT error — it silently returns the wrong boolean. contains(body,
+// "1970-01-01 12:00:00") evaluates to false even when body contains it
+// (verified empirically), so these must also go through hex_decode.
 func needsHexDecodeLiteral(s string) bool {
 	if !utf8.ValidString(s) {
 		return true
@@ -81,6 +79,9 @@ func needsHexDecodeLiteral(s string) bool {
 		if r < 0x20 || r == 0x7f {
 			return true
 		}
+	}
+	if isGovaluateDateLikeLiteral(s) {
+		return true
 	}
 	return false
 }
