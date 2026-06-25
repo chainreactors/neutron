@@ -2,7 +2,6 @@ package convert
 
 import (
 	"fmt"
-	"strings"
 	"unicode"
 )
 
@@ -45,8 +44,14 @@ type xToken struct {
 }
 
 func xrayLex(input string) ([]xToken, error) {
-	s := strings.Replace(strings.Replace(input, "\r\n", " ", -1), "\n", " ", -1)
-	runes := []rune(s)
+	// NOTE: do NOT pre-normalise newlines across the whole input. The main loop
+	// skips every unicode space (incl. \r \n \t) between tokens via
+	// unicode.IsSpace, and isStringBoundary skips them when locating the closing
+	// quote — so token-level newlines are already handled. A blanket replace
+	// here used to corrupt newlines *inside* string literals (a real newline in
+	// "a\nb" became a space), which then silently mismatched; control bytes must
+	// round-trip so needsHexDecodeLiteral can wrap them in hex_decode().
+	runes := []rune(input)
 	var tokens []xToken
 	i := 0
 
@@ -360,7 +365,7 @@ func isStringBoundary(runes []rune, pos int) bool {
 		return true
 	}
 	j := pos
-	for j < len(runes) && (runes[j] == ' ' || runes[j] == '\t') {
+	for j < len(runes) && unicode.IsSpace(runes[j]) {
 		j++
 	}
 	if j >= len(runes) {
