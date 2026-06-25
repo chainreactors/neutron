@@ -9,6 +9,7 @@ require (
 	github.com/hashicorp/go-version v1.6.0
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.6.1
+	golang.org/x/text v0.3.7
 )
 
 require (

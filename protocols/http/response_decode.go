@@ -8,10 +8,16 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
-// readResponseBody decodes HTTP content encodings only. Legacy text charset
-// normalization is a CyberHub transport-layer concern, not a nuclei behavior.
+// readResponseBody decodes HTTP content encodings (gzip/deflate) and, mirroring
+// nuclei v2 (projectdiscovery/nuclei#1018, fixed in v2.5.3), converts GBK-family
+// bodies (gbk/gb2312/gb18030 declared via Content-Type) into UTF-8 so UTF-8
+// matchers match. nuclei v3 dropped this charset step; we restore it here so
+// every consumer (finger / POC / any future entry) is covered uniformly.
 func readResponseBody(resp *http.Response) ([]byte, error) {
 	if resp == nil || resp.Body == nil {
 		return nil, nil
@@ -26,7 +32,14 @@ func readResponseBody(resp *http.Response) ([]byte, error) {
 	decodedBody, err := decodeResponseBody(rawBody, resp.Header.Get("Content-Encoding"))
 	if err != nil {
 		// Fall back to the raw body so malformed encoding headers do not abort matching.
-		return rawBody, nil
+		decodedBody = rawBody
+	}
+
+	// nuclei v2 compat: decode GBK-family bodies declared via Content-Type to UTF-8.
+	if isContentTypeGbk(resp.Header.Get("Content-Type")) {
+		if gbkDecoded, gErr := decodegbk(decodedBody); gErr == nil {
+			return gbkDecoded, nil
+		}
 	}
 
 	return decodedBody, nil
@@ -92,4 +105,25 @@ func decodeBodyWithEncoding(body []byte, encoding string) ([]byte, error) {
 	defer reader.Close()
 
 	return ioutil.ReadAll(reader)
+}
+
+// decodegbk converts a GBK byte slice to UTF-8. Mirrors nuclei v2.5.3
+// (pkg/protocols/http/utils.go) via golang.org/x/text/encoding/simplifiedchinese.
+func decodegbk(s []byte) ([]byte, error) {
+	r := transform.NewReader(bytes.NewReader(s), simplifiedchinese.GBK.NewDecoder())
+	d, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+// isContentTypeGbk reports whether the Content-Type header declares a GBK-family
+// charset (gbk/gb2312/gb18030). Matches nuclei v2.5.3: only server-declared
+// charsets trigger recoding (no auto-detection), exactly as v2 did.
+func isContentTypeGbk(contentType string) bool {
+	contentType = strings.ToLower(contentType)
+	return strings.Contains(contentType, "gbk") ||
+		strings.Contains(contentType, "gb2312") ||
+		strings.Contains(contentType, "gb18030")
 }
