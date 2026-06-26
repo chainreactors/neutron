@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 )
@@ -61,7 +62,7 @@ type ScanContext struct {
 // executions stay isolated.
 func NewScanContext(input string, payloads map[string]interface{}) *ScanContext {
 	ctx := &ScanContext{Input: input, Payloads: payloads}
-	ctx.CookieJar = defaultScanCookieJar()
+	ctx.CookieJar = newCookieJar()
 	return ctx
 }
 
@@ -130,6 +131,42 @@ func aggregateResults(events []*InternalWrappedEvent) []*ResultEvent {
 		results = append(results, e.Results...)
 	}
 	return results
+}
+
+type cookieJar struct {
+	mu      sync.Mutex
+	cookies map[string][]*http.Cookie
+}
+
+func newCookieJar() http.CookieJar {
+	return &cookieJar{cookies: make(map[string][]*http.Cookie)}
+}
+
+func (j *cookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	host := u.Host
+	existing := j.cookies[host]
+	for _, c := range cookies {
+		found := false
+		for i, e := range existing {
+			if e.Name == c.Name {
+				existing[i] = c
+				found = true
+				break
+			}
+		}
+		if !found {
+			existing = append(existing, c)
+		}
+	}
+	j.cookies[host] = existing
+}
+
+func (j *cookieJar) Cookies(u *url.URL) []*http.Cookie {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.cookies[u.Host]
 }
 
 // joinErrors joins multiple errors and returns a single error string
