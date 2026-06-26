@@ -199,10 +199,10 @@ expression: r0() && r1()
 	if !strings.Contains(converted, "name: xray_len") {
 		t.Fatalf("expected len output variable to be aliased:\n%s", converted)
 	}
-	if strings.Contains(converted, "numeric_div(len, 2)") {
+	if strings.Contains(converted, "(len / 2)") {
 		t.Fatalf("reserved output variable reference was not aliased:\n%s", converted)
 	}
-	if !strings.Contains(converted, "numeric_div(xray_len, 2)") {
+	if !strings.Contains(converted, "(xray_len / 2)") {
 		t.Fatalf("expected output expression to reference aliased variable:\n%s", converted)
 	}
 	if !strings.Contains(converted, "dec_to_hex(total)") {

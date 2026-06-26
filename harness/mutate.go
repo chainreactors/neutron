@@ -423,10 +423,6 @@ func mutateCall(node *dsl.Node, resp *ResponseSpec, hints groupHints, opt Option
 		}
 	case "compare_versions":
 		mutateVersionCall(node, resp, hints)
-	case "numeric_gt", "numeric_gte", "numeric_lt", "numeric_lte":
-		if len(node.Children) == 2 {
-			mutateComparison(dsl.BinaryOp(numericCompareOp(node.FuncName), node.Children[0], node.Children[1]), resp, hints, opt, unsupported)
-		}
 	case "wait_for":
 		return
 	default:
@@ -439,21 +435,6 @@ func decodedVariablePart(node *dsl.Node, fn string) string {
 		return ""
 	}
 	return variablePart(node.Children[0])
-}
-
-func numericCompareOp(name string) string {
-	switch name {
-	case "numeric_gt":
-		return ">"
-	case "numeric_gte":
-		return ">="
-	case "numeric_lt":
-		return "<"
-	case "numeric_lte":
-		return "<="
-	default:
-		return "=="
-	}
 }
 
 func mutateVersionCall(node *dsl.Node, resp *ResponseSpec, hints groupHints) {
@@ -1259,6 +1240,14 @@ func isLatencyVar(node *dsl.Node) bool {
 	return node != nil && node.Type == dsl.NodeVariable && fmt.Sprint(node.Value) == "latency"
 }
 
+func isSubtractionWithLatency(node *dsl.Node) bool {
+	if node == nil || len(node.Children) != 2 || !isLatencyVar(node.Children[0]) {
+		return false
+	}
+	return (node.Type == dsl.NodeBinaryOp && node.Op == "-") ||
+		(node.Type == dsl.NodeCall && node.FuncName == "sub")
+}
+
 func literalString(node *dsl.Node) (string, bool) {
 	if node == nil || node.Type != dsl.NodeLiteral {
 		return "", false
@@ -1416,7 +1405,7 @@ func comparisonDelay(node *dsl.Node, resp *ResponseSpec) (time.Duration, bool) {
 		return 0, false
 	}
 	left := node.Children[0]
-	if left.Type != dsl.NodeCall || left.FuncName != "numeric_sub" || len(left.Children) != 2 || !isLatencyVar(left.Children[0]) {
+	if !isSubtractionWithLatency(left) {
 		return 0, false
 	}
 	offsetRaw, err := common.Eval(left.Children[1].String(), resp.event())

@@ -314,7 +314,7 @@ func (m *Matcher) MatchBinary(corpus string) (bool, []string) {
 
 // MatchDSL matches on a generic map result
 func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
-	// Iterate over all the expressions accepted as valid
+	common.CoerceNumericStrings(data)
 	for i, expression := range m.dslCompiled {
 		// Fast path: an expression with no template markers ({{...}} / §...§) is
 		// returned unchanged by common.Evaluate, so re-resolving and recompiling it

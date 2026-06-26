@@ -929,23 +929,10 @@ func convertVariableName(name string) string {
 }
 
 func buildArithmeticNode(op string, left, right *dsl.Node) *dsl.Node {
-	switch op {
-	case "+":
-		if isStringLikeNode(left) || isStringLikeNode(right) {
-			return dsl.Call("concat", left, right)
-		}
-		return dsl.Call("numeric_add", left, right)
-	case "-":
-		return dsl.Call("numeric_sub", left, right)
-	case "*":
-		return dsl.Call("numeric_mul", left, right)
-	case "/":
-		return dsl.Call("numeric_div", left, right)
-	case "%":
-		return dsl.Call("numeric_mod", left, right)
-	default:
-		return dsl.BinaryOp(op, left, right)
+	if op == "+" && (isStringLikeNode(left) || isStringLikeNode(right)) {
+		return dsl.Call("concat", left, right)
 	}
+	return dsl.BinaryOp(op, left, right)
 }
 
 func isStringLikeNode(node *dsl.Node) bool {
@@ -980,20 +967,6 @@ func isKnownStringVariable(node *dsl.Node) bool {
 }
 
 func buildComparisonNode(left *dsl.Node, op string, right *dsl.Node) *dsl.Node {
-	if op == ">" || op == ">=" || op == "<" || op == "<=" {
-		if isXrayNumericComparison(left) || isXrayNumericComparison(right) {
-			switch op {
-			case ">":
-				return dsl.Call("numeric_gt", left, right)
-			case ">=":
-				return dsl.Call("numeric_gte", left, right)
-			case "<":
-				return dsl.Call("numeric_lt", left, right)
-			case "<=":
-				return dsl.Call("numeric_lte", left, right)
-			}
-		}
-	}
 	if op != "==" && op != "!=" {
 		return dsl.BinaryOp(op, left, right)
 	}
@@ -1008,28 +981,6 @@ func buildComparisonNode(left *dsl.Node, op string, right *dsl.Node) *dsl.Node {
 		}
 	}
 	return dsl.BinaryOp(op, left, right)
-}
-
-func isXrayNumericComparison(node *dsl.Node) bool {
-	if node == nil {
-		return false
-	}
-	if node.Type == dsl.NodeVariable {
-		name, _ := node.Value.(string)
-		return name == "latency" || name == "duration" || strings.Contains(strings.ToLower(name), "latency")
-	}
-	if node.Type == dsl.NodeCall {
-		switch node.FuncName {
-		case "numeric_add", "numeric_sub", "numeric_mul", "numeric_div", "numeric_mod", "to_number":
-			return true
-		}
-	}
-	for _, child := range node.Children {
-		if isXrayNumericComparison(child) {
-			return true
-		}
-	}
-	return false
 }
 
 func faviconHashPart(node *dsl.Node) (string, bool) {
