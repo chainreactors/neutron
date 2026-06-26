@@ -247,10 +247,26 @@ func genCall(node *Node, e Emitter, r *Result) string {
 	case "ends_with":
 		r.Warnings = append(r.Warnings, "ends_with approximated as contains")
 		return genContains(node, e, r)
+	case "favicon_hash":
+		return genFaviconHash(node, e, r)
 	default:
 		r.Errors = append(r.Errors, fmt.Sprintf("unsupported function: %s", node.FuncName))
 		return ""
 	}
+}
+
+func genFaviconHash(node *Node, e Emitter, r *Result) string {
+	if len(node.Children) < 1 {
+		r.Errors = append(r.Errors, "favicon_hash requires 1 arg")
+		return ""
+	}
+	hash := resolveValue(node.Children[0])
+	q, err := e.FaviconHash(hash)
+	if err != nil {
+		r.Errors = append(r.Errors, err.Error())
+		return ""
+	}
+	return q
 }
 
 func genContains(node *Node, e Emitter, r *Result) string {
@@ -261,6 +277,14 @@ func genContains(node *Node, e Emitter, r *Result) string {
 	fieldNode := unwrapFieldNode(node.Children[0])
 	if fieldNode.Type == NodeVariable {
 		part := NormalizePart(fieldNode.Value.(string))
+		if part == "favicon_hash" || part == "body_favicon_hash" {
+			q, err := e.FaviconHash(resolveValue(node.Children[1]))
+			if err != nil {
+				r.Errors = append(r.Errors, err.Error())
+				return ""
+			}
+			return q
+		}
 		if isHeaderVariable(part, e) {
 			needle := headerNeedle(part, resolveValue(node.Children[1]))
 			return e.Contains(e.Field("all_headers"), needle)

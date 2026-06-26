@@ -16,6 +16,8 @@ func (m *Matcher) ToQuery() *dsl.Query {
 		node = matcherWordsToNode(m, part, q)
 	case StatusMatcher:
 		node = matcherStatusToNode(m, q)
+	case FaviconMatcher:
+		node = matcherFaviconToNode(m, q)
 	case DSLMatcher:
 		node = matcherDSLToNode(m, q)
 	case RegexMatcher:
@@ -92,6 +94,14 @@ func matcherStatusToNode(m *Matcher, q *dsl.Query) *dsl.Node {
 	var nodes []*dsl.Node
 	for _, code := range m.Status {
 		nodes = append(nodes, dsl.BinaryOp("==", dsl.Variable("status_code"), dsl.Literal(fmt.Sprintf("%d", code))))
+	}
+	return joinNodes(nodes, false)
+}
+
+func matcherFaviconToNode(m *Matcher, q *dsl.Query) *dsl.Node {
+	var nodes []*dsl.Node
+	for _, hash := range m.Hash {
+		nodes = append(nodes, dsl.Call("favicon_hash", dsl.Literal(hash)))
 	}
 	return joinNodes(nodes, false)
 }

@@ -120,6 +120,19 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 		return matcher.ResultWithMatchedSnippet(matcher.MatchBinary(item))
 	case operators.DSLMatcher:
 		return matcher.Result(matcher.MatchDSL(data)), nil
+	case operators.FaviconMatcher:
+		if matcher.Part == "favicon_hash" || matcher.Part == "body_favicon_hash" {
+			return matcher.ResultWithMatchedSnippet(matcher.MatchHashValues(strings.Fields(item)))
+		}
+		faviconData, ok := data["favicon"]
+		if !ok {
+			return false, []string{}
+		}
+		faviconMap, ok := faviconData.(map[string]interface{})
+		if !ok {
+			return false, []string{}
+		}
+		return matcher.ResultWithMatchedSnippet(matcher.MatchFavicon(faviconMap))
 	default:
 		return matcher.ResultWithMatchedSnippet(matcher.MatchWithHandler(item, data))
 	}

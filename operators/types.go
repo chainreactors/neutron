@@ -56,6 +56,8 @@ const (
 	SizeMatcher
 	// DSLMatcher matches based upon dsl syntax
 	DSLMatcher
+	// FaviconMatcher matches responses with favicon hash
+	FaviconMatcher
 	// JSONMatcher matches responses using jq-style expressions
 	JSONMatcher
 	// XPathMatcher matches responses using xpath expressions
@@ -64,12 +66,13 @@ const (
 
 // matcherTypes is an table for conversion of matcher type from string.
 var matcherTypes = map[string]MatcherType{
-	"status": StatusMatcher,
-	"size":   SizeMatcher,
-	"word":   WordsMatcher,
-	"regex":  RegexMatcher,
-	"binary": BinaryMatcher,
-	"dsl":    DSLMatcher,
+	"status":  StatusMatcher,
+	"size":    SizeMatcher,
+	"word":    WordsMatcher,
+	"regex":   RegexMatcher,
+	"binary":  BinaryMatcher,
+	"dsl":     DSLMatcher,
+	"favicon": FaviconMatcher,
 }
 
 // conditionType is the type of condition for matcher

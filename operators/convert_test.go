@@ -60,10 +60,27 @@ func TestMatcherStatus(t *testing.T) {
 	}
 }
 
-func TestFaviconTypeUnsupported(t *testing.T) {
-	m := &Matcher{Type: "favicon"}
-	if err := m.CompileMatchers(); err == nil {
-		t.Fatal("expected favicon matcher type to be unsupported")
+func TestMatcherFaviconFOFA(t *testing.T) {
+	m := newMatcher("favicon")
+	m.Hash = []string{"12345"}
+
+	r := m.ToQuery().ToFOFA()
+	expected := `icon_hash="12345"`
+	if r.Query != expected {
+		t.Errorf("got %q, want %q", r.Query, expected)
+	}
+}
+
+func TestMatcherFaviconCensys(t *testing.T) {
+	m := newMatcher("favicon")
+	m.Hash = []string{"12345"}
+
+	r := m.ToQuery().ToCensys()
+	if r.Query != "" {
+		t.Errorf("expected empty query for censys favicon, got %q", r.Query)
+	}
+	if !r.HasErrors() {
+		t.Error("expected error for censys favicon")
 	}
 }
 
