@@ -64,10 +64,8 @@ func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, err
 		dynamicValues["__request_index_offset"] = requestIndexOffset
 		err := req.ExecuteWithResults(input, dynamicValues, previous, func(event *protocols.InternalWrappedEvent) {
 			if event.OperatorsResult != nil {
-				for key, values := range event.OperatorsResult.DynamicValues {
-					if len(values) > 0 {
-						dynamicValues[key] = values[0]
-					}
+				for key, value := range event.OperatorsResult.DynamicValues {
+					dynamicValues[key] = value
 				}
 				if event.OperatorsResult.Matched || event.OperatorsResult.Extracted || len(event.Results) > 0 {
 					result = event.OperatorsResult
