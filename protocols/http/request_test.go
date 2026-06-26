@@ -103,8 +103,8 @@ func TestResponseToDSLMapDoesNotExposeFaviconRuntimeFields(t *testing.T) {
 
 	require.NotContains(t, event, "favicon")
 	require.NotContains(t, event, "favicon_content")
-	require.NotContains(t, event, "favicon_hash")
-	require.NotContains(t, event, "body_favicon_hash")
+	require.Contains(t, event, "favicon_hash")
+	require.NotEmpty(t, event["favicon_hash"])
 	require.False(t, fetchedIcon)
 }
 

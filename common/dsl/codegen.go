@@ -158,7 +158,7 @@ func genComparison(node *Node, e Emitter, r *Result) string {
 	left := unwrapFieldNode(rawLeft)
 	right := node.Children[1]
 
-	if isFaviconBodyHashCall(rawLeft) {
+	if IsFaviconBodyHashCall(rawLeft) {
 		hash := resolveValue(right)
 		q, err := e.FaviconHash(hash)
 		if err != nil {
@@ -221,7 +221,7 @@ func genComparison(node *Node, e Emitter, r *Result) string {
 	}
 }
 
-func isFaviconBodyHashCall(node *Node) bool {
+func IsFaviconBodyHashCall(node *Node) bool {
 	if node == nil || node.Type != NodeCall || node.FuncName != "mmh3" || len(node.Children) != 1 {
 		return false
 	}

@@ -300,9 +300,6 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 			expr = translateXrayExpression(rawExpr, ctx.variableAlias)
 		}
 		faviconRequest := xrayRuleUsesIconContent(rawExpr)
-		if faviconRequest {
-			expr = faviconBodyExpression(expr)
-		}
 		ruleExprs[ruleName] = expr
 		if !hasXrayRequest(rule, rawExpr) {
 			continue
@@ -312,18 +309,15 @@ func groupRules(poc *XrayPOC, keys []string, ctx *conversionContext, preserveRul
 			method = "GET"
 		}
 		path := rule.Request.Path
-		if path == "" {
+		if faviconRequest {
+			path = "/favicon.ico"
+		} else if path == "" {
 			path = "/"
 		}
 		path = rewriteTemplatePlaceholders(path, ctx.variableAlias)
 		path = normalizeRequestPath(path, ctx)
 		headers := rewriteHeaderPlaceholders(rule.Request.Headers, ctx.variableAlias)
 		body := rewriteTemplatePlaceholders(rule.Request.Body, ctx.variableAlias)
-		if faviconRequest {
-			method = "GET"
-			path = "/favicon.ico"
-			body = ""
-		}
 
 		redirects := followRedirectsOrDefault(rule.Request.FollowRedirects)
 		// A rule that asserts the redirect response itself must see the 30x
@@ -489,7 +483,6 @@ func reqConditionRuleDSL(expr string) string {
 		return expr
 	}
 	ast = TransformTitleToBodyRegex(ast)
-	ast = TransformBodyFaviconRuntimeFieldsToBody(ast)
 	return ast.String()
 }
 
@@ -1695,18 +1688,14 @@ func is3xxLiteral(node *dsl.Node) bool {
 	return false
 }
 
-func convertGroup(method, path string, headers map[string]string, body string, redirects bool, exprs []string) map[string]interface{} {
-	return convertGroupWithOptions(method, path, headers, body, redirects, exprs, false)
-}
-
 func convertGroupForRequest(g *requestGroup, exprs []string) map[string]interface{} {
 	if g == nil {
 		return nil
 	}
-	return convertGroupWithOptions(g.method, g.path, g.headers, g.body, g.redirects, exprs, g.favicon)
+	return convertGroupWithOptions(g.method, g.path, g.headers, g.body, g.redirects, exprs)
 }
 
-func convertGroupWithOptions(method, path string, headers map[string]string, body string, redirects bool, exprs []string, faviconBody bool) map[string]interface{} {
+func convertGroupWithOptions(method, path string, headers map[string]string, body string, redirects bool, exprs []string) map[string]interface{} {
 	if len(exprs) == 0 {
 		return nil
 	}
@@ -1740,9 +1729,6 @@ func convertGroupWithOptions(method, path string, headers map[string]string, bod
 	}
 
 	result, err := ExprToMatchers(combined)
-	if faviconBody && err == nil {
-		result, err = ExprToMatchersForFaviconBody(combined)
-	}
 	if err != nil {
 		req["matchers"] = []map[string]interface{}{
 			{"type": "dsl", "dsl": []string{combined}},
@@ -1771,14 +1757,6 @@ func xrayRuleUsesIconContent(expr string) bool {
 		strings.Contains(expr, "icon(response")
 }
 
-func faviconBodyExpression(expr string) string {
-	ast, err := ParseToAST(expr)
-	if err != nil {
-		return expr
-	}
-	return TransformFaviconRuntimeFieldsToBody(ast).String()
-}
-
 func matcherToMap(m *operators.Matcher) map[string]interface{} {
 	result := map[string]interface{}{"type": m.Type}
 
@@ -1801,6 +1779,8 @@ func matcherToMap(m *operators.Matcher) map[string]interface{} {
 		result["regex"] = m.Regex
 	case "dsl":
 		result["dsl"] = m.DSL
+	case "favicon":
+		result["hash"] = m.Hash
 	}
 
 	if m.Negative {

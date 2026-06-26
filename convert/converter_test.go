@@ -190,10 +190,10 @@ func TestExprToMatchers(t *testing.T) {
 			},
 		},
 		{
-			"body_favicon_hash", `faviconHash(response.body) == 123`, 1, "or",
+			"favicon_hash_body", `faviconHash(response.body) == 123`, 1, "or",
 			func(t *testing.T, r *ConvertResult) {
 				m := r.Matchers[0]
-				if m.Type != "dsl" || m.DSL[0] != `(mmh3(base64_py(body)) == "123")` {
+				if m.Type != "favicon" || len(m.Hash) != 1 || m.Hash[0] != "123" {
 					t.Errorf("got %+v", m)
 				}
 			},
@@ -240,18 +240,18 @@ func TestExprToMatchers(t *testing.T) {
 	}
 }
 
-func TestExprToMatchersForFaviconBody(t *testing.T) {
+func TestExprToMatchersFaviconBody(t *testing.T) {
 	tests := []struct {
 		name string
 		expr string
-		want string
+		hash string
 	}{
-		{"favicon_hash", `faviconHash(response.getIconContent()) == -297069493`, `(mmh3(base64_py(body)) == "-297069493")`},
-		{"mmh3_favicon_content", `mmh3(response.getIconContent()) == -297069493`, `(mmh3(base64_py(body)) == "-297069493")`},
+		{"favicon_hash", `faviconHash(response.getIconContent()) == -297069493`, "-297069493"},
+		{"mmh3_favicon_content", `mmh3(response.getIconContent()) == -297069493`, "-297069493"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, err := ExprToMatchersForFaviconBody(tt.expr)
+			r, err := ExprToMatchers(tt.expr)
 			if err != nil {
 				t.Fatalf("convert: %v", err)
 			}
@@ -259,14 +259,14 @@ func TestExprToMatchersForFaviconBody(t *testing.T) {
 				t.Fatalf("count: got %d want 1", len(r.Matchers))
 			}
 			m := r.Matchers[0]
-			if m.Type != "dsl" || m.DSL[0] != tt.want {
-				t.Fatalf("got %+v want DSL %q", m, tt.want)
+			if m.Type != "favicon" || len(m.Hash) != 1 || m.Hash[0] != tt.hash {
+				t.Fatalf("got %+v want favicon hash %q", m, tt.hash)
 			}
 		})
 	}
 }
 
-func TestConvertBodyFaviconHashUsesBodyDSL(t *testing.T) {
+func TestConvertFaviconHashUsesFaviconMatcher(t *testing.T) {
 	xrayYAML := `
 name: body-favicon-hash
 transport: http
@@ -283,17 +283,17 @@ expression: r0()
 		t.Fatalf("convert: %v", err)
 	}
 	s := string(out)
-	if !strings.Contains(s, `mmh3(base64_py(body)) == "733091897"`) {
-		t.Fatalf("missing body hash DSL:\n%s", s)
+	if !strings.Contains(s, "type: favicon") {
+		t.Fatalf("expected favicon matcher:\n%s", s)
 	}
-	if strings.Contains(s, "body_favicon_hash") || strings.Contains(s, "type: favicon") {
-		t.Fatalf("runtime favicon matcher leaked:\n%s", s)
+	if !strings.Contains(s, `"733091897"`) {
+		t.Fatalf("missing hash value:\n%s", s)
 	}
 }
 
-func TestConvertReqConditionBodyFaviconHashUsesHistoryBodyDSL(t *testing.T) {
+func TestConvertFaviconHashPreservesCustomPath(t *testing.T) {
 	xrayYAML := `
-name: body-favicon-hash-req-condition
+name: custom-path-favicon
 transport: http
 rules:
   r0:
@@ -313,11 +313,8 @@ expression: r0() && r1()
 		t.Fatalf("convert: %v", err)
 	}
 	s := string(out)
-	if !strings.Contains(s, `mmh3(base64_py(body_1)) == "733091897"`) {
-		t.Fatalf("missing history body hash DSL:\n%s", s)
-	}
-	if strings.Contains(s, "body_favicon_hash") || strings.Contains(s, "type: favicon") {
-		t.Fatalf("runtime favicon field leaked:\n%s", s)
+	if !strings.Contains(s, "/favicon.png") {
+		t.Fatalf("custom path /favicon.png not preserved:\n%s", s)
 	}
 }
 
@@ -365,11 +362,11 @@ expression: kw_in_home() || kw_in_server() || favicon_hash()
 	if !strings.Contains(s, "type: word") {
 		t.Error("missing word matcher")
 	}
-	if !strings.Contains(s, "{{BaseURL}}/favicon.ico") {
-		t.Error("missing explicit favicon request")
+	if !strings.Contains(s, "type: favicon") {
+		t.Error("missing favicon matcher")
 	}
-	if !strings.Contains(s, `mmh3(base64_py(body)) == "-297069493"`) {
-		t.Error("missing nuclei-style favicon hash DSL")
+	if !strings.Contains(s, `"-297069493"`) {
+		t.Error("missing favicon hash value")
 	}
 	if !strings.Contains(s, "condition: and") {
 		t.Error("missing and condition for kw_in_home words")

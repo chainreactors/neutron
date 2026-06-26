@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html"
@@ -16,6 +17,7 @@ import (
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
+	"github.com/spaolacci/murmur3"
 )
 
 var errStopExecution = errors.New("stop execution due to unresolved variables")
@@ -121,18 +123,7 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 	case operators.DSLMatcher:
 		return matcher.Result(matcher.MatchDSL(data)), nil
 	case operators.FaviconMatcher:
-		if matcher.Part == "favicon_hash" || matcher.Part == "body_favicon_hash" {
-			return matcher.ResultWithMatchedSnippet(matcher.MatchHashValues(strings.Fields(item)))
-		}
-		faviconData, ok := data["favicon"]
-		if !ok {
-			return false, []string{}
-		}
-		faviconMap, ok := faviconData.(map[string]interface{})
-		if !ok {
-			return false, []string{}
-		}
-		return matcher.ResultWithMatchedSnippet(matcher.MatchFavicon(faviconMap))
+		return matcher.ResultWithMatchedSnippet(matcher.MatchHashValues(strings.Fields(item)))
 	default:
 		return matcher.ResultWithMatchedSnippet(matcher.MatchWithHandler(item, data))
 	}
@@ -577,6 +568,7 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	body, _ := readResponseBody(resp)
 	bodyText := string(body)
 	data["body"] = bodyText
+	data["favicon_hash"] = xrayFaviconHash(body)
 	data["title"] = extractHTMLTitle(bodyText)
 	addTLSCertFields(data, resp)
 	if strings.TrimSpace(resp.Header.Get("Content-Encoding")) != "" {
@@ -715,4 +707,22 @@ type generatedRequest struct {
 
 func (gr *generatedRequest) Vars() map[string]interface{} {
 	return common.MergeMaps(gr.meta, gr.dynamicValues)
+}
+
+func xrayFaviconHash(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	encoded := base64.StdEncoding.EncodeToString(body)
+	var wrapped strings.Builder
+	for len(encoded) > 76 {
+		wrapped.WriteString(encoded[:76])
+		wrapped.WriteByte('\n')
+		encoded = encoded[76:]
+	}
+	wrapped.WriteString(encoded)
+	wrapped.WriteByte('\n')
+	hasher := murmur3.New32WithSeed(0)
+	_, _ = hasher.Write([]byte(wrapped.String()))
+	return fmt.Sprintf("%d", int32(hasher.Sum32()))
 }

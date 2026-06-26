@@ -260,8 +260,8 @@ func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 	for j := i; j < end; j++ {
 		if runes[j] == '\\' && j+1 < end {
 			if raw {
-				buf = append(buf, []byte(string(runes[j]))...)
-				buf = append(buf, []byte(string(runes[j+1]))...)
+				buf = append(buf, string(runes[j])...)
+				buf = append(buf, string(runes[j+1])...)
 			} else {
 				next := runes[j+1]
 				switch next {
@@ -275,7 +275,7 @@ func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 							continue
 						}
 					}
-					buf = append(buf, []byte(string(next))...)
+					buf = append(buf, string(next)...)
 				case 'n':
 					buf = append(buf, '\n')
 				case 'r':
@@ -285,13 +285,13 @@ func lexStringMode(runes []rune, start int, raw bool) (string, int, error) {
 				case '0':
 					buf = append(buf, 0)
 				default:
-					buf = append(buf, []byte(string(next))...)
+					buf = append(buf, string(next)...)
 				}
 			}
 			j++
 			continue
 		}
-		buf = append(buf, []byte(string(runes[j]))...)
+		buf = append(buf, string(runes[j])...)
 	}
 	return string(buf), end + 1, nil
 }
@@ -329,7 +329,7 @@ func lexTripleQuoteString(runes []rune, start int, raw bool, quote rune) (string
 						continue
 					}
 				}
-				buf = append(buf, []byte(string(next))...)
+				buf = append(buf, string(next)...)
 			case 'n':
 				buf = append(buf, '\n')
 			case 'r':
@@ -339,17 +339,17 @@ func lexTripleQuoteString(runes []rune, start int, raw bool, quote rune) (string
 			case '0':
 				buf = append(buf, 0)
 			default:
-				buf = append(buf, []byte(string(next))...)
+				buf = append(buf, string(next)...)
 			}
 			continue
 		}
 		if runes[j] == '\\' && j+1 < len(runes) && raw {
-			buf = append(buf, []byte(string(runes[j]))...)
-			buf = append(buf, []byte(string(runes[j+1]))...)
+			buf = append(buf, string(runes[j])...)
+			buf = append(buf, string(runes[j+1])...)
 			j++
 			continue
 		}
-		buf = append(buf, []byte(string(runes[j]))...)
+		buf = append(buf, string(runes[j])...)
 	}
 	return "", 0, fmt.Errorf("unterminated triple-quoted string at position %d", start-3)
 }

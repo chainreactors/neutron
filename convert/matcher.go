@@ -21,16 +21,6 @@ func ExprToMatchers(expr string) (*ConvertResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	ast = TransformBodyFaviconRuntimeFieldsToBody(ast)
-	return astToMatchers(ast), nil
-}
-
-func ExprToMatchersForFaviconBody(expr string) (*ConvertResult, error) {
-	ast, err := ParseToAST(expr)
-	if err != nil {
-		return nil, err
-	}
-	ast = TransformFaviconRuntimeFieldsToBody(ast)
 	return astToMatchers(ast), nil
 }
 
@@ -258,6 +248,26 @@ func nodeToMatcher(node *dsl.Node) *operators.Matcher {
 		}
 	}
 
+	// contains(favicon_hash, "X") → favicon matcher
+	if hash, negate, ok := faviconContainsHash(node); ok {
+		m := &operators.Matcher{Type: "favicon", Part: "favicon_hash", Hash: []string{hash}, Negative: negate}
+		return m
+	}
+
+	// mmh3(base64_py(body)) == "X" → favicon matcher
+	if node.Type == dsl.NodeBinaryOp && (node.Op == "==" || node.Op == "!=") {
+		if dsl.IsFaviconBodyHashCall(node.Children[0]) {
+			hash := literalString(node.Children[1])
+			if hash != "" {
+				m := &operators.Matcher{Type: "favicon", Part: "favicon_hash", Hash: []string{hash}}
+				if node.Op == "!=" {
+					m.Negative = true
+				}
+				return m
+			}
+		}
+	}
+
 	// status_code == N → status matcher
 	if node.Type == dsl.NodeBinaryOp && node.Op == "==" && isStatusCode(node.Children[0]) {
 		if code := literalInt(node.Children[1]); code != 0 {
@@ -384,25 +394,6 @@ func tryMergeStatusMatchers(node *dsl.Node) *operators.Matcher {
 		return nil
 	}
 	return &operators.Matcher{Type: "status", Status: codes}
-}
-
-func faviconContains(node *dsl.Node) (string, string, bool) {
-	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "contains" || len(node.Children) != 2 {
-		return "", "", false
-	}
-	partNode := node.Children[0]
-	if partNode.Type != dsl.NodeVariable {
-		return "", "", false
-	}
-	part, ok := partNode.Value.(string)
-	if !ok || (part != "favicon_hash" && part != "body_favicon_hash") {
-		return "", "", false
-	}
-	hash := literalString(node.Children[1])
-	if hash == "" {
-		return "", "", false
-	}
-	return part, hash, true
 }
 
 // variableToPart maps an AST variable to a matcher part.
@@ -572,127 +563,29 @@ func TransformTitleToBodyRegex(node *dsl.Node) *dsl.Node {
 	return clone
 }
 
-// TransformBodyFaviconRuntimeFieldsToBody rewrites faviconHash(response.body)
-// into explicit nuclei-style DSL over the current response body.
-func TransformBodyFaviconRuntimeFieldsToBody(node *dsl.Node) *dsl.Node {
-	return transformFaviconRuntimeFieldsToBody(node, false)
-}
-
-// TransformFaviconRuntimeFieldsToBody rewrites converter-internal favicon fields
-// into explicit nuclei-style DSL over the current response body. It is used when
-// the converter emits a dedicated /favicon.ico request for xray getIconContent()
-// expressions.
-func TransformFaviconRuntimeFieldsToBody(node *dsl.Node) *dsl.Node {
-	return transformFaviconRuntimeFieldsToBody(node, true)
-}
-
-func transformFaviconRuntimeFieldsToBody(node *dsl.Node, includeFetchedIcon bool) *dsl.Node {
-	if node == nil {
-		return nil
-	}
-	if hash, part, negate, ok := faviconContainsHash(node); ok {
-		if includeFetchedIcon || part == "body_favicon_hash" {
-			expr := dsl.BinaryOp("==", faviconBodyHashNodeForPart(part), dsl.Literal(hash))
-			if negate {
-				return dsl.UnaryOp("!", expr)
-			}
-			return expr
-		}
-	}
-	if hash, bodyPart, negate, ok := suffixedBodyFaviconContainsHash(node); ok {
-		expr := dsl.BinaryOp("==", faviconBodyHashNodeForBody(bodyPart), dsl.Literal(hash))
-		if negate {
-			return dsl.UnaryOp("!", expr)
-		}
-		return expr
-	}
-	if node.Type == dsl.NodeVariable {
-		if name, ok := node.Value.(string); ok && includeFetchedIcon && name == "favicon_content" {
-			return dsl.Variable("body")
-		}
-	}
-	clone := &dsl.Node{
-		Type: node.Type, Value: node.Value, Op: node.Op, FuncName: node.FuncName,
-	}
-	if len(node.Children) > 0 {
-		clone.Children = make([]*dsl.Node, len(node.Children))
-		for i, child := range node.Children {
-			clone.Children[i] = transformFaviconRuntimeFieldsToBody(child, includeFetchedIcon)
-		}
-	}
-	return clone
-}
-
-func faviconContainsHash(node *dsl.Node) (string, string, bool, bool) {
+// faviconContainsHash detects contains(favicon_hash, "X"), optionally negated.
+func faviconContainsHash(node *dsl.Node) (string, bool, bool) {
 	negate := false
-	if node.Type == dsl.NodeUnaryOp && node.Op == "!" && len(node.Children) == 1 {
-		negate = true
-		node = node.Children[0]
-	}
-	if part, hash, ok := faviconContains(node); ok && (part == "favicon_hash" || part == "body_favicon_hash") {
-		return hash, part, negate, true
-	}
-	return "", "", false, false
-}
-
-func suffixedBodyFaviconContainsHash(node *dsl.Node) (string, string, bool, bool) {
-	negate := false
-	if node.Type == dsl.NodeUnaryOp && node.Op == "!" && len(node.Children) == 1 {
+	if node != nil && node.Type == dsl.NodeUnaryOp && node.Op == "!" && len(node.Children) == 1 {
 		negate = true
 		node = node.Children[0]
 	}
 	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "contains" || len(node.Children) != 2 {
-		return "", "", false, false
+		return "", false, false
 	}
 	partNode := node.Children[0]
 	if partNode.Type != dsl.NodeVariable {
-		return "", "", false, false
+		return "", false, false
 	}
 	part, ok := partNode.Value.(string)
-	if !ok {
-		return "", "", false, false
-	}
-	bodyPart, ok := bodyPartForFaviconHashPart(part)
-	if !ok {
-		return "", "", false, false
+	if !ok || part != "favicon_hash" {
+		return "", false, false
 	}
 	hash := literalString(node.Children[1])
 	if hash == "" {
-		return "", "", false, false
+		return "", false, false
 	}
-	return hash, bodyPart, negate, true
-}
-
-func faviconBodyHashNode() *dsl.Node {
-	return faviconBodyHashNodeForBody("body")
-}
-
-func faviconBodyHashNodeForPart(part string) *dsl.Node {
-	if bodyPart, ok := bodyPartForFaviconHashPart(part); ok {
-		return faviconBodyHashNodeForBody(bodyPart)
-	}
-	return faviconBodyHashNodeForBody("body")
-}
-
-func faviconBodyHashNodeForBody(bodyPart string) *dsl.Node {
-	return dsl.Call("mmh3", dsl.Call("base64_py", dsl.Variable(bodyPart)))
-}
-
-func bodyPartForFaviconHashPart(part string) (string, bool) {
-	if part == "body_favicon_hash" || part == "favicon_hash" {
-		return "body", true
-	}
-	const prefix = "body_favicon_hash_"
-	if strings.HasPrefix(part, prefix) && len(part) > len(prefix) {
-		suffix := part[len(prefix):]
-		for _, r := range suffix {
-			if r < '0' || r > '9' {
-				return "", false
-			}
-		}
-		return "body_" + suffix, true
-	}
-	return "", false
+	return hash, negate, true
 }
 
 func isEmptyStringLiteral(node *dsl.Node) bool {

@@ -367,51 +367,6 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 	return false
 }
 
-// MatchFavicon matches a favicon hash check against a corpus of favicon hashes
-func (m *Matcher) MatchFavicon(faviconData map[string]interface{}) (bool, []string) {
-	var matchedHashes []string
-
-	for url, hashData := range faviconData {
-		var hashes []string
-
-		switch v := hashData.(type) {
-		case []string:
-			hashes = v
-		case []interface{}:
-			for _, h := range v {
-				if hashStr, ok := h.(string); ok {
-					hashes = append(hashes, hashStr)
-				}
-			}
-		default:
-			continue
-		}
-
-		for _, templateHash := range m.Hash {
-			for _, faviconHash := range hashes {
-				if templateHash == faviconHash {
-					matchedHashes = append(matchedHashes, faviconHash, url)
-					if m.condition == ORCondition && !m.MatchAll {
-						return true, matchedHashes
-					}
-				}
-			}
-		}
-	}
-
-	if len(matchedHashes) > 0 {
-		if m.MatchAll || m.condition == ANDCondition {
-			if m.condition == ANDCondition && len(matchedHashes)/2 < len(m.Hash) {
-				return false, []string{}
-			}
-			return true, matchedHashes
-		}
-		return true, matchedHashes
-	}
-
-	return false, []string{}
-}
-
 // MatchHashValues matches hash strings against matcher.Hash.
 func (m *Matcher) MatchHashValues(values []string) (bool, []string) {
 	if len(m.Hash) == 0 || len(values) == 0 {

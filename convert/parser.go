@@ -1037,13 +1037,6 @@ func faviconHashPart(node *dsl.Node) (string, bool) {
 		return "", false
 	}
 	if node.FuncName == "favicon_hash" {
-		if len(node.Children) == 0 {
-			return "favicon_hash", true
-		}
-		source := node.Children[0]
-		if source.Type == dsl.NodeVariable && source.Value.(string) == "body" {
-			return "body_favicon_hash", true
-		}
 		return "favicon_hash", true
 	}
 	if node.FuncName == "mmh3" && len(node.Children) == 1 {

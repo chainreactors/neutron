@@ -8,11 +8,12 @@ require (
 	github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4
 	github.com/hashicorp/go-version v1.6.0
 	github.com/spaolacci/murmur3 v1.1.0
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.9.0
 	golang.org/x/text v0.3.7
 )
 
 require (
+	github.com/chainreactors/utils v0.0.0-20260624182357-8d5cad72d8f2
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -20,3 +21,5 @@ require (
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+replace github.com/chainreactors/utils => /mnt/chainreactors/utils
