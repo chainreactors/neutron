@@ -105,7 +105,7 @@ type Trace struct {
 	Event    int                 `json:"event"`
 	Matched  bool                `json:"matched"`
 	Extracts map[string][]string `json:"extracts,omitempty"`
-	Dynamic  map[string][]string `json:"dynamic,omitempty"`
+	Dynamic  map[string]interface{} `json:"dynamic,omitempty"`
 	Data     map[string]string   `json:"data,omitempty"`
 }
 

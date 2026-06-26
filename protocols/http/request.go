@@ -335,7 +335,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 	generator := r.newGenerator(input)
 	requestCount := 1
 	var requestErr error
-	var gotDynamicValues map[string][]string
+	var gotDynamicValues map[string]interface{}
 	for {
 		// returns two values, error and skip, which skips the execution for the request instance.
 		executeFunc := func(data string, payloads, dynamicValue map[string]interface{}) (bool, error) {
@@ -355,7 +355,12 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 				// Add the extracts to the dynamic values if any.
 				if event.OperatorsResult != nil {
 					gotMatches = event.OperatorsResult.Matched
-					gotDynamicValues = common.MergeMapsMany(event.OperatorsResult.DynamicValues, gotDynamicValues)
+					if gotDynamicValues == nil {
+						gotDynamicValues = make(map[string]interface{})
+					}
+					for k, v := range event.OperatorsResult.DynamicValues {
+						gotDynamicValues[k] = v
+					}
 				}
 				callback(event)
 			}, requestCount)

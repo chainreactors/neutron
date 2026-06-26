@@ -242,3 +242,20 @@ func (e *Extractor) ExtractDSL(data map[string]interface{}) map[string]struct{} 
 	}
 	return results
 }
+
+// ExtractDSLTyped evaluates DSL expressions and returns results with their
+// original types preserved (float64, bool, string, etc.) instead of converting
+// everything to strings.
+func (e *Extractor) ExtractDSLTyped(data map[string]interface{}) []interface{} {
+	var results []interface{}
+	for _, compiledExpression := range e.dslCompiled {
+		result, err := compiledExpression.Evaluate(data)
+		if err != nil && !strings.HasPrefix(err.Error(), "No parameter") {
+			return results
+		}
+		if result != nil {
+			results = append(results, result)
+		}
+	}
+	return results
+}

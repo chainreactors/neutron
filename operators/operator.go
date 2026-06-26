@@ -38,7 +38,7 @@ type Result struct {
 	OutputExtracts []string
 	outputUnique   map[string]struct{}
 	// DynamicValues contains any dynamic values to be templated
-	DynamicValues map[string][]string
+	DynamicValues map[string]interface{}
 	// PayloadValues contains payload values provided by user. (Optional)
 	PayloadValues map[string]interface{}
 	// Request is the raw HTTP request for the match.
@@ -91,7 +91,7 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 	result := &Result{
 		Matches:       make(map[string][]string),
 		Extracts:      make(map[string][]string),
-		DynamicValues: make(map[string][]string),
+		DynamicValues: make(map[string]interface{}),
 		outputUnique:  make(map[string]struct{}),
 	}
 
@@ -102,16 +102,46 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 		if !extractor.Internal && allInternalExtractors {
 			allInternalExtractors = false
 		}
+
+		// DSL extractors: preserve original types from evaluation results
+		if extractor.GetType() == DSLExtractor {
+			typedResults := extractor.ExtractDSLTyped(data)
+			if len(typedResults) == 0 {
+				continue
+			}
+			if len(typedResults) == 1 {
+				data[extractor.Name] = typedResults[0]
+			} else {
+				data[extractor.Name] = typedResults
+			}
+			if extractor.Internal {
+				result.DynamicValues[extractor.Name] = data[extractor.Name]
+			} else {
+				for _, val := range typedResults {
+					str := fmt.Sprint(val)
+					if _, ok := result.outputUnique[str]; !ok {
+						result.OutputExtracts = append(result.OutputExtracts, str)
+						result.outputUnique[str] = struct{}{}
+					}
+				}
+				if extractor.Name != "" {
+					strs := make([]string, len(typedResults))
+					for i, val := range typedResults {
+						strs[i] = fmt.Sprint(val)
+					}
+					result.Extracts[extractor.Name] = strs
+				}
+			}
+			continue
+		}
+
+		// Other extractors: string-based path
 		var extractorResults []string
 		for match := range extract(data, extractor) {
 			extractorResults = append(extractorResults, match)
 
 			if extractor.Internal {
-				if data, ok := result.DynamicValues[extractor.Name]; !ok {
-					result.DynamicValues[extractor.Name] = []string{match}
-				} else {
-					result.DynamicValues[extractor.Name] = append(data, match)
-				}
+				result.DynamicValues[extractor.Name] = match
 			} else {
 				if _, ok := result.outputUnique[match]; !ok {
 					result.OutputExtracts = append(result.OutputExtracts, match)
@@ -122,7 +152,6 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 		if len(extractorResults) > 0 && !extractor.Internal && extractor.Name != "" {
 			result.Extracts[extractor.Name] = extractorResults
 		}
-		// update data with whatever was extracted doesn't matter if it is internal or not (skip unless it empty)
 		if len(extractorResults) > 0 {
 			data[extractor.Name] = getExtractedValue(extractorResults)
 		}
@@ -130,20 +159,7 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 
 	// expose dynamic values to same request matchers
 	if len(result.DynamicValues) > 0 {
-		dataDynamicValues := make(map[string]interface{})
-		for dynName, dynValues := range result.DynamicValues {
-			if len(dynValues) > 1 {
-				for dynIndex, dynValue := range dynValues {
-					dynKeyName := fmt.Sprintf("%s%d", dynName, dynIndex)
-					dataDynamicValues[dynKeyName] = dynValue
-				}
-				dataDynamicValues[dynName] = dynValues
-			} else {
-				dataDynamicValues[dynName] = dynValues[0]
-			}
-
-		}
-		data = common.MergeMaps(data, dataDynamicValues)
+		data = common.MergeMaps(data, result.DynamicValues)
 	}
 
 	// 用于 AND 条件临时存储匹配结果
@@ -201,9 +217,17 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 func (operators *Operators) ExecuteInternalExtractors(data map[string]interface{}, extract extractFunc) map[string]interface{} {
 	dynamicValues := make(map[string]interface{})
 
-	// Start with the extractors first and evaluate them.
 	for _, extractor := range operators.Extractors {
 		if !extractor.Internal {
+			continue
+		}
+		if extractor.GetType() == DSLExtractor {
+			typedResults := extractor.ExtractDSLTyped(data)
+			if len(typedResults) == 1 {
+				dynamicValues[extractor.Name] = typedResults[0]
+			} else if len(typedResults) > 1 {
+				dynamicValues[extractor.Name] = typedResults
+			}
 			continue
 		}
 		for match := range extract(data, extractor) {
@@ -216,52 +240,59 @@ func (operators *Operators) ExecuteInternalExtractors(data map[string]interface{
 }
 
 // MakeDynamicValuesCallback takes an input dynamic values map and calls
-// the callback function with all variations of the data in input in form
-// of map[string]string (interface{}).
-func MakeDynamicValuesCallback(input map[string][]string, iterateAllValues bool, callback func(map[string]interface{}) bool) {
+// the callback function with all variations of the data in input.
+func MakeDynamicValuesCallback(input map[string]interface{}, iterateAllValues bool, callback func(map[string]interface{}) bool) {
 	output := make(map[string]interface{}, len(input))
 
 	if !iterateAllValues {
 		for k, v := range input {
-			if len(v) > 0 {
-				output[k] = v[0]
+			if strs, ok := v.([]string); ok && len(strs) > 0 {
+				output[k] = strs[0]
+			} else {
+				output[k] = v
 			}
 		}
 		callback(output)
 		return
 	}
-	inputIndex := make(map[string]int, len(input))
 
+	inputIndex := make(map[string]int, len(input))
 	var maxValue int
 	for _, v := range input {
-		if len(v) > maxValue {
-			maxValue = len(v)
+		if strs, ok := v.([]string); ok && len(strs) > maxValue {
+			maxValue = len(strs)
+		} else if maxValue == 0 {
+			maxValue = 1
 		}
 	}
 
 	for i := 0; i < maxValue; i++ {
 		for k, v := range input {
-			if len(v) == 0 {
+			strs, ok := v.([]string)
+			if !ok {
+				output[k] = v
 				continue
 			}
-			if len(v) == 1 {
-				output[k] = v[0]
+			if len(strs) == 0 {
+				continue
+			}
+			if len(strs) == 1 {
+				output[k] = strs[0]
 				continue
 			}
 			if gotIndex, ok := inputIndex[k]; !ok {
 				inputIndex[k] = 0
-				output[k] = v[0]
+				output[k] = strs[0]
 			} else {
 				newIndex := gotIndex + 1
-				if newIndex >= len(v) {
-					output[k] = v[len(v)-1]
+				if newIndex >= len(strs) {
+					output[k] = strs[len(strs)-1]
 					continue
 				}
-				output[k] = v[newIndex]
+				output[k] = strs[newIndex]
 				inputIndex[k] = newIndex
 			}
 		}
-		// skip if the callback says so
 		if callback(output) {
 			return
 		}

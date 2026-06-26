@@ -2,7 +2,6 @@ package common
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/Knetic/govaluate"
@@ -89,22 +88,6 @@ func evaluate(data string, base map[string]interface{}) (string, error) {
 		data = ReplaceOne(data, expression, result)
 	}
 	return data, nil
-}
-
-// CoerceNumericStrings converts string values in a data map to float64 where
-// possible. This allows govaluate's native arithmetic/comparison operators to
-// work on values extracted by regex/DSL extractors (which always return strings).
-// Non-numeric strings, non-string values, and known text keys are left untouched.
-func CoerceNumericStrings(data map[string]interface{}) {
-	for k, v := range data {
-		s, ok := v.(string)
-		if !ok || s == "" {
-			continue
-		}
-		if n, err := strconv.ParseFloat(s, 64); err == nil {
-			data[k] = n
-		}
-	}
 }
 
 // maxIterations to avoid infinite loop
