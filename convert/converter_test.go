@@ -31,7 +31,7 @@ func TestParseToAST(t *testing.T) {
 		{"cert_subject", `response.cert.issuer.contains("test")`, `contains(to_lower(cert_issuer), "test")`},
 		{"cert_time_convert", `timeConvert(response.cert.not_before, "2006-01-02 03:04:05").icontains("2020")`, `contains(to_lower(time_convert(cert_not_before, hex_decode("323030362d30312d30322030333a30343a3035"))), "2020")`},
 		// cert subfields beyond subject/issuer used to be silently dropped; they
-		// now resolve via common.XrayCertFields (the single source of truth).
+		// now resolve via common.CertFields (the single source of truth).
 		// contains() on cert.* is folded to case-insensitive contains because
 		// X.509 DN casing is not semantic (see caseFoldCertMatch).
 		{"cert_dnsnames", `response.cert.dnsnames.contains("ingress-nginx")`, `contains(to_lower(cert_dnsnames), "ingress-nginx")`},
@@ -46,13 +46,13 @@ func TestParseToAST(t *testing.T) {
 		{"bytes_func", `response.body.bcontains(bytes("ITDR"))`, `contains(body, "ITDR")`},
 		{"translate_literal", `response.body.bcontains(b"{{ 'Common.Title' | translate }}")`, `contains(body, "{{ \'Common.Title\' | translate }}")`},
 		{"bytes_md5", `response.body.bcontains(bytes(md5(string(s1))))`, `contains(body, md5(to_string(s1)))`},
-		{"arithmetic_latency", `response.latency - r0latency >= sleepSecond1 * 1000 - 1000`, `xray_gte(xray_sub(latency, r0latency), xray_sub(xray_mul(sleepSecond1, 1000), 1000))`},
-		{"latency_less_extracted", `response.latency < r1latency`, `xray_lt(latency, r1latency)`},
-		{"arithmetic_string", `response.body.contains(string(r1 * r2))`, `contains(body, to_string(xray_mul(r1, r2)))`},
+		{"arithmetic_latency", `response.latency - r0latency >= sleepSecond1 * 1000 - 1000`, `numeric_gte(numeric_sub(latency, r0latency), numeric_sub(numeric_mul(sleepSecond1, 1000), 1000))`},
+		{"latency_less_extracted", `response.latency < r1latency`, `numeric_lt(latency, r1latency)`},
+		{"arithmetic_string", `response.body.contains(string(r1 * r2))`, `contains(body, to_string(numeric_mul(r1, r2)))`},
 		{"concat_string", `response.body.contains("<script>" + string(rand) + "</script>")`, `contains(body, concat(concat("<script>", to_string(rand)), "</script>"))`},
 		{"bstarts_with", `response.body.bstartsWith(bytes("Salted__"))`, `starts_with(body, "Salted__")`},
-		{"version_submatch", `"version\":\"(?P<version>.*)\"".submatch(response.body_string)["version"].versionEqual("8.0.0")`, `compare_versions(xray_regex_group("version\":\"(?P<version>.*)\"", body, "version"), "=8.0.0")`},
-		{"version_in", `versionIn("Stable tag: (?P<version>[0-9.]+)".submatch(response.body_string)["version"],"<= 5.1.16")`, `compare_versions(xray_regex_group("Stable tag: (?P<version>[0-9.]+)", body, "version"), "<= 5.1.16")`},
+		{"version_submatch", `"version\":\"(?P<version>.*)\"".submatch(response.body_string)["version"].versionEqual("8.0.0")`, `compare_versions(regex_group("version\":\"(?P<version>.*)\"", body, "version"), "=8.0.0")`},
+		{"version_in", `versionIn("Stable tag: (?P<version>[0-9.]+)".submatch(response.body_string)["version"],"<= 5.1.16")`, `compare_versions(regex_group("Stable tag: (?P<version>[0-9.]+)", body, "version"), "<= 5.1.16")`},
 		{"valid_page", `isValidPage(response)`, `(((status_code >= 200) && (status_code < 400)) && (len(trim_space(body)) > 0))`},
 		{"replace_all", `replaceAll(tmp, "\\", "/")`, `replace(tmp, "\\", "/")`},
 		{"randomstr_alias", `response.body.contains("x" + randomstr)`, `contains(body, concat("x", randstr))`},
@@ -545,7 +545,7 @@ expression: r0()
 	s := string(out)
 	t.Logf("output:\n%s", s)
 	for _, want := range []string{
-		`time: '{{xray_mul(to_number(unix_time()), 1000)}}'`,
+		`time: '{{numeric_mul(to_number(unix_time()), 1000)}}'`,
 		`token: '{{base64(concat("prefix:", to_string(time)))}}'`,
 		`referer: '{{concat(concat(Scheme, "://"), Hostname)}}'`,
 	} {
@@ -585,7 +585,7 @@ expression: baseline() && delayed()
 		"name: r0latency",
 		"dsl:",
 		"- latency",
-		"xray_sub(latency, r0latency)",
+		"numeric_sub(latency, r0latency)",
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)

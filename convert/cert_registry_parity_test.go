@@ -8,7 +8,7 @@ import (
 )
 
 // TestCertRegistryParity guards the single-source-of-truth invariant between
-// common.XrayCertFields (which decides what xray cert subfields are
+// common.CertFields (which decides what xray cert subfields are
 // evaluable) and dsl.CertDataKeys (the keys every Emitter partMap is
 // required to map explicitly).
 //
@@ -23,10 +23,10 @@ func TestCertRegistryParity(t *testing.T) {
 		declared[key] = true
 	}
 
-	// 1. Every value in common.XrayCertFields must appear in dsl.CertDataKeys.
-	for sub, key := range common.XrayCertFields {
+	// 1. Every value in common.CertFields must appear in dsl.CertDataKeys.
+	for sub, key := range common.CertFields {
 		if !declared[key] {
-			t.Errorf("XrayCertFields[%q] = %q missing from dsl.CertDataKeys", sub, key)
+			t.Errorf("CertFields[%q] = %q missing from dsl.CertDataKeys", sub, key)
 		}
 	}
 

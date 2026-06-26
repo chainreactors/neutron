@@ -905,59 +905,59 @@ func registerDefaultFunctions() {
 			result := constraint.Check(firstParsed)
 			return result, nil
 		}))
-	MustAddFunction(NewWithPositionalArgs("xray_add", 2, false, func(args ...interface{}) (interface{}, error) {
-		left, okLeft := xrayNumber(args[0])
-		right, okRight := xrayNumber(args[1])
+	MustAddFunction(NewWithPositionalArgs("numeric_add", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := parseNumeric(args[0])
+		right, okRight := parseNumeric(args[1])
 		if okLeft && okRight {
 			return left + right, nil
 		}
 		return toString(args[0]) + toString(args[1]), nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_sub", 2, false, func(args ...interface{}) (interface{}, error) {
-		left, okLeft := xrayNumber(args[0])
-		right, okRight := xrayNumber(args[1])
+	MustAddFunction(NewWithPositionalArgs("numeric_sub", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := parseNumeric(args[0])
+		right, okRight := parseNumeric(args[1])
 		if !okLeft || !okRight {
 			return nil, ErrInvalidDslFunction
 		}
 		return left - right, nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_mul", 2, false, func(args ...interface{}) (interface{}, error) {
-		left, okLeft := xrayNumber(args[0])
-		right, okRight := xrayNumber(args[1])
+	MustAddFunction(NewWithPositionalArgs("numeric_mul", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := parseNumeric(args[0])
+		right, okRight := parseNumeric(args[1])
 		if !okLeft || !okRight {
 			return nil, ErrInvalidDslFunction
 		}
 		return left * right, nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_div", 2, false, func(args ...interface{}) (interface{}, error) {
-		left, okLeft := xrayNumber(args[0])
-		right, okRight := xrayNumber(args[1])
+	MustAddFunction(NewWithPositionalArgs("numeric_div", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := parseNumeric(args[0])
+		right, okRight := parseNumeric(args[1])
 		if !okLeft || !okRight || right == 0 {
 			return nil, ErrInvalidDslFunction
 		}
 		return left / right, nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_mod", 2, false, func(args ...interface{}) (interface{}, error) {
-		left, okLeft := xrayNumber(args[0])
-		right, okRight := xrayNumber(args[1])
+	MustAddFunction(NewWithPositionalArgs("numeric_mod", 2, false, func(args ...interface{}) (interface{}, error) {
+		left, okLeft := parseNumeric(args[0])
+		right, okRight := parseNumeric(args[1])
 		if !okLeft || !okRight || right == 0 {
 			return nil, ErrInvalidDslFunction
 		}
 		return math.Mod(left, right), nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_lt", 2, false, func(args ...interface{}) (interface{}, error) {
-		return xrayCompare(args[0], args[1], "<"), nil
+	MustAddFunction(NewWithPositionalArgs("numeric_lt", 2, false, func(args ...interface{}) (interface{}, error) {
+		return numericCompare(args[0], args[1], "<"), nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_lte", 2, false, func(args ...interface{}) (interface{}, error) {
-		return xrayCompare(args[0], args[1], "<="), nil
+	MustAddFunction(NewWithPositionalArgs("numeric_lte", 2, false, func(args ...interface{}) (interface{}, error) {
+		return numericCompare(args[0], args[1], "<="), nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_gt", 2, false, func(args ...interface{}) (interface{}, error) {
-		return xrayCompare(args[0], args[1], ">"), nil
+	MustAddFunction(NewWithPositionalArgs("numeric_gt", 2, false, func(args ...interface{}) (interface{}, error) {
+		return numericCompare(args[0], args[1], ">"), nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_gte", 2, false, func(args ...interface{}) (interface{}, error) {
-		return xrayCompare(args[0], args[1], ">="), nil
+	MustAddFunction(NewWithPositionalArgs("numeric_gte", 2, false, func(args ...interface{}) (interface{}, error) {
+		return numericCompare(args[0], args[1], ">="), nil
 	}))
-	MustAddFunction(NewWithPositionalArgs("xray_regex_group", 3, false, func(args ...interface{}) (interface{}, error) {
+	MustAddFunction(NewWithPositionalArgs("regex_group", 3, false, func(args ...interface{}) (interface{}, error) {
 		pattern := toString(args[0])
 		input := toString(args[1])
 		groupName := toString(args[2])
@@ -1437,7 +1437,7 @@ func registerDefaultFunctions() {
 
 }
 
-func xrayNumber(value interface{}) (float64, bool) {
+func parseNumeric(value interface{}) (float64, bool) {
 	switch v := value.(type) {
 	case float64:
 		return v, true
@@ -1462,7 +1462,7 @@ func xrayNumber(value interface{}) (float64, bool) {
 }
 
 func dslLength(value interface{}) (int, error) {
-	n, ok := xrayNumber(value)
+	n, ok := parseNumeric(value)
 	if !ok {
 		return 0, ErrParsingArg
 	}
@@ -1472,9 +1472,9 @@ func dslLength(value interface{}) (int, error) {
 	return int(n), nil
 }
 
-func xrayCompare(left, right interface{}, op string) bool {
-	leftNum, okLeft := xrayNumber(left)
-	rightNum, okRight := xrayNumber(right)
+func numericCompare(left, right interface{}, op string) bool {
+	leftNum, okLeft := parseNumeric(left)
+	rightNum, okRight := parseNumeric(right)
 	if okLeft && okRight {
 		switch op {
 		case "<":

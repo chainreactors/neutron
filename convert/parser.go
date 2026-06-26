@@ -280,7 +280,7 @@ func (p *parser) parsePrimary() (*dsl.Node, error) {
 				}
 				if method == "submatch" || method == "bsubmatch" {
 					if group := p.consumeSubscriptValue(); group != nil {
-						return p.maybeMethodCall(dsl.Call("xray_regex_group", dsl.Literal(tok.Val), arg, group))
+						return p.maybeMethodCall(dsl.Call("regex_group", dsl.Literal(tok.Val), arg, group))
 					}
 				}
 				p.skipSubscript()
@@ -448,12 +448,12 @@ func (p *parser) parseCertAccess() (*dsl.Node, error) {
 		return dsl.Variable("cert"), nil
 	}
 	field := headerVarName(p.next().Val)
-	// common.XrayCertFields is the single source of truth for which cert
+	// common.CertFields is the single source of truth for which cert
 	// subfields are evaluable; its values are the full data-map keys (already
 	// "cert_"-prefixed) populated by the HTTP/SSL runtime via tlsx.FillCertDSL.
 	// not_before/not_after stay string-valued, so the timeConvert chain is
 	// unaffected.
-	if key, ok := common.XrayCertFields[field]; ok {
+	if key, ok := common.CertFields[field]; ok {
 		node, err := p.maybeMethodCall(dsl.Variable(key))
 		if err != nil {
 			return nil, err
@@ -634,7 +634,7 @@ func (p *parser) maybeMethodCall(receiver *dsl.Node) (*dsl.Node, error) {
 	if method == "submatch" || method == "bsubmatch" {
 		if group := p.consumeSubscriptValue(); group != nil {
 			pattern, corpus := regexCallArgs(receiver, arg)
-			return p.maybeMethodCall(dsl.Call("xray_regex_group", pattern, corpus, group))
+			return p.maybeMethodCall(dsl.Call("regex_group", pattern, corpus, group))
 		}
 		p.skipSubscript()
 	}
@@ -934,15 +934,15 @@ func buildArithmeticNode(op string, left, right *dsl.Node) *dsl.Node {
 		if isStringLikeNode(left) || isStringLikeNode(right) {
 			return dsl.Call("concat", left, right)
 		}
-		return dsl.Call("xray_add", left, right)
+		return dsl.Call("numeric_add", left, right)
 	case "-":
-		return dsl.Call("xray_sub", left, right)
+		return dsl.Call("numeric_sub", left, right)
 	case "*":
-		return dsl.Call("xray_mul", left, right)
+		return dsl.Call("numeric_mul", left, right)
 	case "/":
-		return dsl.Call("xray_div", left, right)
+		return dsl.Call("numeric_div", left, right)
 	case "%":
-		return dsl.Call("xray_mod", left, right)
+		return dsl.Call("numeric_mod", left, right)
 	default:
 		return dsl.BinaryOp(op, left, right)
 	}
@@ -984,13 +984,13 @@ func buildComparisonNode(left *dsl.Node, op string, right *dsl.Node) *dsl.Node {
 		if isXrayNumericComparison(left) || isXrayNumericComparison(right) {
 			switch op {
 			case ">":
-				return dsl.Call("xray_gt", left, right)
+				return dsl.Call("numeric_gt", left, right)
 			case ">=":
-				return dsl.Call("xray_gte", left, right)
+				return dsl.Call("numeric_gte", left, right)
 			case "<":
-				return dsl.Call("xray_lt", left, right)
+				return dsl.Call("numeric_lt", left, right)
 			case "<=":
-				return dsl.Call("xray_lte", left, right)
+				return dsl.Call("numeric_lte", left, right)
 			}
 		}
 	}
@@ -1020,7 +1020,7 @@ func isXrayNumericComparison(node *dsl.Node) bool {
 	}
 	if node.Type == dsl.NodeCall {
 		switch node.FuncName {
-		case "xray_add", "xray_sub", "xray_mul", "xray_div", "xray_mod", "to_number":
+		case "numeric_add", "numeric_sub", "numeric_mul", "numeric_div", "numeric_mod", "to_number":
 			return true
 		}
 	}

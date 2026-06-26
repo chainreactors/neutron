@@ -417,15 +417,15 @@ func mutateCall(node *dsl.Node, resp *ResponseSpec, hints groupHints, opt Option
 				}
 			}
 		}
-	case "xray_regex_group":
+	case "regex_group":
 		if pattern, _, part, ok := regexGroupRef(node); ok {
 			addRegexSample(resp, pattern, part, hints)
 		}
 	case "compare_versions":
 		mutateVersionCall(node, resp, hints)
-	case "xray_gt", "xray_gte", "xray_lt", "xray_lte":
+	case "numeric_gt", "numeric_gte", "numeric_lt", "numeric_lte":
 		if len(node.Children) == 2 {
-			mutateComparison(dsl.BinaryOp(xrayCompareOp(node.FuncName), node.Children[0], node.Children[1]), resp, hints, opt, unsupported)
+			mutateComparison(dsl.BinaryOp(numericCompareOp(node.FuncName), node.Children[0], node.Children[1]), resp, hints, opt, unsupported)
 		}
 	case "wait_for":
 		return
@@ -441,15 +441,15 @@ func decodedVariablePart(node *dsl.Node, fn string) string {
 	return variablePart(node.Children[0])
 }
 
-func xrayCompareOp(name string) string {
+func numericCompareOp(name string) string {
 	switch name {
-	case "xray_gt":
+	case "numeric_gt":
 		return ">"
-	case "xray_gte":
+	case "numeric_gte":
 		return ">="
-	case "xray_lt":
+	case "numeric_lt":
 		return "<"
-	case "xray_lte":
+	case "numeric_lte":
 		return "<="
 	default:
 		return "=="
@@ -1229,7 +1229,7 @@ func unwrapTransparentStringCall(node *dsl.Node) *dsl.Node {
 }
 
 func regexGroupRef(node *dsl.Node) (string, string, string, bool) {
-	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "xray_regex_group" || len(node.Children) != 3 {
+	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "regex_group" || len(node.Children) != 3 {
 		return "", "", "", false
 	}
 	pattern, ok := literalString(node.Children[0])
@@ -1416,7 +1416,7 @@ func comparisonDelay(node *dsl.Node, resp *ResponseSpec) (time.Duration, bool) {
 		return 0, false
 	}
 	left := node.Children[0]
-	if left.Type != dsl.NodeCall || left.FuncName != "xray_sub" || len(left.Children) != 2 || !isLatencyVar(left.Children[0]) {
+	if left.Type != dsl.NodeCall || left.FuncName != "numeric_sub" || len(left.Children) != 2 || !isLatencyVar(left.Children[0]) {
 		return 0, false
 	}
 	offsetRaw, err := common.Eval(left.Children[1].String(), resp.event())

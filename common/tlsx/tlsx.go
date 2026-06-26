@@ -7,9 +7,9 @@
 // It deliberately exposes TWO key namespaces from the same certificate so that
 // both template dialects work against the same response:
 //
-//   - xray style  (cert_subject, cert_issuer, cert_not_before, ...): string
-//     values, populated to mirror xray's response.cert.* semantics. These are
-//     what the xray→neutron converter emits.
+//   - cert_* style (cert_subject, cert_issuer, cert_not_before, ...): string
+//     values, populated to mirror response.cert.* semantics. These are what
+//     the converter emits.
 //   - nuclei style (subject_cn, issuer_dn, tls_version, cipher, fingerprint_hash,
 //     not_before, ...): richer typed values mirroring nuclei's `ssl` protocol.
 //
@@ -32,7 +32,7 @@ import (
 	"github.com/chainreactors/neutron/common"
 )
 
-const xrayTimeLayout = "2006-01-02 03:04:05"
+const certTimeLayout = "2006-01-02 03:04:05"
 
 // FingerprintHash holds the leaf certificate fingerprints in the shape nuclei's
 // ssl protocol exposes (a structured object, not flattened keys).
@@ -42,7 +42,7 @@ type FingerprintHash struct {
 	SHA256 string `json:"sha256,omitempty"`
 }
 
-// FillCertDSL populates `data` with both the xray-style cert_* keys and the
+// FillCertDSL populates `data` with both the cert_* style keys and the
 // nuclei-style certificate/handshake keys derived from the leaf certificate in
 // `state`. `sni` is the server name used for the mismatch check (the HTTP path
 // passes the request hostname; the SSL path passes its resolved SNI).
@@ -55,12 +55,11 @@ func FillCertDSL(data map[string]interface{}, state *tls.ConnectionState, sni st
 	}
 	leaf := state.PeerCertificates[0]
 
-	// --- xray style (string values, only set when non-empty to match the
-	// previous protocols/http behaviour) ---
+	// --- cert_* style (string values, only set when non-empty) ---
 	setIfNotEmpty(data, "cert_subject", leaf.Subject.String())
 	setIfNotEmpty(data, "cert_issuer", leaf.Issuer.String())
-	setIfNotEmpty(data, "cert_not_before", leaf.NotBefore.Format(xrayTimeLayout))
-	setIfNotEmpty(data, "cert_not_after", leaf.NotAfter.Format(xrayTimeLayout))
+	setIfNotEmpty(data, "cert_not_before", leaf.NotBefore.Format(certTimeLayout))
+	setIfNotEmpty(data, "cert_not_after", leaf.NotAfter.Format(certTimeLayout))
 	setIfNotEmpty(data, "cert_dnsnames", strings.Join(leaf.DNSNames, " "))
 	if leaf.SerialNumber != nil {
 		setIfNotEmpty(data, "cert_serial", leaf.SerialNumber.String()) // decimal
@@ -73,7 +72,7 @@ func FillCertDSL(data map[string]interface{}, state *tls.ConnectionState, sni st
 		data[k] = v
 	}
 
-	// raw_cert: the whole presented chain as concatenated DER, for xray-style
+	// raw_cert: the whole presented chain as concatenated DER, for
 	// raw_cert.bcontains(...) matching (printable strings in DER are literal ASCII).
 	var raw strings.Builder
 	for _, cert := range state.PeerCertificates {
