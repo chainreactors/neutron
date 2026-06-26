@@ -12,6 +12,7 @@ import (
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
+	"github.com/chainreactors/utils/encode"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -829,4 +830,50 @@ func TestNoMatchNoRequestResponse(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, called, "callback should not be called when no match")
+}
+
+// testFaviconBody is simulated favicon binary content.
+var testFaviconBody = []byte("FAKE-ICON-BINARY-DATA")
+
+func TestFaviconMatcherSupportsMmh3AndMd5(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(testFaviconBody)
+	}))
+	defer server.Close()
+
+	mmh3Hash := encode.Mmh3Hash32(testFaviconBody)
+	md5Hash := encode.Md5Hash(testFaviconBody)
+	t.Logf("mmh3=%s md5=%s", mmh3Hash, md5Hash)
+
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/favicon.ico", nil)
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+
+	request := &Request{
+		options: &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}},
+	}
+	event := request.responseToDSLMap(req, resp, server.URL, server.URL+"/favicon.ico", 100*time.Millisecond, nil, nil)
+
+	// Verify favicon_hash contains mmh3 and md5
+	faviconHash := fmt.Sprint(event["favicon_hash"])
+	require.Contains(t, faviconHash, mmh3Hash)
+	require.Contains(t, faviconHash, md5Hash)
+
+	// Scenario 1: converter-generated template (mmh3 hash)
+	mmh3Matcher := &operators.Matcher{Type: "favicon", Part: "favicon_hash", Hash: []string{mmh3Hash}}
+	require.NoError(t, mmh3Matcher.CompileMatchers())
+	matched, _ := request.Match(event, mmh3Matcher)
+	require.True(t, matched, "mmh3 matcher should match (xray converter scenario)")
+
+	// Scenario 2: fingerprinthub template (md5 hash)
+	md5Matcher := &operators.Matcher{Type: "favicon", Part: "favicon_hash", Hash: []string{md5Hash}}
+	require.NoError(t, md5Matcher.CompileMatchers())
+	matched, _ = request.Match(event, md5Matcher)
+	require.True(t, matched, "md5 matcher should match (fingerprinthub scenario)")
+
+	// Scenario 3: non-matching hash
+	wrongMatcher := &operators.Matcher{Type: "favicon", Part: "favicon_hash", Hash: []string{"wronghash"}}
+	require.NoError(t, wrongMatcher.CompileMatchers())
+	matched, _ = request.Match(event, wrongMatcher)
+	require.False(t, matched, "wrong hash should not match")
 }

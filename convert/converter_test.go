@@ -3,6 +3,11 @@ package convert
 import (
 	"strings"
 	"testing"
+
+	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/common/dsl"
+	"github.com/chainreactors/neutron/templates"
+	"gopkg.in/yaml.v3"
 )
 
 func TestParseToAST(t *testing.T) {
@@ -775,6 +780,376 @@ expression: discover() && follow()
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
+		}
+	}
+}
+
+// --- Tests merged from path_normalize_test.go ---
+
+func TestConvertStripsXrayPathAnchor(t *testing.T) {
+	xray := `
+name: anchored-path
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: ^/admin
+    expression: response.body_string.contains("admin")
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, "^/admin") {
+		t.Fatalf("path anchor was not stripped:\n%s", converted)
+	}
+	if !strings.Contains(converted, `{{BaseURL}}/admin`) {
+		t.Fatalf("normalized path missing:\n%s", converted)
+	}
+}
+
+// --- Tests merged from sequential_convert_test.go ---
+
+func TestConvertPreservesSequentialRulesWithRepeatedRequests(t *testing.T) {
+	xray := `
+name: sequential-repeated-request
+transport: http
+rules:
+  create:
+    request:
+      method: POST
+      path: /toggle
+      body: create
+    expression: response.status == 200
+  check_created:
+    request:
+      method: GET
+      path: /flag
+    expression: response.status == 200
+  delete:
+    request:
+      method: POST
+      path: /toggle
+      body: delete
+    expression: response.status == 200
+  check_deleted:
+    request:
+      method: GET
+      path: /flag
+    expression: response.status == 404
+expression: create() && check_created() && delete() && check_deleted()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if got := strings.Count(converted, `{{BaseURL}}/toggle`); got != 2 {
+		t.Fatalf("expected two toggle requests, got %d:\n%s", got, converted)
+	}
+	if got := strings.Count(converted, `{{BaseURL}}/flag`); got != 2 {
+		t.Fatalf("expected two flag requests, got %d:\n%s", got, converted)
+	}
+	if !strings.Contains(converted, "status_code_2 == 200") || !strings.Contains(converted, "status_code == 404") {
+		t.Fatalf("expected request-condition to reference both repeated GET responses:\n%s", converted)
+	}
+}
+
+// --- Tests merged from set_variables_test.go ---
+
+func TestConvertSetVariablesOrdersDependenciesAndMapsHex(t *testing.T) {
+	xray := `
+name: set-variable-order
+transport: http
+set:
+  h1: hex(rStr1)
+  rStr1: randomLowercase(8)
+rules:
+  r0:
+    request:
+      method: GET
+      path: /?q={{h1}}
+    expression: response.status == 200 && response.body_string.contains(string(rStr1))
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	randIdx := strings.Index(converted, "rStr1:")
+	hexIdx := strings.Index(converted, "h1:")
+	if randIdx < 0 || hexIdx < 0 || randIdx > hexIdx {
+		t.Fatalf("expected rStr1 before h1:\n%s", converted)
+	}
+	if !strings.Contains(converted, "{{hex_encode(rStr1)}}") {
+		t.Fatalf("expected hex() to become hex_encode():\n%s", converted)
+	}
+}
+
+func TestConvertRenamesBuiltinSetVariable(t *testing.T) {
+	xray := `
+name: builtin-variable-collision
+transport: http
+set:
+  BaseURL: request.url.domain
+rules:
+  r0:
+    request:
+      method: POST
+      path: /admin/auth/reset-password
+      headers:
+        Origin: https://{{BaseURL}}
+    expression: response.status == 200
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, "\n  BaseURL:") {
+		t.Fatalf("xray set variable should not override neutron BaseURL:\n%s", converted)
+	}
+	if !strings.Contains(converted, "xray_BaseURL: '{{Host}}'") {
+		t.Fatalf("expected colliding set variable to be renamed:\n%s", converted)
+	}
+	if !strings.Contains(converted, "Origin: https://{{xray_BaseURL}}") {
+		t.Fatalf("expected original header placeholder to use renamed variable:\n%s", converted)
+	}
+	if !strings.Contains(converted, `{{BaseURL}}/admin/auth/reset-password`) {
+		t.Fatalf("expected converted request path to use xray resolver:\n%s", converted)
+	}
+}
+
+func TestConvertBuiltinSetVariableCanReferenceTargetBuiltin(t *testing.T) {
+	xray := `
+name: builtin-variable-target-reference
+transport: http
+set:
+  Hostname: request.url.host
+rules:
+  r0:
+    request:
+      method: GET
+      path: /maint/index.php
+      headers:
+        Referer: '{{Hostname}}/maint/index.php'
+    expression: response.status == 200
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if !strings.Contains(converted, "xray_Hostname: '{{Hostname}}'") {
+		t.Fatalf("expected aliased xray variable to reference neutron Hostname builtin:\n%s", converted)
+	}
+	if strings.Contains(converted, "xray_Hostname: '{{xray_Hostname}}'") {
+		t.Fatalf("aliased set variable should not reference itself:\n%s", converted)
+	}
+	if !strings.Contains(converted, "Referer: '{{xray_Hostname}}/maint/index.php'") {
+		t.Fatalf("expected original placeholder to use aliased variable:\n%s", converted)
+	}
+	assertConvertedCompiles(t, out)
+}
+
+func TestConvertSetStringLiteralAndUpperFunction(t *testing.T) {
+	xray := `
+name: set-string-upper
+transport: http
+set:
+  eps_path: string("/eps/api/resourceOperations/uploadsecretKeyIbuilding")
+  token: upper(md5(eps_path))
+rules:
+  r0:
+    request:
+      method: GET
+      path: /upload?token={{token}}
+    expression: response.status == 200
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, `eps_path: string(`) {
+		t.Fatalf("string() set expression should become a literal:\n%s", converted)
+	}
+	if !strings.Contains(converted, `eps_path: /eps/api/resourceOperations/uploadsecretKeyIbuilding`) {
+		t.Fatalf("expected string() literal value in variables:\n%s", converted)
+	}
+	if strings.Contains(converted, `{{upper(`) {
+		t.Fatalf("upper() should be translated to neutron DSL:\n%s", converted)
+	}
+	if !strings.Contains(converted, `token: '{{to_upper(md5(eps_path))}}'`) {
+		t.Fatalf("expected upper() to become to_upper():\n%s", converted)
+	}
+}
+
+func TestConvertRevFunction(t *testing.T) {
+	xray := `
+name: rev-function
+transport: http
+set:
+  s1: randomLowercase(8)
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+    expression: response.status == 200 && response.body_string.contains(rev(s1))
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, `rev(s1)`) {
+		t.Fatalf("rev() should be translated to neutron DSL:\n%s", converted)
+	}
+	if !strings.Contains(converted, `contains(body, reverse(s1))`) {
+		t.Fatalf("expected rev() to become reverse():\n%s", converted)
+	}
+}
+
+func TestConvertAliasesReservedOutputVariable(t *testing.T) {
+	xray := `
+name: output-reserved-variable
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+    expression: response.status == 200
+    output:
+      len: size(response.body)
+      total: int(len / 2)
+      hexed: decToHex(total)
+  r1:
+    request:
+      method: GET
+      path: /next/{{hexed}}
+    expression: response.status == 200
+expression: r0() && r1()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, "\n          name: len\n") {
+		t.Fatalf("reserved output variable should be renamed:\n%s", converted)
+	}
+	if !strings.Contains(converted, "name: xray_len") {
+		t.Fatalf("expected len output variable to be aliased:\n%s", converted)
+	}
+	if strings.Contains(converted, "(len / 2)") {
+		t.Fatalf("reserved output variable reference was not aliased:\n%s", converted)
+	}
+	if !strings.Contains(converted, "(xray_len / 2)") {
+		t.Fatalf("expected output expression to reference aliased variable:\n%s", converted)
+	}
+	if !strings.Contains(converted, "dec_to_hex(total)") {
+		t.Fatalf("expected decToHex() to become dec_to_hex():\n%s", converted)
+	}
+	assertConvertedCompiles(t, out)
+}
+
+func TestConvertSetBytesVariableExpression(t *testing.T) {
+	xray := `
+name: set-bytes-variable
+transport: http
+set:
+  token: md5("abc")
+  token_bytes: bytes(token)
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+    expression: response.body.bcontains(token_bytes)
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, "token_bytes: bytes(token)") {
+		t.Fatalf("bytes(token) stayed literal:\n%s", converted)
+	}
+	if !strings.Contains(converted, `token_bytes: '{{token}}'`) {
+		t.Fatalf("expected bytes(token) to reference token variable:\n%s", converted)
+	}
+}
+
+func assertConvertedCompiles(t *testing.T, out []byte) {
+	t.Helper()
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal converted template: %v\n%s", err, out)
+	}
+	if err := tmpl.Compile(nil); err != nil {
+		t.Fatalf("compile converted template: %v\n%s", err, out)
+	}
+}
+
+// --- Tests merged from cert_registry_parity_test.go ---
+
+// TestCertRegistryParity guards the single-source-of-truth invariant between
+// common.CertFields (which decides what xray cert subfields are
+// evaluable) and dsl.CertDataKeys (the keys every Emitter partMap is
+// required to map explicitly).
+//
+// The Emitter Field() fallback used to catch unmapped cert_* via a
+// strings.HasPrefix("cert") branch; removing that branch means any cert key
+// that is NOT explicitly mapped silently falls into the header default and
+// gets rewritten as `header="cert_xxx: ..."` by isHeaderVariable. This test
+// makes that drift loud.
+func TestCertRegistryParity(t *testing.T) {
+	declared := make(map[string]bool, len(dsl.CertDataKeys))
+	for _, key := range dsl.CertDataKeys {
+		declared[key] = true
+	}
+
+	// 1. Every value in common.CertFields must appear in dsl.CertDataKeys.
+	for sub, key := range common.CertFields {
+		if !declared[key] {
+			t.Errorf("CertFields[%q] = %q missing from dsl.CertDataKeys", sub, key)
+		}
+	}
+
+	// 2. raw_cert (response.raw_cert.bcontains) must also be listed: it
+	// reaches the emitter as a NodeVariable just like the other cert keys.
+	if !declared[common.RawCertKey] {
+		t.Errorf("common.RawCertKey = %q missing from dsl.CertDataKeys", common.RawCertKey)
+	}
+
+	// 3. Every dsl.CertDataKeys entry must resolve to a non-default field on
+	// every emitter — otherwise it would be misclassified as a header
+	// variable (see isHeaderVariable in codegen.go).
+	for _, platform := range []string{"fofa", "hunter", "censys"} {
+		e, ok := dsl.GetEmitter(platform)
+		if !ok {
+			t.Fatalf("emitter %q not registered", platform)
+		}
+		// A synthetic part name no real query would use → exercises the
+		// emitter's default branch. Any cert key resolving to the same value
+		// means it fell through to header.
+		defaultField := e.Field("__unmapped_synthetic_part__")
+		for _, key := range dsl.CertDataKeys {
+			got := e.Field(key)
+			if got == defaultField {
+				t.Errorf("[%s] cert key %q falls through to default field %q — partMap missing explicit mapping", platform, key, got)
+			}
 		}
 	}
 }

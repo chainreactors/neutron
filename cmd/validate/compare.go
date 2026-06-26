@@ -1,14 +1,3 @@
-// pocverify validates semantic equivalence between an xray POC and a nuclei
-// (neutron) template by generating mock HTTP responses and comparing how each
-// engine evaluates them.
-//
-// Usage:
-//
-//	pocverify --xray <xray.yml> --nuclei <nuclei.yaml> [--json] [-v]
-//	pocverify <xray.yml> <nuclei.yaml> [--json] [-v]
-//
-// The tool always exits 0 on successful evaluation (consistent or divergent);
-// a non-zero exit only signals tool-level errors (I/O, YAML parse).
 package main
 
 import (
@@ -102,33 +91,34 @@ type report struct {
 // main
 // ---------------------------------------------------------------------------
 
-func main() {
+func runCompare(args []string) {
+	fs := flag.NewFlagSet("compare", flag.ExitOnError)
 	var (
 		xrayPath   string
 		nucleiPath string
 		jsonOut    bool
 		verbose    bool
 	)
-	flag.StringVar(&xrayPath, "xray", "", "path to xray POC YAML")
-	flag.StringVar(&nucleiPath, "nuclei", "", "path to nuclei/neutron template YAML")
-	flag.BoolVar(&jsonOut, "json", false, "emit JSON report")
-	flag.BoolVar(&verbose, "v", false, "verbose output (include mock dumps)")
-	flag.Usage = func() {
+	fs.StringVar(&xrayPath, "xray", "", "path to xray POC YAML")
+	fs.StringVar(&nucleiPath, "nuclei", "", "path to nuclei/neutron template YAML")
+	fs.BoolVar(&jsonOut, "json", false, "emit JSON report")
+	fs.BoolVar(&verbose, "v", false, "verbose output (include mock dumps)")
+	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage:")
-		fmt.Fprintln(os.Stderr, "  pocverify --xray <xray.yml> --nuclei <nuclei.yaml> [--json] [-v]")
-		fmt.Fprintln(os.Stderr, "  pocverify <xray.yml> <nuclei.yaml> [--json] [-v]")
-		flag.PrintDefaults()
+		fmt.Fprintln(os.Stderr, "  validate compare --xray <xray.yml> --nuclei <nuclei.yaml> [--json] [-v]")
+		fmt.Fprintln(os.Stderr, "  validate compare <xray.yml> <nuclei.yaml> [--json] [-v]")
+		fs.PrintDefaults()
 	}
-	flag.Parse()
+	fs.Parse(args)
 
-	if xrayPath == "" && flag.NArg() >= 1 {
-		xrayPath = flag.Arg(0)
+	if xrayPath == "" && fs.NArg() >= 1 {
+		xrayPath = fs.Arg(0)
 	}
-	if nucleiPath == "" && flag.NArg() >= 2 {
-		nucleiPath = flag.Arg(1)
+	if nucleiPath == "" && fs.NArg() >= 2 {
+		nucleiPath = fs.Arg(1)
 	}
 	if xrayPath == "" || nucleiPath == "" {
-		flag.Usage()
+		fs.Usage()
 		os.Exit(2)
 	}
 
@@ -143,7 +133,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	rep := verify(xray, tpl, xrayPath, nucleiPath, verbose)
+	rep := compareVerify(xray, tpl, xrayPath, nucleiPath, verbose)
 
 	if jsonOut {
 		data, _ := json.MarshalIndent(rep, "", "  ")
@@ -151,8 +141,6 @@ func main() {
 	} else {
 		printText(rep, verbose)
 	}
-	// Always exit 0 — divergence is reported in-band.
-	os.Exit(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +193,7 @@ type rulePair struct {
 	idx      int
 }
 
-func verify(xray xrayPOC, tpl *templates.Template, xrayPath, nucleiPath string, verbose bool) report {
+func compareVerify(xray xrayPOC, tpl *templates.Template, xrayPath, nucleiPath string, verbose bool) report {
 	rep := report{
 		XrayPath:       xrayPath,
 		NucleiPath:     nucleiPath,
