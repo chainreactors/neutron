@@ -3,7 +3,6 @@ package http
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"html"
@@ -17,7 +16,7 @@ import (
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/spaolacci/murmur3"
+	"github.com/chainreactors/utils/encode"
 )
 
 var errStopExecution = errors.New("stop execution due to unresolved variables")
@@ -568,7 +567,9 @@ func (r *Request) responseToDSLMap(req *http.Request, resp *http.Response, host,
 	body, _ := readResponseBody(resp)
 	bodyText := string(body)
 	data["body"] = bodyText
-	data["favicon_hash"] = xrayFaviconHash(body)
+	if len(body) > 0 {
+		data["favicon_hash"] = encode.Mmh3Hash32(body) + " " + encode.Md5Hash(body)
+	}
 	data["title"] = extractHTMLTitle(bodyText)
 	addTLSCertFields(data, resp)
 	if strings.TrimSpace(resp.Header.Get("Content-Encoding")) != "" {
@@ -709,20 +710,3 @@ func (gr *generatedRequest) Vars() map[string]interface{} {
 	return common.MergeMaps(gr.meta, gr.dynamicValues)
 }
 
-func xrayFaviconHash(body []byte) string {
-	if len(body) == 0 {
-		return ""
-	}
-	encoded := base64.StdEncoding.EncodeToString(body)
-	var wrapped strings.Builder
-	for len(encoded) > 76 {
-		wrapped.WriteString(encoded[:76])
-		wrapped.WriteByte('\n')
-		encoded = encoded[76:]
-	}
-	wrapped.WriteString(encoded)
-	wrapped.WriteByte('\n')
-	hasher := murmur3.New32WithSeed(0)
-	_, _ = hasher.Write([]byte(wrapped.String()))
-	return fmt.Sprintf("%d", int32(hasher.Sum32()))
-}
