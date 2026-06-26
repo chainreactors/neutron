@@ -1,6 +1,8 @@
 package convert
 
 import (
+	"io/ioutil"
+	"path/filepath"
 	"testing"
 
 	"github.com/chainreactors/neutron/templates"
@@ -83,5 +85,56 @@ func TestTemplatesLoadConvertsXray(t *testing.T) {
 	}
 	if len(reqs[0].Matchers) == 0 {
 		t.Errorf("expected converted request to have matchers")
+	}
+}
+
+func TestConverterE2E(t *testing.T) {
+	files, err := filepath.Glob("testdata/xray/*.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no xray testdata files found")
+	}
+
+	for _, f := range files {
+		name := filepath.Base(f)
+		t.Run(name, func(t *testing.T) {
+			data, err := ioutil.ReadFile(f)
+			if err != nil {
+				t.Fatalf("read: %v", err)
+			}
+			if !IsXrayPOC(data) {
+				t.Fatalf("not detected as xray POC")
+			}
+
+			tmpl, err := templates.Load(data)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if tmpl.Id == "" {
+				t.Errorf("empty template id")
+			}
+			reqs := tmpl.GetRequests()
+			if len(reqs) == 0 {
+				t.Fatalf("no http requests after conversion")
+			}
+			if err := tmpl.Compile(nil); err != nil {
+				for _, req := range reqs {
+					if compileErr := (&req.Operators).Compile(); compileErr != nil {
+						t.Fatalf("compile matchers: %v", compileErr)
+					}
+				}
+			}
+			hasMatchers := false
+			for _, req := range reqs {
+				if len(req.Matchers) > 0 {
+					hasMatchers = true
+				}
+			}
+			if !hasMatchers {
+				t.Errorf("no request has matchers after conversion")
+			}
+		})
 	}
 }

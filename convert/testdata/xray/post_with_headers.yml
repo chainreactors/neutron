@@ -1,0 +1,14 @@
+name: poc-post-with-headers
+detail:
+  poc: post-with-headers
+rules:
+  r0:
+    request:
+      method: POST
+      path: /api/login
+      headers:
+        Content-Type: application/json
+      body: '{"user":"admin","pass":"admin"}'
+    expression: response.status == 200 && response.body_string.contains("token")
+expression: r0()
+transport: http

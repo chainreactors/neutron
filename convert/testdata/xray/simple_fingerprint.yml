@@ -1,0 +1,12 @@
+name: poc-simple-fingerprint
+detail:
+  poc: simple-fingerprint
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+      follow_redirects: false
+    expression: response.status == 200 && response.body_string.contains("Powered by TestCMS")
+expression: r0()
+transport: http
