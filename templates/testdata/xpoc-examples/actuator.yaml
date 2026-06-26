@@ -1,7 +1,7 @@
 http:
     - method: GET
       path:
-        - '{{BaseURL}}/'
+        - '{{BaseURL}}/favicon.ico'
       req-condition: true
     - headers:
         Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
@@ -29,7 +29,7 @@ http:
         Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
       matchers:
         - dsl:
-            - (((contains(favicon_hash_1, "116323821")) || (((((contains(body_2, "<h1>Whitelabel Error Page</h1>") || (contains(body_2, "assets/js/vue.min.js") && contains(body_2, "assets/js/element.js"))) || contains(body_2, "\"msg\":\"404 NOT_FOUND\"")) || contains(body_2, "Full authentication is required to access this resource")) || contains(content_type_2, "application/json"))) || (((((contains(body_3, "<h1>Whitelabel Error Page</h1>") || (contains(body_3, "assets/js/vue.min.js") && contains(body_3, "assets/js/element.js"))) || contains(body_3, "\"msg\":\"404 NOT_FOUND\"")) || contains(body_3, "Full authentication is required to access this resource")) || contains(content_type_3, "application/json")))) && ((((contains(body_4, "/actuator") && contains(body_4, "\"_links\":{")) && (contains(body_4, "\"env\":{") || contains(content_type_4, "spring-boot.actuator")))) || ((((status_code_5 == 200) && contains(content_type_5, "spring-boot.actuator")) || ((starts_with(body_5, "{\"code\":") && contains(body_5, "\"status\":")) && contains(body_5, "\"ping\":")))) || ((((status_code == 200) && contains(content_type, "spring-boot.actuator")) || ((starts_with(body, "{\"code\":") && contains(body, "\"status\":")) && contains(body, "\"ping\":"))))))
+            - (((mmh3(base64_py(body_1)) == "116323821") || (((((contains(body_2, "<h1>Whitelabel Error Page</h1>") || (contains(body_2, "assets/js/vue.min.js") && contains(body_2, "assets/js/element.js"))) || contains(body_2, "\"msg\":\"404 NOT_FOUND\"")) || contains(body_2, "Full authentication is required to access this resource")) || contains(content_type_2, "application/json"))) || (((((contains(body_3, "<h1>Whitelabel Error Page</h1>") || (contains(body_3, "assets/js/vue.min.js") && contains(body_3, "assets/js/element.js"))) || contains(body_3, "\"msg\":\"404 NOT_FOUND\"")) || contains(body_3, "Full authentication is required to access this resource")) || contains(content_type_3, "application/json")))) && ((((contains(body_4, "/actuator") && contains(body_4, "\"_links\":{")) && (contains(body_4, "\"env\":{") || contains(content_type_4, "spring-boot.actuator")))) || ((((status_code_5 == 200) && contains(content_type_5, "spring-boot.actuator")) || ((starts_with(body_5, "{\"code\":") && contains(body_5, "\"status\":")) && contains(body_5, "\"ping\":")))) || ((((status_code == 200) && contains(content_type, "spring-boot.actuator")) || ((starts_with(body, "{\"code\":") && contains(body, "\"status\":")) && contains(body, "\"ping\":"))))))
           type: dsl
       method: GET
       path:

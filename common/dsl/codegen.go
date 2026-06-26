@@ -1,6 +1,7 @@
 package dsl
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -223,6 +224,20 @@ func genCall(node *Node, e Emitter, r *Result) string {
 	}
 }
 
+func genFaviconHash(node *Node, e Emitter, r *Result) string {
+	if len(node.Children) < 1 {
+		r.Errors = append(r.Errors, "favicon_hash requires 1 arg")
+		return ""
+	}
+	hash := resolveValue(node.Children[0])
+	q, err := e.FaviconHash(hash)
+	if err != nil {
+		r.Errors = append(r.Errors, err.Error())
+		return ""
+	}
+	return q
+}
+
 func genContains(node *Node, e Emitter, r *Result) string {
 	if len(node.Children) < 2 {
 		r.Errors = append(r.Errors, fmt.Sprintf("contains requires at least 2 args, got %d", len(node.Children)))
@@ -271,20 +286,6 @@ func genContainsMulti(node *Node, e Emitter, r *Result, isAll bool) string {
 		return e.Group(e.And(clauses...))
 	}
 	return e.Group(e.Or(clauses...))
-}
-
-func genFaviconHash(node *Node, e Emitter, r *Result) string {
-	if len(node.Children) < 1 {
-		r.Errors = append(r.Errors, "favicon_hash requires 1 arg")
-		return ""
-	}
-	hash := resolveValue(node.Children[0])
-	q, err := e.FaviconHash(hash)
-	if err != nil {
-		r.Errors = append(r.Errors, err.Error())
-		return ""
-	}
-	return q
 }
 
 func resolveField(node *Node, e Emitter) string {
@@ -342,7 +343,26 @@ func resolveValue(node *Node) string {
 	if node == nil {
 		return ""
 	}
+	if node.Type == NodeCall && node.FuncName == "hex_decode" && len(node.Children) == 1 {
+		if raw, ok := node.Children[0].Value.(string); ok {
+			if decoded, err := hex.DecodeString(raw); err == nil {
+				return escapeQueryBytes(decoded)
+			}
+		}
+	}
 	return fmt.Sprintf("%v", node.Value)
+}
+
+func escapeQueryBytes(value []byte) string {
+	var builder strings.Builder
+	for _, b := range value {
+		if b < 0x20 || b == 0x7f || b >= 0x80 {
+			fmt.Fprintf(&builder, `\x%02x`, b)
+			continue
+		}
+		builder.WriteByte(b)
+	}
+	return builder.String()
 }
 
 func toInt(node *Node) (int, bool) {

@@ -28,6 +28,14 @@ func astToMatchers(node *dsl.Node) *ConvertResult {
 	if node == nil {
 		return &ConvertResult{MatchersCondition: "or"}
 	}
+	// Lift a top-level OR out of an AND (distributive expansion) so each branch
+	// becomes its own matcher under matchers-condition: or, instead of one DSL
+	// matcher holding the OR. govaluate aborts the *whole* expression when one
+	// branch's function errors (e.g. compare_versions on an empty version
+	// extract from xray_regex_group); splitting lets nuclei evaluate each
+	// branch as an independent matcher, so one side erroring can't kill the
+	// other. A && (B || C) -> (A && B) || (A && C). Guarded in distributeOrOverAnd.
+	node = distributeOrOverAnd(node)
 	r := &ConvertResult{MatchersCondition: "or"}
 
 	topOp, children := flattenBinaryOp(node)
@@ -82,6 +90,63 @@ func flattenBinaryOp(node *dsl.Node) (string, []*dsl.Node) {
 	return op, result
 }
 
+// distributeOrOverAnd rewrites a top-level AND that has an OR subtree so the OR
+// becomes the top-level operator: A && (B || C) -> (A && B) || (A && C). After
+// this, astToMatchers emits one matcher per branch under matchers-condition:
+// "or", evaluated by nuclei independently rather than as one govaluate
+// expression (where a single branch's function error aborts the rest).
+//
+// Guarded against combinatorial blowup: only a single OR subtree under a
+// top-level AND is expanded (multiple would cartesian-product), and the OR must
+// flatten to between 2 and 8 branches. Anything else is returned unchanged and
+// falls back to the single-DSL-matcher path (tolerated by compare_versions).
+func distributeOrOverAnd(node *dsl.Node) *dsl.Node {
+	if node == nil || node.Type != dsl.NodeBinaryOp || node.Op != "&&" {
+		return node
+	}
+	_, andChildren := flattenBinaryOp(node)
+
+	orIdx := -1
+	for i, c := range andChildren {
+		if c.Type == dsl.NodeBinaryOp && c.Op == "||" {
+			if orIdx != -1 {
+				return node // more than one OR subtree under the AND: would explode
+			}
+			orIdx = i
+		}
+	}
+	if orIdx == -1 {
+		return node // no OR nested under this AND: nothing to distribute
+	}
+
+	_, orBranches := flattenBinaryOp(andChildren[orIdx])
+	if len(orBranches) < 2 || len(orBranches) > 8 {
+		return node // cap the number of emitted matchers
+	}
+
+	var common []*dsl.Node
+	for i, c := range andChildren {
+		if i != orIdx {
+			common = append(common, c)
+		}
+	}
+
+	var result *dsl.Node
+	for _, b := range orBranches {
+		branch := b
+		// reattach the shared AND conditions in front of this OR branch
+		for i := len(common) - 1; i >= 0; i-- {
+			branch = dsl.BinaryOp("&&", common[i], branch)
+		}
+		if result == nil {
+			result = branch
+		} else {
+			result = dsl.BinaryOp("||", result, branch)
+		}
+	}
+	return result
+}
+
 func mergeCompatibleNodes(nodes []*dsl.Node, topOp string) []*dsl.Node {
 	if len(nodes) <= 1 {
 		return nodes
@@ -111,20 +176,12 @@ func mergeCompatibleNodes(nodes []*dsl.Node, topOp string) []*dsl.Node {
 	}
 
 	for _, node := range nodes {
-		if node.Type == dsl.NodeCall &&
-			(node.FuncName == "contains" || node.FuncName == "icontains") &&
-			len(node.Children) == 2 {
-
-			w := literalString(node.Children[1])
-			part := variableToPartWithWord(node.Children[0], w)
-			if part == "" {
-				if currentKey != nil {
-					flush()
-				}
-				result = append(result, node)
-				continue
+		if part, _, ci, ok := containsWordParts(node); ok {
+			fn := "contains"
+			if ci {
+				fn = "icontains"
 			}
-			key := groupKey{fn: node.FuncName, part: part}
+			key := groupKey{fn: fn, part: part}
 
 			if currentKey != nil && *currentKey == key {
 				currentGroup = append(currentGroup, node)
@@ -149,32 +206,19 @@ func mergeCompatibleNodes(nodes []*dsl.Node, topOp string) []*dsl.Node {
 }
 
 func nodeToMatcher(node *dsl.Node) *operators.Matcher {
-	if part, hash, ok := faviconContains(node); ok {
-		return &operators.Matcher{Type: "favicon", Part: part, Hash: []string{hash}}
-	}
-
 	// title contains/icontains → regex on body scoped to <title> tag
-	if node.Type == dsl.NodeCall && (node.FuncName == "contains" || node.FuncName == "icontains") && len(node.Children) == 2 {
-		if isTitleVar(node.Children[0]) {
-			word := literalString(node.Children[1])
-			if word != "" {
-				pattern := "(?i)<title>[^<]*" + regexQuote(word) + "[^<]*</title>"
-				return &operators.Matcher{Type: "regex", Part: "body", Regex: []string{pattern}}
-			}
-		}
+	if word, ok := titleContainsWord(node); ok {
+		pattern := "(?i)<title>[^<]*" + regexQuote(word) + "[^<]*</title>"
+		return &operators.Matcher{Type: "regex", Part: "body", Regex: []string{pattern}}
 	}
 
 	// contains/icontains(part, word) → word matcher
-	if node.Type == dsl.NodeCall && (node.FuncName == "contains" || node.FuncName == "icontains") && len(node.Children) == 2 {
-		word := literalString(node.Children[1])
-		part := variableToPartWithWord(node.Children[0], word)
-		if part != "" && word != "" {
-			m := &operators.Matcher{Type: "word", Part: part, Words: []string{word}}
-			if node.FuncName == "icontains" {
-				m.CaseInsensitive = true
-			}
-			return m
+	if part, word, ci, ok := containsWordParts(node); ok {
+		m := &operators.Matcher{Type: "word", Part: part, Words: []string{word}}
+		if ci {
+			m.CaseInsensitive = true
 		}
+		return m
 	}
 
 	// regex(pattern, part) → regex matcher
@@ -204,6 +248,12 @@ func nodeToMatcher(node *dsl.Node) *operators.Matcher {
 		}
 	}
 
+	// contains(favicon_hash, "X") → favicon matcher
+	if hash, negate, ok := faviconContainsHash(node); ok {
+		m := &operators.Matcher{Type: "favicon", Part: "favicon_hash", Hash: []string{hash}, Negative: negate}
+		return m
+	}
+
 	// status_code == N → status matcher
 	if node.Type == dsl.NodeBinaryOp && node.Op == "==" && isStatusCode(node.Children[0]) {
 		if code := literalInt(node.Children[1]); code != 0 {
@@ -215,20 +265,6 @@ func nodeToMatcher(node *dsl.Node) *operators.Matcher {
 	if node.Type == dsl.NodeBinaryOp && node.Op == "!=" && isStatusCode(node.Children[0]) {
 		if code := literalInt(node.Children[1]); code != 0 {
 			return &operators.Matcher{Type: "status", Status: []int{code}, Negative: true}
-		}
-	}
-
-	// favicon_hash(...) == N → favicon matcher
-	if node.Type == dsl.NodeBinaryOp && (node.Op == "==" || node.Op == "!=") {
-		if node.Children[0].Type == dsl.NodeCall && node.Children[0].FuncName == "favicon_hash" {
-			hash := literalAny(node.Children[1])
-			if hash != "" {
-				m := &operators.Matcher{Type: "favicon", Hash: []string{hash}}
-				if node.Op == "!=" {
-					m.Negative = true
-				}
-				return m
-			}
 		}
 	}
 
@@ -282,9 +318,6 @@ func nodeToMatcher(node *dsl.Node) *operators.Matcher {
 		if m := tryMergeStatusMatchers(node); m != nil {
 			return m
 		}
-		if m := tryMergeFaviconMatchers(node); m != nil {
-			return m
-		}
 	}
 
 	return nil
@@ -299,12 +332,8 @@ func tryMergeWordMatchers(node *dsl.Node) *operators.Matcher {
 	var words []string
 	var ci *bool
 	for _, child := range children {
-		if child.Type != dsl.NodeCall || (child.FuncName != "contains" && child.FuncName != "icontains") || len(child.Children) != 2 {
-			return nil
-		}
-		w := literalString(child.Children[1])
-		p := variableToPartWithWord(child.Children[0], w)
-		if p == "" || w == "" {
+		p, w, icase, ok := containsWordParts(child)
+		if !ok {
 			return nil
 		}
 		if part == "" {
@@ -312,7 +341,6 @@ func tryMergeWordMatchers(node *dsl.Node) *operators.Matcher {
 		} else if part != p {
 			return nil
 		}
-		icase := child.FuncName == "icontains"
 		if ci == nil {
 			ci = &icase
 		} else if *ci != icase {
@@ -354,59 +382,6 @@ func tryMergeStatusMatchers(node *dsl.Node) *operators.Matcher {
 	return &operators.Matcher{Type: "status", Status: codes}
 }
 
-func tryMergeFaviconMatchers(node *dsl.Node) *operators.Matcher {
-	op, children := flattenBinaryOp(node)
-	var hashes []string
-	part := ""
-	for _, child := range children {
-		if child.Type == dsl.NodeBinaryOp && child.Op == "==" &&
-			child.Children[0].Type == dsl.NodeCall && child.Children[0].FuncName == "favicon_hash" {
-			hash := literalAny(child.Children[1])
-			if hash != "" {
-				hashes = append(hashes, hash)
-				continue
-			}
-		}
-		if p, hash, ok := faviconContains(child); ok {
-			if part == "" {
-				part = p
-			} else if part != p {
-				return nil
-			}
-			hashes = append(hashes, hash)
-			continue
-		}
-		return nil
-	}
-	if len(hashes) < 2 {
-		return nil
-	}
-	m := &operators.Matcher{Type: "favicon", Part: part, Hash: hashes}
-	if op == "&&" {
-		m.Condition = "and"
-	}
-	return m
-}
-
-func faviconContains(node *dsl.Node) (string, string, bool) {
-	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "contains" || len(node.Children) != 2 {
-		return "", "", false
-	}
-	partNode := node.Children[0]
-	if partNode.Type != dsl.NodeVariable {
-		return "", "", false
-	}
-	part, ok := partNode.Value.(string)
-	if !ok || (part != "favicon_hash" && part != "body_favicon_hash") {
-		return "", "", false
-	}
-	hash := literalString(node.Children[1])
-	if hash == "" {
-		return "", "", false
-	}
-	return part, hash, true
-}
-
 // variableToPart maps an AST variable to a matcher part.
 // Body/all_headers map directly. Cert fields and raw_cert are first-class
 // response parts populated by the shared tlsx runtime. Individual header
@@ -441,6 +416,62 @@ func variableToPartWithWord(varNode *dsl.Node, word string) string {
 	return variableToPart(varNode)
 }
 
+func containsWordParts(node *dsl.Node) (part string, word string, caseInsensitive bool, ok bool) {
+	left, right, caseInsensitive, ok := containsCallParts(node)
+	if !ok {
+		return "", "", false, false
+	}
+	word = literalString(right)
+	if word == "" {
+		return "", "", false, false
+	}
+	part = variableToPartWithWord(left, word)
+	if part == "" {
+		return "", "", false, false
+	}
+	return part, word, caseInsensitive, true
+}
+
+func titleContainsWord(node *dsl.Node) (string, bool) {
+	left, right, _, ok := containsCallParts(node)
+	if !ok || !isTitleVar(left) {
+		return "", false
+	}
+	word := literalString(right)
+	return word, word != ""
+}
+
+func containsCallParts(node *dsl.Node) (left *dsl.Node, right *dsl.Node, caseInsensitive bool, ok bool) {
+	if node == nil || node.Type != dsl.NodeCall || len(node.Children) != 2 {
+		return nil, nil, false, false
+	}
+	switch node.FuncName {
+	case "contains":
+	case "icontains":
+		caseInsensitive = true
+	default:
+		return nil, nil, false, false
+	}
+	left = node.Children[0]
+	right = node.Children[1]
+	if unwrapped, lowered := unwrapToLowerCall(left); lowered {
+		left = unwrapped
+		caseInsensitive = true
+	}
+	if unwrapped, lowered := unwrapToLowerCall(right); lowered {
+		right = unwrapped
+		caseInsensitive = true
+	}
+	return left, right, caseInsensitive, true
+}
+
+func unwrapToLowerCall(node *dsl.Node) (*dsl.Node, bool) {
+	if node != nil && node.Type == dsl.NodeCall && node.FuncName == "to_lower" && len(node.Children) == 1 {
+		return node.Children[0], true
+	}
+	return node, false
+}
+
 func isStatusCode(node *dsl.Node) bool {
 	return node.Type == dsl.NodeVariable && node.Value.(string) == "status_code"
 }
@@ -471,13 +502,6 @@ func literalInt(node *dsl.Node) int {
 	return 0
 }
 
-func literalAny(node *dsl.Node) string {
-	if node.Type == dsl.NodeLiteral {
-		return fmt.Sprintf("%v", node.Value)
-	}
-	return ""
-}
-
 // isTooPermissive detects matchers that are too broad to stand alone in an OR.
 // e.g. status==200 alone would match almost every website.
 func isTooPermissive(m *operators.Matcher) bool {
@@ -502,14 +526,9 @@ func TransformTitleToBodyRegex(node *dsl.Node) *dsl.Node {
 	if node == nil {
 		return nil
 	}
-	if node.Type == dsl.NodeCall &&
-		(node.FuncName == "contains" || node.FuncName == "icontains") &&
-		len(node.Children) == 2 && isTitleVar(node.Children[0]) {
-		word := literalString(node.Children[1])
-		if word != "" {
-			pattern := "(?i)<title>[^<]*" + regexQuote(word) + "[^<]*</title>"
-			return dsl.Call("regex", dsl.Literal(pattern), dsl.Variable("body"))
-		}
+	if word, ok := titleContainsWord(node); ok {
+		pattern := "(?i)<title>[^<]*" + regexQuote(word) + "[^<]*</title>"
+		return dsl.Call("regex", dsl.Literal(pattern), dsl.Variable("body"))
 	}
 	if node.Type == dsl.NodeBinaryOp && node.Op == "==" && isTitleVar(node.Children[0]) {
 		val := literalString(node.Children[1])
@@ -528,6 +547,31 @@ func TransformTitleToBodyRegex(node *dsl.Node) *dsl.Node {
 		}
 	}
 	return clone
+}
+
+// faviconContainsHash detects contains(favicon_hash, "X"), optionally negated.
+func faviconContainsHash(node *dsl.Node) (string, bool, bool) {
+	negate := false
+	if node != nil && node.Type == dsl.NodeUnaryOp && node.Op == "!" && len(node.Children) == 1 {
+		negate = true
+		node = node.Children[0]
+	}
+	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "contains" || len(node.Children) != 2 {
+		return "", false, false
+	}
+	partNode := node.Children[0]
+	if partNode.Type != dsl.NodeVariable {
+		return "", false, false
+	}
+	part, ok := partNode.Value.(string)
+	if !ok || part != "favicon_hash" {
+		return "", false, false
+	}
+	hash := literalString(node.Children[1])
+	if hash == "" {
+		return "", false, false
+	}
+	return hash, negate, true
 }
 
 func isEmptyStringLiteral(node *dsl.Node) bool {

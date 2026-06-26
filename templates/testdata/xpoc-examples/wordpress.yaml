@@ -18,7 +18,7 @@ http:
           type: favicon
       method: GET
       path:
-        - '{{BaseURL}}/'
+        - '{{BaseURL}}/favicon.ico'
 id: wordpress-wordpress
 info:
     author: xray-converter

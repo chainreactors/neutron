@@ -12,7 +12,7 @@ http:
           type: regex
       matchers:
         - dsl:
-            - (((((contains(body_1, "WCMAnt:param=") || contains(body_1, "URL=/wcm")) || icontains(body_1, "window.location.href = /wcm;")) || icontains(header_1, "com.trs.idm.coSessionId"))) && (true))
+            - (((((contains(body_1, "WCMAnt:param=") || contains(body_1, "URL=/wcm")) || contains(to_lower(body_1), "window.location.href = /wcm;")) || contains(to_lower(header_1), "com.trs.idm.cosessionid"))) && (true))
           type: dsl
       method: GET
       path:

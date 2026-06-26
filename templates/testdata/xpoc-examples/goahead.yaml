@@ -1,7 +1,7 @@
 http:
     - matchers:
         - dsl:
-            - icontains(server, "GoAhead")
+            - contains(to_lower(server), "goahead")
           type: dsl
       method: GET
       path:

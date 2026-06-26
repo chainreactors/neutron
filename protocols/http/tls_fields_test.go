@@ -20,7 +20,7 @@ import (
 )
 
 // TestCertFieldRegistryParity guards the single-source-of-truth invariant:
-// every xray cert key declared in common.XrayCertFields must actually be
+// every xray cert key declared in common.CertFields must actually be
 // populated by the shared tlsx.FillCertDSL path that the HTTP runtime uses.
 // This prevents the converter (which decides what cert subfields are evaluable)
 // and the runtime (which fills the keys) from drifting apart.
@@ -28,9 +28,9 @@ func TestCertFieldRegistryParity(t *testing.T) {
 	data := map[string]interface{}{}
 	addTLSCertFields(data, newCertTestResponse(t))
 
-	for sub, key := range common.XrayCertFields {
+	for sub, key := range common.CertFields {
 		if _, ok := data[key]; !ok {
-			t.Errorf("XrayCertFields[%q] -> %q not populated by addTLSCertFields", sub, key)
+			t.Errorf("CertFields[%q] -> %q not populated by addTLSCertFields", sub, key)
 		}
 	}
 

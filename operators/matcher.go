@@ -100,9 +100,12 @@ func (m *Matcher) CompileMatchers() error {
 	if !ok {
 		return fmt.Errorf("unknown matcher type specified: %s", m.Type)
 	}
-	// By default, match on body if user hasn't provided any specific items
 	if m.Part == "" {
-		m.Part = "body"
+		if m.matcherType == FaviconMatcher {
+			m.Part = "favicon_hash"
+		} else {
+			m.Part = "body"
+		}
 	}
 
 	// Compile the regexes
@@ -311,7 +314,6 @@ func (m *Matcher) MatchBinary(corpus string) (bool, []string) {
 
 // MatchDSL matches on a generic map result
 func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
-	// Iterate over all the expressions accepted as valid
 	for i, expression := range m.dslCompiled {
 		// Fast path: an expression with no template markers ({{...}} / §...§) is
 		// returned unchanged by common.Evaluate, so re-resolving and recompiling it
@@ -367,58 +369,6 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 	return false
 }
 
-// MatchFavicon matches a favicon hash check against a corpus of favicon hashes
-// faviconData should be a map[string]interface{} where keys are URLs and values are hash arrays
-func (m *Matcher) MatchFavicon(faviconData map[string]interface{}) (bool, []string) {
-	var matchedHashes []string
-
-	// Iterate over all favicon URLs and their hashes
-	for url, hashData := range faviconData {
-		var hashes []string
-
-		// Handle different hash data formats
-		switch v := hashData.(type) {
-		case []string:
-			hashes = v
-		case []interface{}:
-			for _, h := range v {
-				if hashStr, ok := h.(string); ok {
-					hashes = append(hashes, hashStr)
-				}
-			}
-		default:
-			continue
-		}
-
-		// Check if any template hash matches any favicon hash
-		for _, templateHash := range m.Hash {
-			for _, faviconHash := range hashes {
-				if templateHash == faviconHash {
-					matchedHashes = append(matchedHashes, faviconHash, url)
-					// If OR condition and not match_all, return immediately
-					if m.condition == ORCondition && !m.MatchAll {
-						return true, matchedHashes
-					}
-				}
-			}
-		}
-	}
-
-	// If we have matches and we're in match_all mode or AND condition
-	if len(matchedHashes) > 0 {
-		if m.MatchAll || m.condition == ANDCondition {
-			// For AND condition, check if we matched all template hashes
-			if m.condition == ANDCondition && len(matchedHashes)/2 < len(m.Hash) {
-				return false, []string{}
-			}
-			return true, matchedHashes
-		}
-		return true, matchedHashes
-	}
-
-	return false, []string{}
-}
-
 // MatchHashValues matches hash strings against matcher.Hash.
 func (m *Matcher) MatchHashValues(values []string) (bool, []string) {
 	if len(m.Hash) == 0 || len(values) == 0 {
@@ -441,17 +391,14 @@ func (m *Matcher) MatchHashValues(values []string) (bool, []string) {
 			}
 			continue
 		}
-		if m.condition == ANDCondition || m.MatchAll {
+		if m.condition == ANDCondition {
 			return false, []string{}
 		}
-	}
-	if len(matched) == 0 {
-		return false, []string{}
 	}
 	if m.condition == ANDCondition || m.MatchAll {
 		return len(matched) == len(m.Hash), matched
 	}
-	return true, matched
+	return len(matched) > 0, matched
 }
 
 func (m *Matcher) SetCompiledData(data interface{}) { m.compiledData = data }

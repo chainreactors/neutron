@@ -215,6 +215,9 @@ func applyExpressionVariableHints(expr string, values map[string]string) {
 }
 
 func outputVariableName(node *dsl.Node) (string, bool) {
+	if unwrapped := unwrapTransparentStringCall(node); unwrapped != node {
+		return outputVariableName(unwrapped)
+	}
 	if node == nil || node.Type != dsl.NodeVariable {
 		return "", false
 	}
@@ -286,6 +289,14 @@ func mutateComparison(node *dsl.Node, resp *ResponseSpec, hints groupHints, opt 
 			return
 		}
 	}
+	if isBodyLengthExpr(left) {
+		if n, ok := literalInt(right); ok {
+			if chooseBodyLength(node.Op, n) {
+				resp.addPart("body", "valid page")
+				return
+			}
+		}
+	}
 	if isDurationVar(left) || isLatencyVar(left) {
 		if n, ok := literalFloat(right); ok {
 			delay := chooseDelay(node.Op, n, isLatencyVar(left))
@@ -343,6 +354,27 @@ func isContentLengthExpr(node *dsl.Node) bool {
 	return node.Type == dsl.NodeCall && node.FuncName == "to_number" && len(node.Children) == 1 && isContentLengthExpr(node.Children[0])
 }
 
+func isBodyLengthExpr(node *dsl.Node) bool {
+	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "len" || len(node.Children) != 1 {
+		return false
+	}
+	child := unwrapTransparentStringCall(node.Children[0])
+	return child != nil && child.Type == dsl.NodeVariable && fmt.Sprint(child.Value) == "body"
+}
+
+func chooseBodyLength(op string, n int) bool {
+	switch op {
+	case ">":
+		return n >= 0
+	case ">=":
+		return n > 0
+	case "!=":
+		return n == 0
+	default:
+		return false
+	}
+}
+
 func mutateCall(node *dsl.Node, resp *ResponseSpec, hints groupHints, opt Options, unsupported *[]string) {
 	switch node.FuncName {
 	case "contains", "icontains":
@@ -385,19 +417,12 @@ func mutateCall(node *dsl.Node, resp *ResponseSpec, hints groupHints, opt Option
 				}
 			}
 		}
-	case "xray_regex_group":
+	case "regex_group":
 		if pattern, _, part, ok := regexGroupRef(node); ok {
 			addRegexSample(resp, pattern, part, hints)
 		}
-	case "xray_version_less", "xray_version_greater", "xray_version_equal", "xray_version_in":
+	case "compare_versions":
 		mutateVersionCall(node, resp, hints)
-	case "xray_valid_page":
-		resp.StatusCode = 200
-		resp.addPart("body", "valid page")
-	case "xray_gt", "xray_gte", "xray_lt", "xray_lte":
-		if len(node.Children) == 2 {
-			mutateComparison(dsl.BinaryOp(xrayCompareOp(node.FuncName), node.Children[0], node.Children[1]), resp, hints, opt, unsupported)
-		}
 	case "wait_for":
 		return
 	default:
@@ -412,30 +437,15 @@ func decodedVariablePart(node *dsl.Node, fn string) string {
 	return variablePart(node.Children[0])
 }
 
-func xrayCompareOp(name string) string {
-	switch name {
-	case "xray_gt":
-		return ">"
-	case "xray_gte":
-		return ">="
-	case "xray_lt":
-		return "<"
-	case "xray_lte":
-		return "<="
-	default:
-		return "=="
-	}
-}
-
 func mutateVersionCall(node *dsl.Node, resp *ResponseSpec, hints groupHints) {
-	if len(node.Children) != 2 {
+	if len(node.Children) < 2 {
 		return
 	}
-	target, ok := literalString(node.Children[1])
+	target, ok := versionConstraints(node.Children[1:])
 	if !ok {
 		return
 	}
-	value := versionWitness(node.FuncName, target)
+	value := versionWitness(target)
 	if value == "" {
 		return
 	}
@@ -456,10 +466,10 @@ func collectGroupHints(node *dsl.Node) groupHints {
 		if n == nil {
 			return
 		}
-		if n.Type == dsl.NodeCall && strings.HasPrefix(n.FuncName, "xray_version_") && len(n.Children) == 2 {
+		if n.Type == dsl.NodeCall && n.FuncName == "compare_versions" && len(n.Children) >= 2 {
 			if pattern, group, _, ok := regexGroupRef(n.Children[0]); ok {
-				if target, ok := literalString(n.Children[1]); ok {
-					if value := versionWitness(n.FuncName, target); value != "" {
+				if target, ok := versionConstraints(n.Children[1:]); ok {
+					if value := versionWitness(target); value != "" {
 						hints[regexGroupKey(pattern, group)] = value
 					}
 				}
@@ -485,42 +495,43 @@ func collectGroupHints(node *dsl.Node) groupHints {
 	return hints
 }
 
-func versionWitness(fn, target string) string {
-	target = strings.TrimSpace(target)
-	switch fn {
-	case "xray_version_equal":
-		return strings.TrimLeft(strings.TrimPrefix(target, "="), " ")
-	case "xray_version_greater":
-		return bumpVersion(strings.TrimLeft(strings.TrimPrefix(target, ">"), " "))
-	case "xray_version_less":
-		return lowerVersion(strings.TrimLeft(strings.TrimPrefix(target, "<"), " "))
-	case "xray_version_in":
-		if strings.Contains(target, ">") && strings.Contains(target, "<") {
-			parts := strings.Split(target, ",")
-			base := "1.0.0"
-			for _, part := range parts {
-				part = strings.TrimSpace(part)
-				if strings.HasPrefix(part, ">=") {
-					base = strings.TrimSpace(strings.TrimPrefix(part, ">="))
-				} else if strings.HasPrefix(part, ">") {
-					base = bumpVersion(strings.TrimSpace(strings.TrimPrefix(part, ">")))
-				}
-			}
-			return base
+func versionConstraints(nodes []*dsl.Node) (string, bool) {
+	parts := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		value, ok := literalString(node)
+		if !ok {
+			return "", false
 		}
-		if strings.Contains(target, "<") {
-			return lowerVersion(strings.TrimLeft(strings.TrimLeft(target, "<="), " "))
-		}
-		if strings.Contains(target, ">") {
-			return bumpVersion(strings.TrimLeft(strings.TrimLeft(target, ">="), " "))
-		}
-		if strings.Contains(target, "=") {
-			return strings.TrimLeft(strings.TrimPrefix(target, "="), " ")
-		}
-		return target
-	default:
-		return ""
+		parts = append(parts, value)
 	}
+	return strings.Join(parts, ","), true
+}
+
+func versionWitness(target string) string {
+	target = strings.TrimSpace(target)
+	if strings.Contains(target, ">") && strings.Contains(target, "<") {
+		parts := strings.Split(target, ",")
+		base := "1.0.0"
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(part, ">=") {
+				base = strings.TrimSpace(strings.TrimPrefix(part, ">="))
+			} else if strings.HasPrefix(part, ">") {
+				base = bumpVersion(strings.TrimSpace(strings.TrimPrefix(part, ">")))
+			}
+		}
+		return base
+	}
+	if strings.Contains(target, "<") {
+		return lowerVersion(strings.TrimLeft(strings.TrimLeft(target, "<="), " "))
+	}
+	if strings.Contains(target, ">") {
+		return bumpVersion(strings.TrimLeft(strings.TrimLeft(target, ">="), " "))
+	}
+	if strings.Contains(target, "=") {
+		return strings.TrimLeft(strings.TrimPrefix(target, "="), " ")
+	}
+	return target
 }
 
 func bumpVersion(v string) string {
@@ -1168,6 +1179,7 @@ func responsePart(expr string) string {
 }
 
 func variablePart(node *dsl.Node) string {
+	node = unwrapTransparentStringCall(node)
 	if node == nil || node.Type != dsl.NodeVariable {
 		return ""
 	}
@@ -1185,8 +1197,20 @@ func variablePart(node *dsl.Node) string {
 	}
 }
 
+func unwrapTransparentStringCall(node *dsl.Node) *dsl.Node {
+	for node != nil && node.Type == dsl.NodeCall && len(node.Children) == 1 {
+		switch node.FuncName {
+		case "to_lower", "to_upper", "trim_space", "to_string":
+			node = node.Children[0]
+		default:
+			return node
+		}
+	}
+	return node
+}
+
 func regexGroupRef(node *dsl.Node) (string, string, string, bool) {
-	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "xray_regex_group" || len(node.Children) != 3 {
+	if node == nil || node.Type != dsl.NodeCall || node.FuncName != "regex_group" || len(node.Children) != 3 {
 		return "", "", "", false
 	}
 	pattern, ok := literalString(node.Children[0])
@@ -1214,6 +1238,14 @@ func isDurationVar(node *dsl.Node) bool {
 
 func isLatencyVar(node *dsl.Node) bool {
 	return node != nil && node.Type == dsl.NodeVariable && fmt.Sprint(node.Value) == "latency"
+}
+
+func isSubtractionWithLatency(node *dsl.Node) bool {
+	if node == nil || len(node.Children) != 2 || !isLatencyVar(node.Children[0]) {
+		return false
+	}
+	return (node.Type == dsl.NodeBinaryOp && node.Op == "-") ||
+		(node.Type == dsl.NodeCall && node.FuncName == "sub")
 }
 
 func literalString(node *dsl.Node) (string, bool) {
@@ -1373,7 +1405,7 @@ func comparisonDelay(node *dsl.Node, resp *ResponseSpec) (time.Duration, bool) {
 		return 0, false
 	}
 	left := node.Children[0]
-	if left.Type != dsl.NodeCall || left.FuncName != "xray_sub" || len(left.Children) != 2 || !isLatencyVar(left.Children[0]) {
+	if !isSubtractionWithLatency(left) {
 		return 0, false
 	}
 	offsetRaw, err := common.Eval(left.Children[1].String(), resp.event())
@@ -1472,10 +1504,6 @@ func initialValues(poc *convert.XrayPOC) (map[string]string, map[string]bool) {
 	for k, raw := range poc.Set {
 		s := strings.TrimSpace(fmt.Sprint(raw))
 		if s == "" {
-			continue
-		}
-		if isHarnessRootURLExpression(s) {
-			wildcards[k] = true
 			continue
 		}
 		if isHarnessURLValue(s) {
@@ -1833,19 +1861,6 @@ func splitConcatExpr(expr string) []string {
 	}
 	parts = append(parts, expr[start:])
 	return parts
-}
-
-func isHarnessRootURLExpression(expr string) bool {
-	compact := strings.Replace(strings.Replace(strings.TrimSpace(expr), " ", "", -1), "'", `"`, -1)
-	switch compact {
-	case `response.url.scheme+"://"+response.url.domain`,
-		`request.url.scheme+"://"+request.url.domain`,
-		`response.url.scheme+"://"+response.url.host`,
-		`request.url.scheme+"://"+request.url.host`:
-		return true
-	default:
-		return false
-	}
 }
 
 func isHarnessURLValue(expr string) bool {

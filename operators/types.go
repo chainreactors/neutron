@@ -23,7 +23,7 @@ const (
 var extractorMappings = map[string]ExtractorType{
 	"regex": RegexExtractor,
 	"kval":  KValExtractor,
-	"dsl": DSLExtractor,
+	"dsl":   DSLExtractor,
 }
 
 // GetType returns the type of the matcher

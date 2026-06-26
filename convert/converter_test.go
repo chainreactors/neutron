@@ -3,6 +3,11 @@ package convert
 import (
 	"strings"
 	"testing"
+
+	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/neutron/common/dsl"
+	"github.com/chainreactors/neutron/templates"
+	"gopkg.in/yaml.v3"
 )
 
 func TestParseToAST(t *testing.T) {
@@ -13,11 +18,11 @@ func TestParseToAST(t *testing.T) {
 	}{
 		{"body_contains", `response.body_string.contains("hello")`, `contains(body, "hello")`},
 		{"status_and_body", `response.status == 200 && response.body.contains("test")`, `((status_code == 200) && contains(body, "test"))`},
-		{"header_access", `response.headers["Server"].contains("Apache")`, `contains(server, "Apache")`},
+		{"header_access", `response.headers["Server"].contains("Apache")`, `(contains(all_headers, "server:") && contains(server, "Apache"))`},
 		{"raw_header_contains", `response.raw_header.bcontains(b"X-Jenkins")`, `contains(header, "X-Jenkins")`},
 		{"raw_header_reverse_regex", `"Location: https://example.com".bmatches(response.raw_header)`, `regex("Location: https://example.com", header)`},
 		{"header_in", `"Server" in response.headers`, `contains(all_headers, "server:")`},
-		{"icontains", `response.body.icontains("Test")`, `icontains(body, "Test")`},
+		{"icontains", `response.body.icontains("Test")`, `contains(to_lower(body), "test")`},
 		{"regex", `response.body_string.matches("ver\\d+")`, `regex("ver\\d+", body)`},
 		{"reverse_matches", `"pattern".matches(response.body_string)`, `regex("pattern", body)`},
 		{"favicon", `faviconHash(response.getIconContent()) == -297069493`, `contains(favicon_hash, "-297069493")`},
@@ -28,47 +33,46 @@ func TestParseToAST(t *testing.T) {
 		{"title_to_title", `response.title_string.contains("Login")`, `contains(title, "Login")`},
 		{"string_title_contains", `string(response.title).contains("Sindoh")`, `contains(title, "Sindoh")`},
 		{"literal_contains", `"a".contains("b")`, `contains("a", "b")`},
-		{"cert_subject", `response.cert.issuer.contains("test")`, `icontains(cert_issuer, "test")`},
-		{"cert_time_convert", `timeConvert(response.cert.not_before, "2006-01-02 03:04:05").icontains("2020")`, `icontains(time_convert(cert_not_before, concat("2", "0", "0", "6", "-", "0", "1", "-", "0", "2", " ", "0", "3", ":", "0", "4", ":", "0", "5")), "2020")`},
+		{"cert_subject", `response.cert.issuer.contains("test")`, `contains(to_lower(cert_issuer), "test")`},
+		{"cert_time_convert", `timeConvert(response.cert.not_before, "2006-01-02 03:04:05").icontains("2020")`, `contains(to_lower(time_convert(cert_not_before, hex_decode("323030362d30312d30322030333a30343a3035"))), "2020")`},
 		// cert subfields beyond subject/issuer used to be silently dropped; they
-		// now resolve via common.XrayCertFields (the single source of truth).
-		// contains() on cert.* is folded to icontains() because X.509 DN casing
-		// is not semantic (see caseFoldCertMatch).
-		{"cert_dnsnames", `response.cert.dnsnames.contains("ingress-nginx")`, `icontains(cert_dnsnames, "ingress-nginx")`},
-		{"cert_serial", `response.cert.serial.contains("12")`, `icontains(cert_serial, "12")`},
-		{"cert_common_name", `response.cert.common_name.contains("leaf")`, `icontains(cert_common_name, "leaf")`},
-		{"cert_cn_alias", `response.cert.cn.contains("leaf")`, `icontains(cert_common_name, "leaf")`},
-		{"cert_organization", `response.cert.organization.contains("Acme")`, `icontains(cert_organization, "Acme")`},
-		{"cert_org_alias", `response.cert.org.contains("Acme")`, `icontains(cert_organization, "Acme")`},
-		{"cert_icontains_idempotent", `response.cert.issuer.icontains("RG-SMP")`, `icontains(cert_issuer, "RG-SMP")`},
+		// now resolve via common.CertFields (the single source of truth).
+		// contains() on cert.* is folded to case-insensitive contains because
+		// X.509 DN casing is not semantic (see caseFoldCertMatch).
+		{"cert_dnsnames", `response.cert.dnsnames.contains("ingress-nginx")`, `contains(to_lower(cert_dnsnames), "ingress-nginx")`},
+		{"cert_serial", `response.cert.serial.contains("12")`, `contains(to_lower(cert_serial), "12")`},
+		{"cert_common_name", `response.cert.common_name.contains("leaf")`, `contains(to_lower(cert_common_name), "leaf")`},
+		{"cert_cn_alias", `response.cert.cn.contains("leaf")`, `contains(to_lower(cert_common_name), "leaf")`},
+		{"cert_organization", `response.cert.organization.contains("Acme")`, `contains(to_lower(cert_organization), "acme")`},
+		{"cert_org_alias", `response.cert.org.contains("Acme")`, `contains(to_lower(cert_organization), "acme")`},
+		{"cert_icontains_idempotent", `response.cert.issuer.icontains("RG-SMP")`, `contains(to_lower(cert_issuer), "rg-smp")`},
 		{"raw_cert", `response.raw_cert.bcontains(b"RV042G")`, `contains(raw_cert, "RV042G")`},
 		{"size_to_len", `size(response.body) < 100`, `(len(body) < 100)`},
 		{"bytes_func", `response.body.bcontains(bytes("ITDR"))`, `contains(body, "ITDR")`},
 		{"translate_literal", `response.body.bcontains(b"{{ 'Common.Title' | translate }}")`, `contains(body, "{{ \'Common.Title\' | translate }}")`},
 		{"bytes_md5", `response.body.bcontains(bytes(md5(string(s1))))`, `contains(body, md5(to_string(s1)))`},
-		{"arithmetic_latency", `response.latency - r0latency >= sleepSecond1 * 1000 - 1000`, `xray_gte(xray_sub(latency, r0latency), xray_sub(xray_mul(sleepSecond1, 1000), 1000))`},
-		{"latency_less_extracted", `response.latency < r1latency`, `xray_lt(latency, r1latency)`},
-		{"arithmetic_string", `response.body.contains(string(r1 * r2))`, `contains(body, to_string(xray_mul(r1, r2)))`},
+		{"arithmetic_latency", `response.latency - r0latency >= sleepSecond1 * 1000 - 1000`, `((latency - r0latency) >= ((sleepSecond1 * 1000) - 1000))`},
+		{"latency_less_extracted", `response.latency < r1latency`, `(latency < r1latency)`},
+		{"arithmetic_string", `response.body.contains(string(r1 * r2))`, `contains(body, to_string((r1 * r2)))`},
 		{"concat_string", `response.body.contains("<script>" + string(rand) + "</script>")`, `contains(body, concat(concat("<script>", to_string(rand)), "</script>"))`},
 		{"bstarts_with", `response.body.bstartsWith(bytes("Salted__"))`, `starts_with(body, "Salted__")`},
-		{"version_submatch", `"version\":\"(?P<version>.*)\"".submatch(response.body_string)["version"].versionEqual("8.0.0")`, `xray_version_equal(xray_regex_group("version\":\"(?P<version>.*)\"", body, "version"), "8.0.0")`},
-		{"version_in", `versionIn("Stable tag: (?P<version>[0-9.]+)".submatch(response.body_string)["version"],"<= 5.1.16")`, `xray_version_in(xray_regex_group("Stable tag: (?P<version>[0-9.]+)", body, "version"), "<= 5.1.16")`},
-		{"valid_page", `isValidPage(response)`, `xray_valid_page(status_code, body)`},
+		{"version_submatch", `"version\":\"(?P<version>.*)\"".submatch(response.body_string)["version"].versionEqual("8.0.0")`, `compare_versions(regex_group("version\":\"(?P<version>.*)\"", body, "version"), "=8.0.0")`},
+		{"version_in", `versionIn("Stable tag: (?P<version>[0-9.]+)".submatch(response.body_string)["version"],"<= 5.1.16")`, `compare_versions(regex_group("Stable tag: (?P<version>[0-9.]+)", body, "version"), "<= 5.1.16")`},
+		{"valid_page", `isValidPage(response)`, `(((status_code >= 200) && (status_code < 400)) && (len(trim_space(body)) > 0))`},
 		{"replace_all", `replaceAll(tmp, "\\", "/")`, `replace(tmp, "\\", "/")`},
 		{"randomstr_alias", `response.body.contains("x" + randomstr)`, `contains(body, concat("x", randstr))`},
-		{"sha_alias", `sha(str1, "sha1") + "=" + sha(str2, "sha1")`, `concat(concat(xray_sha(str1, "sha1"), "="), xray_sha(str2, "sha1"))`},
+		{"sha_alias", `sha(str1, "sha1") + "=" + sha(str2, "sha1")`, `concat(concat(sha1(str1), "="), sha1(str2))`},
 		// \xNN hex escape sequences
-		{"hex_escape_0c", `response.body.bcontains(b"\x0c")`, "contains(body, \"\\f\")"},
-		{"hex_escape_gzip", `response.body.bstartsWith(b"\x1F\x8B")`, "starts_with(body, \"\\x1f\\u008b\")"},
-		{"hex_escape_zip", `response.body.bstartsWith(b"PK\x03\x04")`, "starts_with(body, \"PK\\x03\\x04\")"},
-		{"hex_escape_null", `response.body.bcontains(b"SQLite format 3\x00")`, "contains(body, \"SQLite format 3\\x00\")"},
+		{"hex_escape_0c", `response.body.bcontains(b"\x0c")`, `contains(body, hex_decode("0c"))`},
+		{"hex_escape_gzip", `response.body.bstartsWith(b"\x1F\x8B")`, `starts_with(body, hex_decode("1f8b"))`},
+		{"hex_escape_zip", `response.body.bstartsWith(b"PK\x03\x04")`, `starts_with(body, hex_decode("504b0304"))`},
+		{"hex_escape_null", `response.body.bcontains(b"SQLite format 3\x00")`, `contains(body, hex_decode("53514c69746520666f726d6174203300"))`},
 		// triple-quoted raw strings
 		{"triple_quote_regex", `r'''(?i)<input\b.+?type=["']?file['"]?'''.bmatches(response.body)`, "regex(\"(?i)<input\\\\b.+?type=[\\\"\\']?file[\\'\\\"]?\", body)"},
 		// variable-indexed header access
 		{"header_var_access", `response.headers[rHeader].startsWith(r1)`, `contains(all_headers, r1)`},
-		// xray's dir() has no nuclei equivalent — convertFunctionCall expands it
-		// to neutron's replace_regex (NOT regex_replace, which is the upstream
-		// nuclei spelling). Locks the function name against future drift.
+		// xray's dir() has no direct nuclei equivalent; expand it to the
+		// nuclei-compatible replace_regex helper.
 		{"dir_expand", `dir("/static/ueditor.config.js")`, `replace_regex("/static/ueditor.config.js", "/[^/]*$", "/")`},
 		{"dir_expand_concat", `dir("/" + config_path)`, `replace_regex(concat("/", config_path), "/[^/]*$", "/")`},
 	}
@@ -94,6 +98,49 @@ func TestParseUnsupportedCertFieldErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unsupported xray response.cert.fingerprint") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestXrayTemplatePathPreservesRawPath(t *testing.T) {
+	// {{BaseURL}} prefix + raw path; single quotes are no longer escaped since
+	// the path is no longer routed through a govaluate expression.
+	got := xrayTemplatePath("/service/~iufo/a?x=1')WAITFOR%20DELAY%20'0:0:0'--")
+	want := `{{BaseURL}}/service/~iufo/a?x=1')WAITFOR%20DELAY%20'0:0:0'--`
+	if got != want {
+		t.Fatalf("got:  %s\nwant: %s", got, want)
+	}
+}
+
+func TestConvertAliasesXrayPathVariableStartingWithDigit(t *testing.T) {
+	xrayYAML := `
+name: fingerprint-test--numeric-path-variable
+detail:
+  fingerprint:
+    name: Numeric Path Variable
+transport: http
+set:
+  404Path: get404Path()
+rules:
+  r0:
+    request:
+      method: GET
+      path: /{{404Path}}
+    expression: response.status == 404
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "xray_404Path: '{{rand_text_alphanumeric(16)}}'") {
+		t.Fatalf("missing aliased 404Path variable:\n%s", s)
+	}
+	if strings.Contains(s, `concat("/", 404Path)`) || strings.Contains(s, "  404Path:") {
+		t.Fatalf("unaliased 404Path leaked into converted output:\n%s", s)
+	}
+	if !strings.Contains(s, `{{BaseURL}}/{{trim_prefix(xray_404Path, "/")}}`) {
+		t.Fatalf("numeric-leading path variable was not aliased in path expression:\n%s", s)
 	}
 }
 
@@ -137,37 +184,21 @@ func TestExprToMatchers(t *testing.T) {
 			},
 		},
 		{
-			"header_dsl", `response.headers['Server'].contains("Apache")`, 1, "or",
+			"header_dsl", `response.headers['Server'].contains("Apache")`, 2, "and",
 			func(t *testing.T, r *ConvertResult) {
-				m := r.Matchers[0]
-				if m.Type != "dsl" {
-					t.Errorf("expected dsl matcher for individual header, got %+v", m)
+				if r.Matchers[0].Type != "word" || r.Matchers[0].Part != "header" || r.Matchers[0].Words[0] != "server:" {
+					t.Errorf("expected header presence guard, got %+v", r.Matchers[0])
+				}
+				if r.Matchers[1].Type != "dsl" || r.Matchers[1].DSL[0] != `contains(server, "Apache")` {
+					t.Errorf("expected header value DSL matcher, got %+v", r.Matchers[1])
 				}
 			},
 		},
 		{
-			"favicon_hash", `faviconHash(response.getIconContent()) == -297069493`, 1, "or",
+			"favicon_hash_body", `faviconHash(response.body) == 123`, 1, "or",
 			func(t *testing.T, r *ConvertResult) {
 				m := r.Matchers[0]
-				if m.Type != "favicon" || m.Part != "favicon_hash" || m.Hash[0] != "-297069493" {
-					t.Errorf("got %+v", m)
-				}
-			},
-		},
-		{
-			"mmh3_favicon_content", `mmh3(response.getIconContent()) == -297069493`, 1, "or",
-			func(t *testing.T, r *ConvertResult) {
-				m := r.Matchers[0]
-				if m.Type != "favicon" || m.Part != "favicon_hash" || m.Hash[0] != "-297069493" {
-					t.Errorf("got %+v", m)
-				}
-			},
-		},
-		{
-			"body_favicon_hash", `faviconHash(response.body) == 123`, 1, "or",
-			func(t *testing.T, r *ConvertResult) {
-				m := r.Matchers[0]
-				if m.Type != "favicon" || m.Part != "body_favicon_hash" || m.Hash[0] != "123" {
+				if m.Type != "favicon" || len(m.Hash) != 1 || m.Hash[0] != "123" {
 					t.Errorf("got %+v", m)
 				}
 			},
@@ -176,7 +207,7 @@ func TestExprToMatchers(t *testing.T) {
 			"cert_word", `response.cert.issuer.contains("Example Corp")`, 1, "or",
 			func(t *testing.T, r *ConvertResult) {
 				m := r.Matchers[0]
-				if m.Type != "word" || m.Part != "cert_issuer" || !m.CaseInsensitive || m.Words[0] != "Example Corp" {
+				if m.Type != "word" || m.Part != "cert_issuer" || !m.CaseInsensitive || m.Words[0] != "example corp" {
 					t.Errorf("got %+v", m)
 				}
 			},
@@ -211,6 +242,84 @@ func TestExprToMatchers(t *testing.T) {
 				tt.check(t, r)
 			}
 		})
+	}
+}
+
+func TestExprToMatchersFaviconBody(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		hash string
+	}{
+		{"favicon_hash", `faviconHash(response.getIconContent()) == -297069493`, "-297069493"},
+		{"mmh3_favicon_content", `mmh3(response.getIconContent()) == -297069493`, "-297069493"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := ExprToMatchers(tt.expr)
+			if err != nil {
+				t.Fatalf("convert: %v", err)
+			}
+			if len(r.Matchers) != 1 {
+				t.Fatalf("count: got %d want 1", len(r.Matchers))
+			}
+			m := r.Matchers[0]
+			if m.Type != "favicon" || len(m.Hash) != 1 || m.Hash[0] != tt.hash {
+				t.Fatalf("got %+v want favicon hash %q", m, tt.hash)
+			}
+		})
+	}
+}
+
+func TestConvertFaviconHashUsesFaviconMatcher(t *testing.T) {
+	xrayYAML := `
+name: body-favicon-hash
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: /favicon.ico
+    expression: faviconHash(response.body) == 733091897
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "type: favicon") {
+		t.Fatalf("expected favicon matcher:\n%s", s)
+	}
+	if !strings.Contains(s, `"733091897"`) {
+		t.Fatalf("missing hash value:\n%s", s)
+	}
+}
+
+func TestConvertFaviconHashPreservesCustomPath(t *testing.T) {
+	xrayYAML := `
+name: custom-path-favicon
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: /favicon.png
+    expression: faviconHash(response.body) == 733091897
+  r1:
+    request:
+      method: GET
+      path: /api/v1/system/config/authorizer
+    expression: response.body_string.contains("org.openmetadata.service.security.")
+expression: r0() && r1()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "/favicon.png") {
+		t.Fatalf("custom path /favicon.png not preserved:\n%s", s)
 	}
 }
 
@@ -261,6 +370,9 @@ expression: kw_in_home() || kw_in_server() || favicon_hash()
 	if !strings.Contains(s, "type: favicon") {
 		t.Error("missing favicon matcher")
 	}
+	if !strings.Contains(s, `"-297069493"`) {
+		t.Error("missing favicon hash value")
+	}
 	if !strings.Contains(s, "condition: and") {
 		t.Error("missing and condition for kw_in_home words")
 	}
@@ -270,6 +382,49 @@ expression: kw_in_home() || kw_in_server() || favicon_hash()
 	// Should NOT contain xray_hdr_ prefix
 	if strings.Contains(s, "xray_hdr_") {
 		t.Error("output contains xray_hdr_ prefix — should use nuclei variable names")
+	}
+}
+
+func TestConvertMapsRootURLHeaderToBaseURL(t *testing.T) {
+	// xray rule references {{RootURL}} in headers with NO `set:` block, so the
+	// alias map is empty — this exercises the len(aliases)==0 path that used to
+	// short-circuit and leave {{RootURL}} untouched. Runtime no longer resolves
+	// {{RootURL}}, so the converter must map every {{RootURL}} reference to
+	// {{BaseURL}} (Origin/Referer here mirror the WordPress/泛微/Terramaster rules
+	// that previously leaked RootURL into pocs.raw_content_draft).
+	xrayYAML := `
+name: fingerprint-test--rooturl-header
+detail:
+  fingerprint:
+    name: Test-RootURL-Header
+transport: http
+rules:
+  r0:
+    request:
+      method: POST
+      path: /wp-admin/admin.php?page=vfb-export
+      headers:
+        Content-Type: application/x-www-form-urlencoded
+        Origin: '{{RootURL}}'
+        Referer: '{{RootURL}}/wp-admin/admin.php?page=vfb-export'
+    expression: response.body_string.contains("ok")
+expression: r0()
+`
+	out, err := Convert([]byte(xrayYAML))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	s := string(out)
+	t.Logf("output:\n%s", s)
+
+	if strings.Contains(s, "{{RootURL}}") {
+		t.Errorf("output still references {{RootURL}}:\n%s", s)
+	}
+	if !strings.Contains(s, "Origin: '{{BaseURL}}'") {
+		t.Errorf("Origin header not mapped to {{BaseURL}}:\n%s", s)
+	}
+	if !strings.Contains(s, "Referer: '{{BaseURL}}/wp-admin/admin.php?page=vfb-export") {
+		t.Errorf("Referer header not mapped to {{BaseURL}}:\n%s", s)
 	}
 }
 
@@ -314,7 +469,7 @@ expression: payload_rule() || set_rule()
 	if !strings.Contains(s, "payloads:") || !strings.Contains(s, "value:") || !strings.Contains(s, "admin/login") {
 		t.Fatalf("missing converted payload values:\n%s", s)
 	}
-	if !strings.Contains(s, "{{RootURL}}/{{value}}") {
+	if !strings.Contains(s, `{{BaseURL}}/{{trim_prefix(value, "/")}}`) {
 		t.Fatalf("payload placeholder path was not preserved:\n%s", s)
 	}
 }
@@ -358,6 +513,12 @@ expression: r0()
 			t.Fatalf("missing unwrapped payload value %q:\n%s", want, s)
 		}
 	}
+	if !strings.Contains(s, `{{BaseURL}}/{{trim_prefix(entry, "/")}}`) {
+		t.Fatalf("leading payload path was not converted to slash-safe form:\n%s", s)
+	}
+	if strings.Contains(s, `{{BaseURL}}{{entry}}`) {
+		t.Fatalf("leading payload path can create repeated slash:\n%s", s)
+	}
 }
 
 func TestConvertXraySetExpressionSemantics(t *testing.T) {
@@ -389,7 +550,7 @@ expression: r0()
 	s := string(out)
 	t.Logf("output:\n%s", s)
 	for _, want := range []string{
-		`time: '{{xray_mul(to_number(unix_time()), 1000)}}'`,
+		`time: '{{(to_number(unix_time()) * 1000)}}'`,
 		`token: '{{base64(concat("prefix:", to_string(time)))}}'`,
 		`referer: '{{concat(concat(Scheme, "://"), Hostname)}}'`,
 	} {
@@ -429,7 +590,7 @@ expression: baseline() && delayed()
 		"name: r0latency",
 		"dsl:",
 		"- latency",
-		"xray_sub(latency, r0latency)",
+		"(latency - r0latency)",
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
@@ -535,7 +696,7 @@ expression: discover() && fetch_js()
 		"extractors:",
 		"name: js_path",
 		"internal: true",
-		`{{RootURL}}/{{trim_prefix(js_path, "/")}}`,
+		`{{BaseURL}}/{{trim_prefix(js_path, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
@@ -575,7 +736,7 @@ expression: upload() && fetch()
 		"name: path_raw",
 		"name: path",
 		`replace(path_raw, "\\", "")`,
-		`{{RootURL}}/{{trim_prefix(path, "/")}}`,
+		`{{BaseURL}}/{{trim_prefix(path, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
@@ -615,10 +776,380 @@ expression: discover() && follow()
 
 	for _, want := range []string{
 		`location="(?P<nextpath>[\/\w]+)`,
-		`{{RootURL}}/{{trim_prefix(nextpath, "/")}}`,
+		`{{BaseURL}}/{{trim_prefix(nextpath, "/")}}`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in converted output:\n%s", want, s)
+		}
+	}
+}
+
+// --- Tests merged from path_normalize_test.go ---
+
+func TestConvertStripsXrayPathAnchor(t *testing.T) {
+	xray := `
+name: anchored-path
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: ^/admin
+    expression: response.body_string.contains("admin")
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, "^/admin") {
+		t.Fatalf("path anchor was not stripped:\n%s", converted)
+	}
+	if !strings.Contains(converted, `{{BaseURL}}/admin`) {
+		t.Fatalf("normalized path missing:\n%s", converted)
+	}
+}
+
+// --- Tests merged from sequential_convert_test.go ---
+
+func TestConvertPreservesSequentialRulesWithRepeatedRequests(t *testing.T) {
+	xray := `
+name: sequential-repeated-request
+transport: http
+rules:
+  create:
+    request:
+      method: POST
+      path: /toggle
+      body: create
+    expression: response.status == 200
+  check_created:
+    request:
+      method: GET
+      path: /flag
+    expression: response.status == 200
+  delete:
+    request:
+      method: POST
+      path: /toggle
+      body: delete
+    expression: response.status == 200
+  check_deleted:
+    request:
+      method: GET
+      path: /flag
+    expression: response.status == 404
+expression: create() && check_created() && delete() && check_deleted()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if got := strings.Count(converted, `{{BaseURL}}/toggle`); got != 2 {
+		t.Fatalf("expected two toggle requests, got %d:\n%s", got, converted)
+	}
+	if got := strings.Count(converted, `{{BaseURL}}/flag`); got != 2 {
+		t.Fatalf("expected two flag requests, got %d:\n%s", got, converted)
+	}
+	if !strings.Contains(converted, "status_code_2 == 200") || !strings.Contains(converted, "status_code == 404") {
+		t.Fatalf("expected request-condition to reference both repeated GET responses:\n%s", converted)
+	}
+}
+
+// --- Tests merged from set_variables_test.go ---
+
+func TestConvertSetVariablesOrdersDependenciesAndMapsHex(t *testing.T) {
+	xray := `
+name: set-variable-order
+transport: http
+set:
+  h1: hex(rStr1)
+  rStr1: randomLowercase(8)
+rules:
+  r0:
+    request:
+      method: GET
+      path: /?q={{h1}}
+    expression: response.status == 200 && response.body_string.contains(string(rStr1))
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	randIdx := strings.Index(converted, "rStr1:")
+	hexIdx := strings.Index(converted, "h1:")
+	if randIdx < 0 || hexIdx < 0 || randIdx > hexIdx {
+		t.Fatalf("expected rStr1 before h1:\n%s", converted)
+	}
+	if !strings.Contains(converted, "{{hex_encode(rStr1)}}") {
+		t.Fatalf("expected hex() to become hex_encode():\n%s", converted)
+	}
+}
+
+func TestConvertRenamesBuiltinSetVariable(t *testing.T) {
+	xray := `
+name: builtin-variable-collision
+transport: http
+set:
+  BaseURL: request.url.domain
+rules:
+  r0:
+    request:
+      method: POST
+      path: /admin/auth/reset-password
+      headers:
+        Origin: https://{{BaseURL}}
+    expression: response.status == 200
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, "\n  BaseURL:") {
+		t.Fatalf("xray set variable should not override neutron BaseURL:\n%s", converted)
+	}
+	if !strings.Contains(converted, "xray_BaseURL: '{{Host}}'") {
+		t.Fatalf("expected colliding set variable to be renamed:\n%s", converted)
+	}
+	if !strings.Contains(converted, "Origin: https://{{xray_BaseURL}}") {
+		t.Fatalf("expected original header placeholder to use renamed variable:\n%s", converted)
+	}
+	if !strings.Contains(converted, `{{BaseURL}}/admin/auth/reset-password`) {
+		t.Fatalf("expected converted request path to use xray resolver:\n%s", converted)
+	}
+}
+
+func TestConvertBuiltinSetVariableCanReferenceTargetBuiltin(t *testing.T) {
+	xray := `
+name: builtin-variable-target-reference
+transport: http
+set:
+  Hostname: request.url.host
+rules:
+  r0:
+    request:
+      method: GET
+      path: /maint/index.php
+      headers:
+        Referer: '{{Hostname}}/maint/index.php'
+    expression: response.status == 200
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if !strings.Contains(converted, "xray_Hostname: '{{Hostname}}'") {
+		t.Fatalf("expected aliased xray variable to reference neutron Hostname builtin:\n%s", converted)
+	}
+	if strings.Contains(converted, "xray_Hostname: '{{xray_Hostname}}'") {
+		t.Fatalf("aliased set variable should not reference itself:\n%s", converted)
+	}
+	if !strings.Contains(converted, "Referer: '{{xray_Hostname}}/maint/index.php'") {
+		t.Fatalf("expected original placeholder to use aliased variable:\n%s", converted)
+	}
+	assertConvertedCompiles(t, out)
+}
+
+func TestConvertSetStringLiteralAndUpperFunction(t *testing.T) {
+	xray := `
+name: set-string-upper
+transport: http
+set:
+  eps_path: string("/eps/api/resourceOperations/uploadsecretKeyIbuilding")
+  token: upper(md5(eps_path))
+rules:
+  r0:
+    request:
+      method: GET
+      path: /upload?token={{token}}
+    expression: response.status == 200
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, `eps_path: string(`) {
+		t.Fatalf("string() set expression should become a literal:\n%s", converted)
+	}
+	if !strings.Contains(converted, `eps_path: /eps/api/resourceOperations/uploadsecretKeyIbuilding`) {
+		t.Fatalf("expected string() literal value in variables:\n%s", converted)
+	}
+	if strings.Contains(converted, `{{upper(`) {
+		t.Fatalf("upper() should be translated to neutron DSL:\n%s", converted)
+	}
+	if !strings.Contains(converted, `token: '{{to_upper(md5(eps_path))}}'`) {
+		t.Fatalf("expected upper() to become to_upper():\n%s", converted)
+	}
+}
+
+func TestConvertRevFunction(t *testing.T) {
+	xray := `
+name: rev-function
+transport: http
+set:
+  s1: randomLowercase(8)
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+    expression: response.status == 200 && response.body_string.contains(rev(s1))
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, `rev(s1)`) {
+		t.Fatalf("rev() should be translated to neutron DSL:\n%s", converted)
+	}
+	if !strings.Contains(converted, `contains(body, reverse(s1))`) {
+		t.Fatalf("expected rev() to become reverse():\n%s", converted)
+	}
+}
+
+func TestConvertAliasesReservedOutputVariable(t *testing.T) {
+	xray := `
+name: output-reserved-variable
+transport: http
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+    expression: response.status == 200
+    output:
+      len: size(response.body)
+      total: int(len / 2)
+      hexed: decToHex(total)
+  r1:
+    request:
+      method: GET
+      path: /next/{{hexed}}
+    expression: response.status == 200
+expression: r0() && r1()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, "\n          name: len\n") {
+		t.Fatalf("reserved output variable should be renamed:\n%s", converted)
+	}
+	if !strings.Contains(converted, "name: xray_len") {
+		t.Fatalf("expected len output variable to be aliased:\n%s", converted)
+	}
+	if strings.Contains(converted, "(len / 2)") {
+		t.Fatalf("reserved output variable reference was not aliased:\n%s", converted)
+	}
+	if !strings.Contains(converted, "(xray_len / 2)") {
+		t.Fatalf("expected output expression to reference aliased variable:\n%s", converted)
+	}
+	if !strings.Contains(converted, "dec_to_hex(total)") {
+		t.Fatalf("expected decToHex() to become dec_to_hex():\n%s", converted)
+	}
+	assertConvertedCompiles(t, out)
+}
+
+func TestConvertSetBytesVariableExpression(t *testing.T) {
+	xray := `
+name: set-bytes-variable
+transport: http
+set:
+  token: md5("abc")
+  token_bytes: bytes(token)
+rules:
+  r0:
+    request:
+      method: GET
+      path: /
+    expression: response.body.bcontains(token_bytes)
+expression: r0()
+`
+	out, err := Convert([]byte(xray))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	converted := string(out)
+	if strings.Contains(converted, "token_bytes: bytes(token)") {
+		t.Fatalf("bytes(token) stayed literal:\n%s", converted)
+	}
+	if !strings.Contains(converted, `token_bytes: '{{token}}'`) {
+		t.Fatalf("expected bytes(token) to reference token variable:\n%s", converted)
+	}
+}
+
+func assertConvertedCompiles(t *testing.T, out []byte) {
+	t.Helper()
+	var tmpl templates.Template
+	if err := yaml.Unmarshal(out, &tmpl); err != nil {
+		t.Fatalf("unmarshal converted template: %v\n%s", err, out)
+	}
+	if err := tmpl.Compile(nil); err != nil {
+		t.Fatalf("compile converted template: %v\n%s", err, out)
+	}
+}
+
+// --- Tests merged from cert_registry_parity_test.go ---
+
+// TestCertRegistryParity guards the single-source-of-truth invariant between
+// common.CertFields (which decides what xray cert subfields are
+// evaluable) and dsl.CertDataKeys (the keys every Emitter partMap is
+// required to map explicitly).
+//
+// The Emitter Field() fallback used to catch unmapped cert_* via a
+// strings.HasPrefix("cert") branch; removing that branch means any cert key
+// that is NOT explicitly mapped silently falls into the header default and
+// gets rewritten as `header="cert_xxx: ..."` by isHeaderVariable. This test
+// makes that drift loud.
+func TestCertRegistryParity(t *testing.T) {
+	declared := make(map[string]bool, len(dsl.CertDataKeys))
+	for _, key := range dsl.CertDataKeys {
+		declared[key] = true
+	}
+
+	// 1. Every value in common.CertFields must appear in dsl.CertDataKeys.
+	for sub, key := range common.CertFields {
+		if !declared[key] {
+			t.Errorf("CertFields[%q] = %q missing from dsl.CertDataKeys", sub, key)
+		}
+	}
+
+	// 2. raw_cert (response.raw_cert.bcontains) must also be listed: it
+	// reaches the emitter as a NodeVariable just like the other cert keys.
+	if !declared[common.RawCertKey] {
+		t.Errorf("common.RawCertKey = %q missing from dsl.CertDataKeys", common.RawCertKey)
+	}
+
+	// 3. Every dsl.CertDataKeys entry must resolve to a non-default field on
+	// every emitter — otherwise it would be misclassified as a header
+	// variable (see isHeaderVariable in codegen.go).
+	for _, platform := range []string{"fofa", "hunter", "censys"} {
+		e, ok := dsl.GetEmitter(platform)
+		if !ok {
+			t.Fatalf("emitter %q not registered", platform)
+		}
+		// A synthetic part name no real query would use → exercises the
+		// emitter's default branch. Any cert key resolving to the same value
+		// means it fell through to header.
+		defaultField := e.Field("__unmapped_synthetic_part__")
+		for _, key := range dsl.CertDataKeys {
+			got := e.Field(key)
+			if got == defaultField {
+				t.Errorf("[%s] cert key %q falls through to default field %q — partMap missing explicit mapping", platform, key, got)
+			}
 		}
 	}
 }

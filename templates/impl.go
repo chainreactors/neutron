@@ -179,21 +179,6 @@ func (t *Template) ExecuteWithTransport(input string, payload map[string]interfa
 	return t.Executor.Execute(ctx)
 }
 
-// ExecuteWithTransportAndPathPrefix runs the template using the provided
-// RoundTripper and mount path prefix for this execution only. PathPrefix affects
-// RootURL generation in the HTTP request generator; BaseURL remains the literal
-// input URL.
-func (t *Template) ExecuteWithTransportAndPathPrefix(input string, payload map[string]interface{}, transport http.RoundTripper, pathPrefix string) (*operators.Result, error) {
-	if t.Executor.Options().Options.Opsec && t.Opsec {
-		common.Debug("(opsec!!!) skip template %s", t.Id)
-		return nil, protocols.OpsecError
-	}
-	ctx := protocols.NewScanContext(input, payload)
-	ctx.Transport = transport
-	ctx.PathPrefix = pathPrefix
-	return t.Executor.Execute(ctx)
-}
-
 // ExecuteWithEvents executes the template and returns both the final result
 // and all per-step ResultEvents (each carrying its own Request/Response).
 func (t *Template) ExecuteWithEvents(input string, payload map[string]interface{}) (*operators.Result, []*protocols.ResultEvent, error) {

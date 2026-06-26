@@ -10,7 +10,7 @@ import (
 // explicitly: unmapped cert variables fall through to the header default and
 // get rewritten as `header="cert_xxx: ..."` by isHeaderVariable.
 //
-// Kept in lockstep with common.XrayCertFields' values via a parity test in
+// Kept in lockstep with common.CertFields' values via a parity test in
 // the convert/ package (which can import both without a cycle).
 var CertDataKeys = []string{
 	"cert_subject",
@@ -58,7 +58,7 @@ func (f *FOFAEmitter) Field(part string) string {
 		return v
 	}
 	// Unmapped variables (location, set_cookie, x_powered_by, etc.)
-	// are individual header fields from xray conversion. Every cert_* key
+	// are individual header fields from conversion. Every cert_* key
 	// must be explicitly mapped above — see CertDataKeys / parity test.
 	return "header"
 }

@@ -1,7 +1,7 @@
 http:
     - method: GET
       path:
-        - '{{BaseURL}}/'
+        - '{{BaseURL}}/favicon.ico'
       req-condition: true
     - headers:
         Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
@@ -23,7 +23,7 @@ http:
       req-condition: true
     - matchers:
         - dsl:
-            - ((((md5(favicon_content_1) == "0488faca4c19046b94d07c3ee83cf9d6") || contains(favicon_hash_1, "116323821"))) || (contains(body_2, "<h1>Whitelabel Error Page</h1>")) || ((contains(all_headers_3, "set_cookie:") && contains(set_cookie_3, "org.springframework.web.servlet.i18n.CookieLocaleResolver"))) || ((contains(body_4, "/actuator/info") && contains(body_4, "target=\"_blank\">"))) || (((contains(body_5, "eureka/css/") || contains(body_5, "src=\"eureka/js/"))) && (contains(body, "spring-logo-eureka"))))
+            - ((((md5(body_1) == "0488faca4c19046b94d07c3ee83cf9d6") || (mmh3(base64_py(body_1)) == "116323821"))) || (contains(body_2, "<h1>Whitelabel Error Page</h1>")) || ((contains(all_headers_3, "set_cookie:") && contains(set_cookie_3, "org.springframework.web.servlet.i18n.CookieLocaleResolver"))) || ((contains(body_4, "/actuator/info") && contains(body_4, "target=\"_blank\">"))) || (((contains(body_5, "eureka/css/") || contains(body_5, "src=\"eureka/js/"))) && (contains(body, "spring-logo-eureka"))))
           type: dsl
       method: GET
       path:

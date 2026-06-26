@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/chainreactors/utils/httputils"
 )
 
 func readResponseBody(resp *http.Response) ([]byte, error) {
@@ -23,11 +25,10 @@ func readResponseBody(resp *http.Response) ([]byte, error) {
 
 	decodedBody, err := decodeResponseBody(rawBody, resp.Header.Get("Content-Encoding"))
 	if err != nil {
-		// Fall back to the raw body so malformed encoding headers do not abort matching.
-		return rawBody, nil
+		decodedBody = rawBody
 	}
 
-	return decodedBody, nil
+	return httputils.DecodeCharset(decodedBody, resp.Header.Get("Content-Type")), nil
 }
 
 func decodeResponseBody(body []byte, contentEncoding string) ([]byte, error) {
@@ -91,4 +92,3 @@ func decodeBodyWithEncoding(body []byte, encoding string) ([]byte, error) {
 
 	return ioutil.ReadAll(reader)
 }
-

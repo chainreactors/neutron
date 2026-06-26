@@ -4,20 +4,19 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/chainreactors/logs"
-	"github.com/chainreactors/neutron/common"
-	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/neutron/templates"
-	"github.com/davecgh/go-spew/spew"
-	"gopkg.in/yaml.v3"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"time"
-)
 
-var ExecuterOptions *protocols.ExecuterOptions
+	"github.com/chainreactors/logs"
+	"github.com/chainreactors/neutron/common"
+	_ "github.com/chainreactors/neutron/convert"
+	"github.com/chainreactors/neutron/protocols"
+	"github.com/chainreactors/neutron/templates"
+	"github.com/davecgh/go-spew/spew"
+)
 
 func main() {
 	pathFlag := flag.String("path", "", "Path to YAML template file or directory")
@@ -40,7 +39,7 @@ func main() {
 
 	if targetPath == "" || targetURL == "" {
 		fmt.Println("Usage: shot -path <template> -target <url> [-json] [-timeout N] [-proxy <addr>]")
-		fmt.Println("       shot [-proxy <addr>] <path_or_file> <target_url>")
+		fmt.Println("       shot <path_or_file> <target_url>")
 		os.Exit(1)
 	}
 
@@ -53,16 +52,14 @@ func main() {
 		spew.Config.SortKeys = true
 	}
 
-	if ExecuterOptions == nil {
-		ExecuterOptions = &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: *timeoutFlag}}
-	}
+	execOpts := &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: *timeoutFlag}}
 	if *proxyAddr != "" {
 		proxyURL, err := url.Parse(*proxyAddr)
 		if err != nil {
 			fmt.Printf("Invalid proxy address: %s\n", err.Error())
 			os.Exit(1)
 		}
-		ExecuterOptions.Options.Proxy = http.ProxyURL(proxyURL)
+		execOpts.Options.Proxy = http.ProxyURL(proxyURL)
 	}
 
 	var yamlFiles []string
@@ -94,16 +91,15 @@ func main() {
 			continue
 		}
 
-		t := &templates.Template{}
-		err = yaml.Unmarshal(content, t)
+		t, err := templates.Load(content)
 		if err != nil {
 			if !*jsonFlag {
-				fmt.Printf("Error unmarshalling %s: %s\n", yamlFile, err.Error())
+				fmt.Printf("Error loading %s: %s\n", yamlFile, err.Error())
 			}
 			continue
 		}
 
-		err = t.Compile(ExecuterOptions)
+		err = t.Compile(execOpts)
 		if err != nil {
 			if !*jsonFlag {
 				fmt.Printf("Error compiling %s: %s\n", yamlFile, err.Error())
