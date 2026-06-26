@@ -254,20 +254,6 @@ func nodeToMatcher(node *dsl.Node) *operators.Matcher {
 		return m
 	}
 
-	// mmh3(base64_py(body)) == "X" → favicon matcher
-	if node.Type == dsl.NodeBinaryOp && (node.Op == "==" || node.Op == "!=") {
-		if dsl.IsFaviconBodyHashCall(node.Children[0]) {
-			hash := literalString(node.Children[1])
-			if hash != "" {
-				m := &operators.Matcher{Type: "favicon", Part: "favicon_hash", Hash: []string{hash}}
-				if node.Op == "!=" {
-					m.Negative = true
-				}
-				return m
-			}
-		}
-	}
-
 	// status_code == N → status matcher
 	if node.Type == dsl.NodeBinaryOp && node.Op == "==" && isStatusCode(node.Children[0]) {
 		if code := literalInt(node.Children[1]); code != 0 {

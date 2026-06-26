@@ -350,11 +350,6 @@ func TestGenerateHistoryVariablesNormalizeForQueries(t *testing.T) {
 			`header="location: /login" && !(status_code="404")`,
 			`services.http.response.headers: "location: /login" AND NOT services.http.response.status_code: 404`,
 		},
-		{
-			`mmh3(base64_py(body_1)) == "733091897"`,
-			`icon_hash="733091897"`,
-			``,
-		},
 	}
 
 	for _, tt := range tests {

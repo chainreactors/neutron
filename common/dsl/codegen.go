@@ -154,27 +154,8 @@ func generateGrouped(child *Node, parentOp string, e Emitter, r *Result) string 
 }
 
 func genComparison(node *Node, e Emitter, r *Result) string {
-	rawLeft := node.Children[0]
-	left := unwrapFieldNode(rawLeft)
+	left := unwrapFieldNode(node.Children[0])
 	right := node.Children[1]
-
-	if IsFaviconBodyHashCall(rawLeft) {
-		hash := resolveValue(right)
-		q, err := e.FaviconHash(hash)
-		if err != nil {
-			r.Errors = append(r.Errors, err.Error())
-			return ""
-		}
-		switch node.Op {
-		case "==":
-			return q
-		case "!=":
-			return e.Not(q)
-		default:
-			r.Warnings = append(r.Warnings, fmt.Sprintf("favicon hash operator %s approximated as equals", node.Op))
-			return q
-		}
-	}
 
 	if isStatusCodeVariable(left) {
 		if code, ok := toInt(right); ok {
@@ -219,18 +200,6 @@ func genComparison(node *Node, e Emitter, r *Result) string {
 		r.Warnings = append(r.Warnings, fmt.Sprintf("operator %s approximated as equals", node.Op))
 		return e.Equals(field, value)
 	}
-}
-
-func IsFaviconBodyHashCall(node *Node) bool {
-	if node == nil || node.Type != NodeCall || node.FuncName != "mmh3" || len(node.Children) != 1 {
-		return false
-	}
-	child := node.Children[0]
-	if child == nil || child.Type != NodeCall || child.FuncName != "base64_py" || len(child.Children) != 1 {
-		return false
-	}
-	part, ok := variableName(child.Children[0])
-	return ok && NormalizePart(part) == "body"
 }
 
 func genCall(node *Node, e Emitter, r *Result) string {

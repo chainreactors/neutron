@@ -12,9 +12,10 @@ http:
       path:
         - '{{BaseURL}}/'
     - matchers:
-        - dsl:
-            - mmh3(base64_py(body)) == "1198047028"
-          type: dsl
+        - hash:
+            - "1198047028"
+          part: favicon_hash
+          type: favicon
       method: GET
       path:
         - '{{BaseURL}}/favicon.ico'

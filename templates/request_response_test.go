@@ -512,9 +512,9 @@ func TestExecuteExplicitFaviconBodyHashDSL(t *testing.T) {
 	defer server.Close()
 
 	yamlContent := `
-id: explicit-favicon-body-hash-dsl-test
+id: explicit-favicon-body-hash-test
 info:
-  name: Explicit Favicon Body Hash DSL Test
+  name: Explicit Favicon Body Hash Test
   author: test
   severity: info
 http:
@@ -522,9 +522,9 @@ http:
     path:
       - '{{BaseURL}}/custom.ico'
     matchers:
-      - type: dsl
-        dsl:
-          - 'mmh3(base64_py(body)) == "592422342"'
+      - type: favicon
+        hash:
+          - "592422342"
 `
 	var tmpl Template
 	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)

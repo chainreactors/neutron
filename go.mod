@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	github.com/chainreactors/utils v0.0.0-20260624182357-8d5cad72d8f2
+	github.com/chainreactors/utils v0.0.0-20260626163323-49927b03ece8
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -21,5 +21,3 @@ require (
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-replace github.com/chainreactors/utils => /mnt/chainreactors/utils
