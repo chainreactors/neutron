@@ -100,9 +100,12 @@ func (m *Matcher) CompileMatchers() error {
 	if !ok {
 		return fmt.Errorf("unknown matcher type specified: %s", m.Type)
 	}
-	// By default, match on body if user hasn't provided any specific items
 	if m.Part == "" {
-		m.Part = "body"
+		if m.matcherType == FaviconMatcher {
+			m.Part = "favicon_hash"
+		} else {
+			m.Part = "body"
+		}
 	}
 
 	// Compile the regexes
@@ -396,7 +399,7 @@ func (m *Matcher) MatchHashValues(values []string) (bool, []string) {
 	if m.condition == ANDCondition || m.MatchAll {
 		return len(matched) == len(m.Hash), matched
 	}
-	return true, matched
+	return len(matched) > 0, matched
 }
 
 func (m *Matcher) SetCompiledData(data interface{}) { m.compiledData = data }
