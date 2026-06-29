@@ -2,8 +2,10 @@ package operators
 
 import (
 	"fmt"
-	"github.com/chainreactors/neutron/common"
 	"strconv"
+
+	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/parsers"
 )
 
 // operators contains the operators that can be applied on protocols
@@ -24,28 +26,7 @@ type Operators struct {
 	TemplateID string `json:"templateID,omitempty" yaml:"templateID,omitempty"`
 }
 
-// Result is a result structure created from operators running on data.
-type Result struct {
-	// Matched is true if any matchers matched
-	Matched bool
-	// Extracted is true if any result type values were extracted
-	Extracted bool
-	// Matches is a map of matcher names that we matched
-	Matches map[string][]string
-	// Extracts contains all the data extracted from inputs
-	Extracts map[string][]string
-	// OutputExtracts is the list of extracts to be displayed on screen.
-	OutputExtracts []string
-	outputUnique   map[string]struct{}
-	// DynamicValues contains any dynamic values to be templated
-	DynamicValues map[string]interface{}
-	// PayloadValues contains payload values provided by user. (Optional)
-	PayloadValues map[string]interface{}
-	// Request is the raw HTTP request for the match.
-	Request string
-	// Response is the raw HTTP response for the match.
-	Response string
-}
+type Result = parsers.NeutronResult
 
 func (r *Operators) Compile() error {
 	if r == nil {
@@ -92,8 +73,8 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 		Matches:       make(map[string][]string),
 		Extracts:      make(map[string][]string),
 		DynamicValues: make(map[string]interface{}),
-		outputUnique:  make(map[string]struct{}),
 	}
+	outputUnique := make(map[string]struct{})
 
 	// state variable to check if all extractors are internal
 	var allInternalExtractors bool = true
@@ -119,9 +100,9 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 			} else {
 				for _, val := range typedResults {
 					str := fmt.Sprint(val)
-					if _, ok := result.outputUnique[str]; !ok {
+					if _, ok := outputUnique[str]; !ok {
 						result.OutputExtracts = append(result.OutputExtracts, str)
-						result.outputUnique[str] = struct{}{}
+						outputUnique[str] = struct{}{}
 					}
 				}
 				if extractor.Name != "" {
@@ -143,9 +124,9 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 			if extractor.Internal {
 				result.DynamicValues[extractor.Name] = match
 			} else {
-				if _, ok := result.outputUnique[match]; !ok {
+				if _, ok := outputUnique[match]; !ok {
 					result.OutputExtracts = append(result.OutputExtracts, match)
-					result.outputUnique[match] = struct{}{}
+					outputUnique[match] = struct{}{}
 				}
 			}
 		}
