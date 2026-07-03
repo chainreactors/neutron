@@ -7,7 +7,7 @@ toolchain go1.24.3
 require (
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/utils/parsers v0.0.0-20260629054935-23a3e0a235f9
+	github.com/chainreactors/utils/parsers v0.0.0-20260703124640-175b2abe30c2
 	github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4
 	github.com/hashicorp/go-version v1.6.0
 	github.com/spaolacci/murmur3 v1.1.0

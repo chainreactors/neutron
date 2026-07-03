@@ -94,37 +94,28 @@ func (r *Request) Type() protocols.ProtocolType {
 }
 
 // Match matches a generic data response again a given matcher
-func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []string) {
-	item, ok := r.getMatchPart(matcher.Part, data)
-	if !ok {
-		return false, []string{}
-	}
-
+func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []operators.MatchHit) {
 	switch matcher.GetType() {
 	case operators.StatusMatcher:
 		statusCode, ok := data["status_code"]
 		if !ok {
-			return false, []string{}
+			return false, nil
 		}
 		status, ok := statusCode.(int)
 		if !ok {
 			return false, nil
 		}
-		return matcher.Result(matcher.MatchStatusCode(status)), []string{common.ToString(statusCode)}
-	case operators.SizeMatcher:
-		return matcher.Result(matcher.MatchSize(len(item))), []string{}
-	case operators.WordsMatcher:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchWords(item, data))
-	case operators.RegexMatcher:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchRegex(item))
-	case operators.BinaryMatcher:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchBinary(item))
-	case operators.DSLMatcher:
-		return matcher.Result(matcher.MatchDSL(data)), nil
+		return matcher.Result(matcher.MatchStatusCode(status)), []operators.MatchHit{{Value: common.ToString(statusCode)}}
 	case operators.FaviconMatcher:
+		item, ok := r.getMatchPart(matcher.Part, data)
+		if !ok {
+			return false, nil
+		}
 		return matcher.ResultWithMatchedSnippet(matcher.MatchHashValues(strings.Fields(item)))
 	default:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchWithHandler(item, data))
+		return protocols.MakeDefaultMatchFunc(data, matcher, func(part string) (string, bool) {
+			return r.getMatchPart(part, data)
+		})
 	}
 }
 
@@ -186,20 +177,21 @@ func (r *Request) MakeResultEvent(wrapped *protocols.InternalWrappedEvent) []*pr
 		return nil
 	}
 
-	results := make([]*protocols.ResultEvent, 0, len(wrapped.OperatorsResult.Matches)+1)
+	matchNames := wrapped.OperatorsResult.MatchesByName()
+	extractNames := wrapped.OperatorsResult.ExtractsByName()
+	results := make([]*protocols.ResultEvent, 0, len(matchNames)+1)
 
-	// If we have multiple matchers with names, write each of them separately.
-	if len(wrapped.OperatorsResult.Matches) > 0 {
-		for k := range wrapped.OperatorsResult.Matches {
+	if len(matchNames) > 0 {
+		for name := range matchNames {
 			data := r.MakeResultEventItem(wrapped)
-			data.MatcherName = k
+			data.MatcherName = name
 			results = append(results, data)
 		}
-	} else if len(wrapped.OperatorsResult.Extracts) > 0 {
-		for k, v := range wrapped.OperatorsResult.Extracts {
+	} else if len(extractNames) > 0 {
+		for name, vals := range extractNames {
 			data := r.MakeResultEventItem(wrapped)
-			data.ExtractedResults = v
-			data.ExtractorName = k
+			data.ExtractorName = name
+			data.ExtractedResults = vals
 			results = append(results, data)
 		}
 	} else {
@@ -217,7 +209,7 @@ func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *
 		Host:             common.ToString(wrapped.InternalEvent["host"]),
 		Matched:          common.ToString(wrapped.InternalEvent["matched"]),
 		Metadata:         wrapped.OperatorsResult.PayloadValues,
-		ExtractedResults: wrapped.OperatorsResult.OutputExtracts,
+		ExtractedResults: wrapped.OperatorsResult.OutputExtracts(),
 		Timestamp:        time.Now(),
 		IP:               common.ToString(wrapped.InternalEvent["ip"]),
 		Request:          common.ToString(wrapped.InternalEvent["request"]),

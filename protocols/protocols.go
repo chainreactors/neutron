@@ -40,7 +40,7 @@ type Request interface {
 	// be evaluated from the third request by using the IDs for both requests.
 	//GetID() string
 	// Match performs matching operation for a matcher on model and returns true or false.
-	Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []string)
+	Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []operators.MatchHit)
 	// Extract performs extracting operation for a extractor on model and returns true or false.
 	Extract(data map[string]interface{}, matcher *operators.Extractor) map[string]struct{}
 	// ExecuteWithResults executes the protocol requests and returns results instead of writing them.
@@ -104,20 +104,22 @@ func MakeDefaultResultEvent(request Request, wrapped *InternalWrappedEvent) []*R
 		return nil
 	}
 
-	results := make([]*ResultEvent, 0, len(wrapped.OperatorsResult.Matches)+1)
+	matchNames := wrapped.OperatorsResult.MatchesByName()
+	extractNames := wrapped.OperatorsResult.ExtractsByName()
 
-	// If we have multiple matchers with names, write each of them separately.
-	if len(wrapped.OperatorsResult.Matches) > 0 {
-		for matcherNames := range wrapped.OperatorsResult.Matches {
+	results := make([]*ResultEvent, 0, len(matchNames)+1)
+
+	if len(matchNames) > 0 {
+		for name := range matchNames {
 			data := request.MakeResultEventItem(wrapped)
-			data.MatcherName = matcherNames
+			data.MatcherName = name
 			results = append(results, data)
 		}
-	} else if len(wrapped.OperatorsResult.Extracts) > 0 {
-		for k, v := range wrapped.OperatorsResult.Extracts {
+	} else if len(extractNames) > 0 {
+		for name, vals := range extractNames {
 			data := request.MakeResultEventItem(wrapped)
-			data.ExtractorName = k
-			data.ExtractedResults = v
+			data.ExtractorName = name
+			data.ExtractedResults = vals
 			results = append(results, data)
 		}
 	} else {

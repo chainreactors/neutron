@@ -70,9 +70,9 @@ func (m *Matcher) Result(data bool) bool {
 }
 
 // ResultWithMatchedSnippet returns true and the matched snippet, or false and an empty string
-func (m *Matcher) ResultWithMatchedSnippet(data bool, matchedSnippet []string) (bool, []string) {
+func (m *Matcher) ResultWithMatchedSnippet(data bool, matchedSnippet []MatchHit) (bool, []MatchHit) {
 	if m.Negative {
-		return !data, []string{}
+		return !data, nil
 	}
 	return data, matchedSnippet
 }
@@ -194,47 +194,43 @@ func (m *Matcher) MatchSize(length int) bool {
 }
 
 // MatchWords matches a word check against a corpus.
-func (matcher *Matcher) MatchWords(corpus string, data map[string]interface{}) (bool, []string) {
+func (matcher *Matcher) MatchWords(corpus string, data map[string]interface{}) (bool, []MatchHit) {
 	if matcher.CaseInsensitive {
 		corpus = strings.ToLower(corpus)
 	}
 
-	var matchedWords []string
-	// Iterate over all the words accepted as valid
+	var matchedWords []MatchHit
 	for i, word := range matcher.Words {
 		if data == nil {
 			data = make(map[string]interface{})
 		}
 
+		originalWord := word
 		var err error
 		if strings.Contains(word, common.ParenthesisOpen) || strings.Contains(word, common.General) {
 			word, err = common.Evaluate(word, data)
 			if err != nil {
 				common.Logger().Warnf("Error while evaluating word matcher: %q", word)
 				if matcher.condition == ANDCondition {
-					return false, []string{}
+					return false, nil
 				}
 			}
 		}
-		// Continue if the word doesn't match
 		if !strings.Contains(corpus, word) {
-			// If we are in an AND request and a match failed,
-			// return false as the AND condition fails on any single mismatch.
 			switch matcher.condition {
 			case ANDCondition:
-				return false, []string{}
+				return false, nil
 			case ORCondition:
 				continue
 			}
 		}
 
-		// If the condition was an OR, return on the first match.
+		hit := MatchHit{Value: word, Rule: originalWord}
 		if matcher.condition == ORCondition && !matcher.MatchAll {
-			return true, []string{word}
+			return true, []MatchHit{hit}
 		}
-		matchedWords = append(matchedWords, word)
+		matchedWords = append(matchedWords, hit)
 
-		// If we are at the end of the words, return with true
 		if len(matcher.Words)-1 == i && !matcher.MatchAll {
 			return true, matchedWords
 		}
@@ -242,35 +238,34 @@ func (matcher *Matcher) MatchWords(corpus string, data map[string]interface{}) (
 	if len(matchedWords) > 0 && matcher.MatchAll {
 		return true, matchedWords
 	}
-	return false, []string{}
+	return false, nil
 }
 
 // MatchRegex matches a regex check against a corpus
-func (matcher *Matcher) MatchRegex(corpus string) (bool, []string) {
-	var matchedRegexes []string
-	// Iterate over all the regexes accepted as valid
+func (matcher *Matcher) MatchRegex(corpus string) (bool, []MatchHit) {
+	var matchedRegexes []MatchHit
 	for i, regex := range matcher.regexCompiled {
-		// Continue if the regex doesn't match
 		if !regex.MatchString(corpus) {
-			// If we are in an AND request and a match failed,
-			// return false as the AND condition fails on any single mismatch.
 			switch matcher.condition {
 			case ANDCondition:
-				return false, []string{}
+				return false, nil
 			case ORCondition:
 				continue
 			}
 		}
 
+		pattern := matcher.Regex[i]
 		currentMatches := regex.FindAllString(corpus, -1)
-		// If the condition was an OR, return on the first match.
+		var hits []MatchHit
+		for _, v := range currentMatches {
+			hits = append(hits, MatchHit{Value: v, Rule: pattern})
+		}
 		if matcher.condition == ORCondition && !matcher.MatchAll {
-			return true, currentMatches
+			return true, hits
 		}
 
-		matchedRegexes = append(matchedRegexes, currentMatches...)
+		matchedRegexes = append(matchedRegexes, hits...)
 
-		// If we are at the end of the regex, return with true
 		if len(matcher.regexCompiled)-1 == i && !matcher.MatchAll {
 			return true, matchedRegexes
 		}
@@ -278,38 +273,35 @@ func (matcher *Matcher) MatchRegex(corpus string) (bool, []string) {
 	if len(matchedRegexes) > 0 && matcher.MatchAll {
 		return true, matchedRegexes
 	}
-	return false, []string{}
+	return false, nil
 }
 
 // MatchBinary matches a binary check against a corpus
-func (m *Matcher) MatchBinary(corpus string) (bool, []string) {
-	var matchedBinary []string
-	// Iterate over all the words accepted as valid
+func (m *Matcher) MatchBinary(corpus string) (bool, []MatchHit) {
+	var matchedBinary []MatchHit
 	for i, binary := range m.binaryDecoded {
 		if !strings.Contains(corpus, binary) {
-			// If we are in an AND request and a match failed,
-			// return false as the AND condition fails on any single mismatch.
 			switch m.condition {
 			case ANDCondition:
-				return false, []string{}
+				return false, nil
 			case ORCondition:
 				continue
 			}
 		}
 
-		// If the condition was an OR, return on the first match.
+		rule := m.Binary[i]
+		hit := MatchHit{Value: binary, Rule: rule}
 		if m.condition == ORCondition {
-			return true, []string{binary}
+			return true, []MatchHit{hit}
 		}
 
-		matchedBinary = append(matchedBinary, binary)
+		matchedBinary = append(matchedBinary, hit)
 
-		// If we are at the end of the words, return with true
 		if len(m.Binary)-1 == i {
 			return true, matchedBinary
 		}
 	}
-	return false, []string{}
+	return false, nil
 }
 
 // MatchDSL matches on a generic map result
@@ -370,9 +362,9 @@ func (m *Matcher) MatchDSL(data map[string]interface{}) bool {
 }
 
 // MatchHashValues matches hash strings against matcher.Hash.
-func (m *Matcher) MatchHashValues(values []string) (bool, []string) {
+func (m *Matcher) MatchHashValues(values []string) (bool, []MatchHit) {
 	if len(m.Hash) == 0 || len(values) == 0 {
-		return false, []string{}
+		return false, nil
 	}
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
@@ -382,17 +374,17 @@ func (m *Matcher) MatchHashValues(values []string) (bool, []string) {
 		seen[value] = struct{}{}
 	}
 
-	var matched []string
+	var matched []MatchHit
 	for _, templateHash := range m.Hash {
 		if _, ok := seen[templateHash]; ok {
-			matched = append(matched, templateHash)
+			matched = append(matched, MatchHit{Value: templateHash, Rule: templateHash})
 			if m.condition == ORCondition && !m.MatchAll {
 				return true, matched
 			}
 			continue
 		}
 		if m.condition == ANDCondition {
-			return false, []string{}
+			return false, nil
 		}
 	}
 	if m.condition == ANDCondition || m.MatchAll {
@@ -408,7 +400,7 @@ func (m *Matcher) GetCompiledData() interface{} { return m.compiledData }
 func (m *Matcher) GetCondition() ConditionType { return m.condition }
 
 // MatchWithHandler dispatches matching to a registered handler.
-func (m *Matcher) MatchWithHandler(corpus string, data map[string]interface{}) (bool, []string) {
+func (m *Matcher) MatchWithHandler(corpus string, data map[string]interface{}) (bool, []MatchHit) {
 	if handler, ok := registeredMatchHandlers[m.matcherType]; ok {
 		return handler(m, corpus, data)
 	}

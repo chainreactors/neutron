@@ -36,25 +36,10 @@ func (r *Request) getMatchPart(part string, data protocols.InternalEvent) (strin
 	return itemStr, true
 }
 
-// Match matches a generic data response again a given matcher
-func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []string) {
-	itemStr, ok := r.getMatchPart(matcher.Part, data)
-	if !ok {
-		return ok, []string{}
-	}
-
-	switch matcher.GetType() {
-	case operators.SizeMatcher:
-		return matcher.Result(matcher.MatchSize(len(itemStr))), []string{}
-	case operators.WordsMatcher:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchWords(itemStr, data))
-	case operators.RegexMatcher:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchRegex(itemStr))
-	case operators.BinaryMatcher:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchBinary(itemStr))
-	default:
-		return matcher.ResultWithMatchedSnippet(matcher.MatchWithHandler(itemStr, data))
-	}
+func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []operators.MatchHit) {
+	return protocols.MakeDefaultMatchFunc(data, matcher, func(part string) (string, bool) {
+		return r.getMatchPart(part, data)
+	})
 }
 
 // Extract performs extracting operation for an extractor on model and returns true or false.
@@ -351,7 +336,7 @@ func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *
 		Type:             common.ToString(wrapped.InternalEvent["type"]),
 		Host:             common.ToString(wrapped.InternalEvent["host"]),
 		Matched:          common.ToString(wrapped.InternalEvent["matched"]),
-		ExtractedResults: wrapped.OperatorsResult.OutputExtracts,
+		ExtractedResults: wrapped.OperatorsResult.OutputExtracts(),
 		Metadata:         wrapped.OperatorsResult.PayloadValues,
 		Timestamp:        time.Now(),
 		//MatcherStatus:    true,

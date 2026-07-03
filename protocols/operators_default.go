@@ -44,7 +44,7 @@ func DefaultPartResolver(data map[string]interface{}) PartResolver {
 // specific) from "how do I run this matcher type?" (universal), so a protocol
 // with a custom part scheme (ssl's body/all→response fold) doesn't have to
 // duplicate the type-switch.
-func MakeDefaultMatchFunc(data map[string]interface{}, matcher *operators.Matcher, partResolver PartResolver) (bool, []string) {
+func MakeDefaultMatchFunc(data map[string]interface{}, matcher *operators.Matcher, partResolver PartResolver) (bool, []operators.MatchHit) {
 	if matcher.GetType() == operators.DSLMatcher {
 		return matcher.Result(matcher.MatchDSL(data)), nil
 	}

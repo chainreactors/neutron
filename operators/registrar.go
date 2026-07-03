@@ -4,7 +4,7 @@ type ExtractFunc func(e *Extractor, corpus string, data map[string]interface{}) 
 
 type CompileExtractFunc func(e *Extractor) error
 
-type MatchFunc func(m *Matcher, corpus string, data map[string]interface{}) (bool, []string)
+type MatchFunc func(m *Matcher, corpus string, data map[string]interface{}) (bool, []MatchHit)
 
 type CompileMatchFunc func(m *Matcher) error
 

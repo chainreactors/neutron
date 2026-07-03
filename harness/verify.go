@@ -170,7 +170,7 @@ func summarizeTrace(scenario string, index int, event *protocols.InternalWrapped
 	}
 	if event.OperatorsResult != nil {
 		trace.Matched = event.OperatorsResult.Matched
-		trace.Extracts = event.OperatorsResult.Extracts
+		trace.Extracts = event.OperatorsResult.ExtractsByName()
 		trace.Dynamic = event.OperatorsResult.DynamicValues
 	}
 	for _, key := range []string{

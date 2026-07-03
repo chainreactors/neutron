@@ -1,0 +1,26 @@
+id: nextjs
+info:
+  name: nextjs
+  author: cn-kali-team
+  tags: detect,tech,nextjs
+  severity: info
+  metadata:
+    product: nextjs
+    vendor: 00_unknown
+    verified: false
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/'
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "/_next/static/"
+          - "next-router-state-tree"
+        case-insensitive: true
+      - type: word
+        words:
+          - "Next.js"
+        part: header
+        case-insensitive: true

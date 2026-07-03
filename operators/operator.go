@@ -61,7 +61,12 @@ func (r *Operators) GetMatchersCondition() ConditionType {
 	return r.matchersCondition
 }
 
-type matchFunc func(data map[string]interface{}, matcher *Matcher) (bool, []string)
+type MatchHit struct {
+	Value string
+	Rule  string
+}
+
+type matchFunc func(data map[string]interface{}, matcher *Matcher) (bool, []MatchHit)
 type extractFunc func(data map[string]interface{}, matcher *Extractor) map[string]struct{}
 
 // Execute executes the operators on data and returns a result structure
@@ -70,21 +75,17 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 
 	var matches bool
 	result := &Result{
-		Matches:       make(map[string][]string),
-		Extracts:      make(map[string][]string),
 		DynamicValues: make(map[string]interface{}),
 	}
 	outputUnique := make(map[string]struct{})
+	hasExtract := false
 
-	// state variable to check if all extractors are internal
-	var allInternalExtractors bool = true
-	// Start with the extractors first and evaluate them.
-	for _, extractor := range operators.Extractors {
-		if !extractor.Internal && allInternalExtractors {
-			allInternalExtractors = false
+	for extIdx, extractor := range operators.Extractors {
+		name := extractor.Name
+		if name == "" {
+			name = fmt.Sprintf("extractor-%d", extIdx)
 		}
 
-		// DSL extractors: preserve original types from evaluation results
 		if extractor.GetType() == DSLExtractor {
 			typedResults := extractor.ExtractDSLTyped(data)
 			if len(typedResults) == 0 {
@@ -101,66 +102,52 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 				for _, val := range typedResults {
 					str := fmt.Sprint(val)
 					if _, ok := outputUnique[str]; !ok {
-						result.OutputExtracts = append(result.OutputExtracts, str)
+						result.Events = append(result.Events, parsers.TemplateEvent{Type: "extract", Name: name, Value: str})
 						outputUnique[str] = struct{}{}
+						hasExtract = true
 					}
-				}
-				if extractor.Name != "" {
-					strs := make([]string, len(typedResults))
-					for i, val := range typedResults {
-						strs[i] = fmt.Sprint(val)
-					}
-					result.Extracts[extractor.Name] = strs
 				}
 			}
 			continue
 		}
 
-		// Other extractors: string-based path
 		var extractorResults []string
-		for match := range extract(data, extractor) {
-			extractorResults = append(extractorResults, match)
-
+		for m := range extract(data, extractor) {
+			extractorResults = append(extractorResults, m)
 			if extractor.Internal {
-				result.DynamicValues[extractor.Name] = match
+				result.DynamicValues[extractor.Name] = m
 			} else {
-				if _, ok := outputUnique[match]; !ok {
-					result.OutputExtracts = append(result.OutputExtracts, match)
-					outputUnique[match] = struct{}{}
+				if _, ok := outputUnique[m]; !ok {
+					result.Events = append(result.Events, parsers.TemplateEvent{Type: "extract", Name: name, Value: m})
+					outputUnique[m] = struct{}{}
+					hasExtract = true
 				}
 			}
-		}
-		if len(extractorResults) > 0 && !extractor.Internal && extractor.Name != "" {
-			result.Extracts[extractor.Name] = extractorResults
 		}
 		if len(extractorResults) > 0 {
 			data[extractor.Name] = getExtractedValue(extractorResults)
 		}
 	}
 
-	// expose dynamic values to same request matchers
 	if len(result.DynamicValues) > 0 {
 		data = common.MergeMaps(data, result.DynamicValues)
 	}
 
-	// 用于 AND 条件临时存储匹配结果
-	var andMatches map[string][]string
-	if matcherCondition == ANDCondition {
-		andMatches = make(map[string][]string)
-	}
-
+	var andEvents []parsers.TemplateEvent
 	for matcherIndex, matcher := range operators.Matchers {
 		if isMatch, matched := match(data, matcher); isMatch {
 			common.Debug("Matched: %+v", matcher)
+			matcherName := getMatcherName(matcher, matcherIndex)
+			evts := make([]parsers.TemplateEvent, len(matched))
+			for i, h := range matched {
+				evts[i] = parsers.TemplateEvent{Type: "match", Name: matcherName, Rule: h.Rule, Value: h.Value}
+			}
 			if matcherCondition == ORCondition {
-				// OR 条件：立即记录
 				if matcher.Name != "" {
-					result.Matches[matcher.Name] = matched
+					result.Events = append(result.Events, evts...)
 				}
 			} else {
-				// AND 条件：暂存到临时 map，等所有都通过后再记录
-				matcherName := getMatcherName(matcher, matcherIndex)
-				andMatches[matcherName] = matched
+				andEvents = append(andEvents, evts...)
 			}
 			matches = true
 		} else if matcherCondition == ANDCondition {
@@ -171,23 +158,20 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 		}
 	}
 
-	// AND 条件且所有 matcher 都匹配成功，统一写入到 result.Matches
 	if matcherCondition == ANDCondition && matches {
-		result.Matches = andMatches
+		result.Events = append(result.Events, andEvents...)
 	}
 
 	result.Matched = matches
-	result.Extracted = len(result.OutputExtracts) > 0
-	// Don't print if we have matchers and they have not matched, irregardless of extractor
+	result.Extracted = hasExtract
+
 	if len(operators.Matchers) > 0 && !matches {
 		return nil, false
 	}
 	if len(result.DynamicValues) > 0 {
 		return result, true
 	}
-	// Write a final string of output if matcher type is
-	// AND or if we have extractors for the mechanism too.
-	if len(result.Extracts) > 0 || len(result.OutputExtracts) > 0 || matches {
+	if hasExtract || matches {
 		return result, true
 	}
 

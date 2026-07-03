@@ -40,7 +40,7 @@ func (r *Request) getMatchPart(part string, data protocols.InternalEvent) (strin
 // json/xpath, so this protocol stays aligned with nuclei's ssl by construction
 // (one matrix, no per-protocol switch to forget). The partResolver carries the
 // ssl-specific body/all→response fold that xray-converter templates rely on.
-func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []string) {
+func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []operators.MatchHit) {
 	return protocols.MakeDefaultMatchFunc(data, matcher, func(part string) (string, bool) {
 		return r.getMatchPart(part, data)
 	})
@@ -283,7 +283,7 @@ func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *
 		Type:             common.ToString(wrapped.InternalEvent["type"]),
 		Host:             common.ToString(wrapped.InternalEvent["host"]),
 		Matched:          common.ToString(wrapped.InternalEvent["matched"]),
-		ExtractedResults: wrapped.OperatorsResult.OutputExtracts,
+		ExtractedResults: wrapped.OperatorsResult.OutputExtracts(),
 		Metadata:         wrapped.OperatorsResult.PayloadValues,
 		Timestamp:        time.Now(),
 		IP:               common.ToString(wrapped.InternalEvent["ip"]),

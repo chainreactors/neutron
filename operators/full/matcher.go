@@ -34,7 +34,7 @@ func compileJSONMatcher(m *operators.Matcher) error {
 	return nil
 }
 
-func matchJSON(m *operators.Matcher, corpus string, _ map[string]interface{}) (bool, []string) {
+func matchJSON(m *operators.Matcher, corpus string, _ map[string]interface{}) (bool, []operators.MatchHit) {
 	var jsonObj interface{}
 	if err := json.Unmarshal([]byte(corpus), &jsonObj); err != nil {
 		return false, nil
@@ -45,7 +45,7 @@ func matchJSON(m *operators.Matcher, corpus string, _ map[string]interface{}) (b
 		return false, nil
 	}
 
-	var matchedItems []string
+	var matchedItems []operators.MatchHit
 	for i, code := range compiled {
 		iter := code.Run(jsonObj)
 		v, ok := iter.Next()
@@ -70,7 +70,11 @@ func matchJSON(m *operators.Matcher, corpus string, _ map[string]interface{}) (b
 		}
 
 		result := common.ToString(v)
-		matchedItems = append(matchedItems, result)
+		rule := ""
+		if i < len(m.JSON) {
+			rule = m.JSON[i]
+		}
+		matchedItems = append(matchedItems, operators.MatchHit{Value: result, Rule: rule})
 
 		if m.GetCondition() == operators.ORCondition && !m.MatchAll {
 			return true, matchedItems
@@ -100,20 +104,20 @@ func isJQTruthy(v interface{}) bool {
 	}
 }
 
-func matchXPath(m *operators.Matcher, corpus string, _ map[string]interface{}) (bool, []string) {
+func matchXPath(m *operators.Matcher, corpus string, _ map[string]interface{}) (bool, []operators.MatchHit) {
 	if strings.HasPrefix(corpus, "<?xml") {
 		return matchXML(m, corpus)
 	}
 	return matchHTML(m, corpus)
 }
 
-func matchHTML(m *operators.Matcher, corpus string) (bool, []string) {
+func matchHTML(m *operators.Matcher, corpus string) (bool, []operators.MatchHit) {
 	doc, err := htmlquery.Parse(strings.NewReader(corpus))
 	if err != nil {
 		return false, nil
 	}
 
-	var matchedItems []string
+	var matchedItems []operators.MatchHit
 	for i, xpath := range m.XPath {
 		nodes, err := htmlquery.QueryAll(doc, xpath)
 		if err != nil || len(nodes) == 0 {
@@ -124,7 +128,7 @@ func matchHTML(m *operators.Matcher, corpus string) (bool, []string) {
 		}
 
 		for _, node := range nodes {
-			matchedItems = append(matchedItems, htmlquery.InnerText(node))
+			matchedItems = append(matchedItems, operators.MatchHit{Value: htmlquery.InnerText(node), Rule: xpath})
 		}
 
 		if m.GetCondition() == operators.ORCondition && !m.MatchAll {
@@ -140,13 +144,13 @@ func matchHTML(m *operators.Matcher, corpus string) (bool, []string) {
 	return false, nil
 }
 
-func matchXML(m *operators.Matcher, corpus string) (bool, []string) {
+func matchXML(m *operators.Matcher, corpus string) (bool, []operators.MatchHit) {
 	doc, err := xmlquery.Parse(strings.NewReader(corpus))
 	if err != nil {
 		return false, nil
 	}
 
-	var matchedItems []string
+	var matchedItems []operators.MatchHit
 	for i, xpath := range m.XPath {
 		nodes, err := xmlquery.QueryAll(doc, xpath)
 		if err != nil || len(nodes) == 0 {
@@ -157,7 +161,7 @@ func matchXML(m *operators.Matcher, corpus string) (bool, []string) {
 		}
 
 		for _, node := range nodes {
-			matchedItems = append(matchedItems, node.InnerText())
+			matchedItems = append(matchedItems, operators.MatchHit{Value: node.InnerText(), Rule: xpath})
 		}
 
 		if m.GetCondition() == operators.ORCondition && !m.MatchAll {
