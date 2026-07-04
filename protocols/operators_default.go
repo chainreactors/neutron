@@ -1,8 +1,10 @@
 package protocols
 
 import (
-	"github.com/chainreactors/utils/iutils"
+	"strings"
+
 	"github.com/chainreactors/neutron/operators"
+	"github.com/chainreactors/utils/iutils"
 )
 
 // PartResolver maps a matcher/extractor `part:` to the string the operator
@@ -66,6 +68,64 @@ func MakeDefaultMatchFunc(data map[string]interface{}, matcher *operators.Matche
 		// the registered handler — same fall-through nuclei uses.
 		return matcher.ResultWithMatchedSnippet(matcher.MatchWithHandler(itemStr, data))
 	}
+}
+
+// HTTPPartResolver maps HTTP-specific part names to event map keys.
+// It implements the same logic as http.Request.getMatchPart but without
+// depending on the http package, so callers that only need passive
+// matching (e.g. fingerprinthub in passive_only builds) can avoid
+// importing net/http and crypto/tls.
+func HTTPPartResolver(data map[string]interface{}) PartResolver {
+	return func(part string) (string, bool) {
+		if part == "" {
+			part = "body"
+		}
+		if part == "header" {
+			part = "all_headers"
+		}
+		if part == "all" {
+			body := iutils.ToString(data["body"])
+			headers := iutils.ToString(data["all_headers"])
+			return body + headers, true
+		}
+		item, ok := data[part]
+		if !ok {
+			return "", false
+		}
+		return iutils.ToString(item), true
+	}
+}
+
+// HTTPMatch performs HTTP-protocol matching without depending on
+// neutron/protocols/http. Equivalent to http.Request.Match.
+func HTTPMatch(data map[string]interface{}, matcher *operators.Matcher) (bool, []operators.MatchHit) {
+	switch matcher.GetType() {
+	case operators.StatusMatcher:
+		statusCode, ok := data["status_code"]
+		if !ok {
+			return false, nil
+		}
+		status, ok := statusCode.(int)
+		if !ok {
+			return false, nil
+		}
+		return matcher.Result(matcher.MatchStatusCode(status)), []operators.MatchHit{{Value: iutils.ToString(statusCode)}}
+	case operators.FaviconMatcher:
+		resolver := HTTPPartResolver(data)
+		item, ok := resolver(matcher.Part)
+		if !ok {
+			return false, nil
+		}
+		return matcher.ResultWithMatchedSnippet(matcher.MatchHashValues(strings.Fields(item)))
+	default:
+		return MakeDefaultMatchFunc(data, matcher, HTTPPartResolver(data))
+	}
+}
+
+// HTTPExtract performs HTTP-protocol extraction without depending on
+// neutron/protocols/http. Equivalent to http.Request.Extract.
+func HTTPExtract(data map[string]interface{}, extractor *operators.Extractor) map[string]struct{} {
+	return MakeDefaultExtractFunc(data, extractor, HTTPPartResolver(data))
 }
 
 // MakeDefaultExtractFunc is the extractor counterpart, mirroring nuclei's
