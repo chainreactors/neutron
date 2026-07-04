@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/utils/encode"
@@ -41,12 +41,12 @@ func TestResponseToDSLMap(t *testing.T) {
 	require.Equal(t, "http", event["type"])
 
 	// Verify response string contains status line, headers, and body
-	respStr := common.ToString(event["response"])
+	respStr := iutils.ToString(event["response"])
 	require.Contains(t, respStr, "200")
 	require.Contains(t, respStr, "test body")
 
 	// Verify request string contains method and URL
-	reqStr := common.ToString(event["request"])
+	reqStr := iutils.ToString(event["request"])
 	require.Contains(t, reqStr, "GET")
 	require.Contains(t, reqStr, "/path")
 	require.Contains(t, reqStr, "HTTP/1.1")
@@ -127,13 +127,13 @@ func TestResponseToDSLMapWithRequestBody(t *testing.T) {
 	event := r.responseToDSLMap(req, resp, server.URL, server.URL+"/api", 100*time.Millisecond, nil, reqBody)
 
 	// Verify request string includes the body
-	reqStr := common.ToString(event["request"])
+	reqStr := iutils.ToString(event["request"])
 	require.Contains(t, reqStr, "POST")
 	require.Contains(t, reqStr, `{"key":"value"}`)
 	require.Contains(t, reqStr, "Content-Type: application/json")
 
 	// Verify response string includes echo body
-	respStr := common.ToString(event["response"])
+	respStr := iutils.ToString(event["response"])
 	require.Contains(t, respStr, `echo: {"key":"value"}`)
 }
 
@@ -216,7 +216,7 @@ func TestRedirectsCarrySetCookieWithinRedirectChain(t *testing.T) {
 	require.NoError(t, r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}))
 
 	var matched bool
-	err := r.ExecuteWithResults(protocols.NewScanContext(server.URL, nil), map[string]interface{}{}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
+	err := r.ExecuteWithResults(NewHTTPScanContext(server.URL, nil), map[string]interface{}{}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
 		if event.OperatorsResult != nil {
 			matched = event.OperatorsResult.Matched
 		}
@@ -252,7 +252,7 @@ func TestPerContextCookieJarSharedWithinExecution(t *testing.T) {
 	}
 	require.NoError(t, r.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}))
 
-	input := protocols.NewScanContext(server.URL, nil)
+	input := NewHTTPScanContext(server.URL, nil)
 	input.TraceAll = true
 	err := r.ExecuteWithResults(input, map[string]interface{}{}, map[string]interface{}{}, func(*protocols.InternalWrappedEvent) {})
 	require.NoError(t, err)
@@ -297,7 +297,7 @@ func TestCookieReuseSharesJarWithinExecution(t *testing.T) {
 	})
 	require.NoError(t, checkReq.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}))
 
-	ctx := protocols.NewScanContext(server.URL, nil)
+	ctx := NewHTTPScanContext(server.URL, nil)
 	err := loginReq.ExecuteWithResults(ctx, map[string]interface{}{}, map[string]interface{}{}, func(*protocols.InternalWrappedEvent) {})
 	require.NoError(t, err)
 
@@ -313,7 +313,7 @@ func TestCookieReuseSharesJarWithinExecution(t *testing.T) {
 
 	checkSawCookie = false
 	matched = false
-	err = checkReq.ExecuteWithResults(protocols.NewScanContext(server.URL, nil), map[string]interface{}{}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
+	err = checkReq.ExecuteWithResults(NewHTTPScanContext(server.URL, nil), map[string]interface{}{}, map[string]interface{}{}, func(event *protocols.InternalWrappedEvent) {
 		if event.OperatorsResult != nil {
 			matched = event.OperatorsResult.Matched
 		}
@@ -358,7 +358,7 @@ func TestCookieJarIsSharedAcrossRequestBlocksByDefault(t *testing.T) {
 	})
 	require.NoError(t, secondReq.Compile(&protocols.ExecuterOptions{Options: &protocols.Options{Timeout: 5}}))
 
-	ctx := protocols.NewScanContext(server.URL, nil)
+	ctx := NewHTTPScanContext(server.URL, nil)
 	err := firstReq.ExecuteWithResults(ctx, map[string]interface{}{}, map[string]interface{}{}, func(*protocols.InternalWrappedEvent) {})
 	require.NoError(t, err)
 
@@ -798,7 +798,7 @@ func TestExtractorInHTTP(t *testing.T) {
 	require.NotNil(t, capturedResult)
 	require.NotNil(t, capturedResult.OperatorsResult)
 	require.True(t, capturedResult.OperatorsResult.Extracted)
-	require.Contains(t, capturedResult.OperatorsResult.Extracts, "app_version")
+	require.Contains(t, capturedResult.OperatorsResult.ExtractsByName(), "app_version")
 }
 
 func TestNoMatchNoRequestResponse(t *testing.T) {

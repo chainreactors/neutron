@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"github.com/chainreactors/neutron/common/tlsx"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
@@ -32,7 +33,7 @@ func (r *Request) getMatchPart(part string, data protocols.InternalEvent) (strin
 	if !ok {
 		return "", false
 	}
-	return common.ToString(item), true
+	return iutils.ToString(item), true
 }
 
 // Match dispatches through protocols.MakeDefaultMatchFunc — the shared matrix
@@ -73,7 +74,7 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 		scanInput = input.Input
 	}
 
-	target := r.resolveTarget(scanInput, common.MergeMaps(globalVars, dynamicValues))
+	target := r.resolveTarget(scanInput, iutils.MergeMaps(globalVars, dynamicValues))
 	if err := r.executeTarget(input, target, dynamicValues, previous, callback); err != nil {
 		// Emit a probe_status=false event so the executer sees something for
 		// this sub-request — matchers/extractors that key off probe_status
@@ -128,7 +129,7 @@ func (r *Request) resolveTarget(input string, vars map[string]interface{}) strin
 		"Port":     port,
 		"BaseURL":  input,
 	}
-	merged := common.MergeMaps(vars, targetVars)
+	merged := iutils.MergeMaps(vars, targetVars)
 
 	address := strings.TrimSpace(r.Address)
 	if address == "" {
@@ -279,14 +280,14 @@ func (r *Request) GetCompiledOperators() []*operators.Operators {
 
 func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *protocols.ResultEvent {
 	data := &protocols.ResultEvent{
-		TemplateID:       common.ToString(wrapped.InternalEvent["template-id"]),
-		Type:             common.ToString(wrapped.InternalEvent["type"]),
-		Host:             common.ToString(wrapped.InternalEvent["host"]),
-		Matched:          common.ToString(wrapped.InternalEvent["matched"]),
+		TemplateID:       iutils.ToString(wrapped.InternalEvent["template-id"]),
+		Type:             iutils.ToString(wrapped.InternalEvent["type"]),
+		Host:             iutils.ToString(wrapped.InternalEvent["host"]),
+		Matched:          iutils.ToString(wrapped.InternalEvent["matched"]),
 		ExtractedResults: wrapped.OperatorsResult.OutputExtracts(),
 		Metadata:         wrapped.OperatorsResult.PayloadValues,
 		Timestamp:        time.Now(),
-		IP:               common.ToString(wrapped.InternalEvent["ip"]),
+		IP:               iutils.ToString(wrapped.InternalEvent["ip"]),
 	}
 	return data
 }

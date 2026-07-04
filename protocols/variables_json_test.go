@@ -6,7 +6,7 @@ package protocols
 import (
 	"testing"
 
-	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,7 +14,7 @@ func TestJSONStableValuesFreezesResolvedValueContainingParenthesis(t *testing.T)
 	vars := Variable{"r1": `{{rand_base(1, "(")}}`}
 	frozen := vars.StableValues()
 
-	require.Equal(t, "(", common.ToString(frozen["r1"]))
+	require.Equal(t, "(", iutils.ToString(frozen["r1"]))
 }
 
 func TestJSONStableValuesKeepsRuntimeDependentVariableUnfrozen(t *testing.T) {

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -54,12 +52,7 @@ func main() {
 
 	execOpts := &protocols.ExecuterOptions{Options: &protocols.Options{Timeout: *timeoutFlag}}
 	if *proxyAddr != "" {
-		proxyURL, err := url.Parse(*proxyAddr)
-		if err != nil {
-			fmt.Printf("Invalid proxy address: %s\n", err.Error())
-			os.Exit(1)
-		}
-		execOpts.Options.Proxy = http.ProxyURL(proxyURL)
+		execOpts.Options.ProxyURL = *proxyAddr
 	}
 
 	var yamlFiles []string

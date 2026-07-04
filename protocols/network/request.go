@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"github.com/chainreactors/neutron/operators"
 	protocols "github.com/chainreactors/neutron/protocols"
 	"io"
@@ -31,7 +32,7 @@ func (r *Request) getMatchPart(part string, data protocols.InternalEvent) (strin
 	if !ok {
 		return "", false
 	}
-	itemStr := common.ToString(item)
+	itemStr := iutils.ToString(item)
 
 	return itemStr, true
 }
@@ -71,16 +72,16 @@ func (r *Request) ExecuteWithResults(input *protocols.ScanContext, dynamicValues
 	if input != nil {
 		globalVars = input.GlobalVars
 	}
-	values := common.MergeMaps(common.MergeMaps(common.MergeMaps(globalVars, dynamicValues), previous), targetValues)
+	values := iutils.MergeMaps(iutils.MergeMaps(iutils.MergeMaps(globalVars, dynamicValues), previous), targetValues)
 	variablesMap := r.options.Variables.Evaluate(values)
 	for k, v := range globalVars {
 		if _, defined := variablesMap[k]; defined {
 			variablesMap[k] = v
 		}
 	}
-	dynamicValues = common.MergeMaps(globalVars, dynamicValues)
-	dynamicValues = common.MergeMaps(variablesMap, dynamicValues)
-	dynamicValues = common.MergeMaps(dynamicValues, targetValues)
+	dynamicValues = iutils.MergeMaps(globalVars, dynamicValues)
+	dynamicValues = iutils.MergeMaps(variablesMap, dynamicValues)
+	dynamicValues = iutils.MergeMaps(dynamicValues, targetValues)
 	for _, kv := range r.addresses {
 		actualAddress := common.Replace(kv.address, targetValues)
 		err = r.executeAddress(input, targetValues, actualAddress, address, kv.tls, dynamicValues, callback)
@@ -118,7 +119,7 @@ func (r *Request) executeAddress(input *protocols.ScanContext, variables map[str
 			if !ok {
 				break
 			}
-			value = common.MergeMaps(value, payloads)
+			value = iutils.MergeMaps(value, payloads)
 			if err := r.executeRequestWithPayloads(variables, actualAddress, address, input.Input, shouldUseTLS, value, dynamicValues, callback); err != nil {
 				return err
 			}
@@ -330,19 +331,19 @@ func (r *Request) GetCompiledOperators() []*operators.Operators {
 
 func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *protocols.ResultEvent {
 	data := &protocols.ResultEvent{
-		TemplateID: common.ToString(wrapped.InternalEvent["template-id"]),
-		//TemplatePath:     common.ToString(wrapped.InternalEvent["template-path"]),
+		TemplateID: iutils.ToString(wrapped.InternalEvent["template-id"]),
+		//TemplatePath:     iutils.ToString(wrapped.InternalEvent["template-path"]),
 		//Info:             wrapped.InternalEvent["template-info"].(model.Info),
-		Type:             common.ToString(wrapped.InternalEvent["type"]),
-		Host:             common.ToString(wrapped.InternalEvent["host"]),
-		Matched:          common.ToString(wrapped.InternalEvent["matched"]),
+		Type:             iutils.ToString(wrapped.InternalEvent["type"]),
+		Host:             iutils.ToString(wrapped.InternalEvent["host"]),
+		Matched:          iutils.ToString(wrapped.InternalEvent["matched"]),
 		ExtractedResults: wrapped.OperatorsResult.OutputExtracts(),
 		Metadata:         wrapped.OperatorsResult.PayloadValues,
 		Timestamp:        time.Now(),
 		//MatcherStatus:    true,
-		IP: common.ToString(wrapped.InternalEvent["ip"]),
-		//Request:          common.ToString(wrapped.InternalEvent["request"]),
-		//Response:         common.ToString(wrapped.InternalEvent["data"]),
+		IP: iutils.ToString(wrapped.InternalEvent["ip"]),
+		//Request:          iutils.ToString(wrapped.InternalEvent["request"]),
+		//Response:         iutils.ToString(wrapped.InternalEvent["data"]),
 	}
 	return data
 }

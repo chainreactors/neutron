@@ -1,7 +1,7 @@
 package protocols
 
 import (
-	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"github.com/chainreactors/neutron/operators"
 )
 
@@ -29,7 +29,7 @@ func DefaultPartResolver(data map[string]interface{}) PartResolver {
 		if !ok {
 			return "", false
 		}
-		return common.ToString(item), true
+		return iutils.ToString(item), true
 	}
 }
 

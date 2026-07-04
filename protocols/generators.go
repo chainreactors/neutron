@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 )
 
 // Inspired from https://github.com/ffuf/ffuf/blob/master/pkg/input/input.go
@@ -25,7 +25,7 @@ func loadPayloads(payloads map[string]interface{}) (map[string][]string, error) 
 		case []interface{}:
 			s := make([]string, len(pt))
 			for i, v := range pt {
-				s[i] = common.ToString(v)
+				s[i] = iutils.ToString(v)
 			}
 			loadedPayloads[name] = s
 		default:
@@ -284,7 +284,7 @@ func BuildPayloadFromOptions(options *Options) map[string]interface{} {
 	m := make(map[string]interface{})
 	// merge with vars
 	if len(options.VarsPayload) > 0 {
-		m = common.MergeMaps(m, options.VarsPayload)
+		m = iutils.MergeMaps(m, options.VarsPayload)
 	}
 
 	// merge with env vars

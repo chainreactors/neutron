@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -34,7 +34,7 @@ r1: '{{concat("token-", rand_base(8, "abc"))}}'
 
 	r1, ok := frozen["r1"]
 	require.True(t, ok, "r1 (random + literal) must be frozen")
-	require.True(t, strings.HasPrefix(common.ToString(r1), "token-"))
+	require.True(t, strings.HasPrefix(iutils.ToString(r1), "token-"))
 
 	_, ok = frozen["token"]
 	require.False(t, ok, "token depends on {{Hostname}} and must stay per-request")
@@ -62,7 +62,7 @@ b: '{{a}}-suffix'
 
 	require.Contains(t, frozen, "a")
 	require.Contains(t, frozen, "b")
-	require.Equal(t, common.ToString(frozen["a"])+"-suffix", common.ToString(frozen["b"]))
+	require.Equal(t, iutils.ToString(frozen["a"])+"-suffix", iutils.ToString(frozen["b"]))
 }
 
 func TestStableValuesDoesNotResolveLaterVariablesOutOfOrder(t *testing.T) {
@@ -80,7 +80,7 @@ func TestStableValuesFreezesResolvedValueContainingParenthesis(t *testing.T) {
 	vars := mustVariable(t, `r1: '{{rand_base(1, "(")}}'`)
 	frozen := vars.StableValues()
 
-	require.Equal(t, "(", common.ToString(frozen["r1"]))
+	require.Equal(t, "(", iutils.ToString(frozen["r1"]))
 }
 
 // Evaluate evaluates each variable's own definition, so a template variable

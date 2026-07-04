@@ -75,7 +75,7 @@ func (operators *Operators) Execute(data map[string]interface{}, match matchFunc
 
 	var matches bool
 	result := &Result{
-		DynamicValues: make(map[string]interface{}),
+		Result: parsers.Result{DynamicValues: make(map[string]interface{})},
 	}
 	outputUnique := make(map[string]struct{})
 	hasExtract := false

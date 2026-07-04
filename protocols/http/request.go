@@ -9,11 +9,13 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/utils/encode"
@@ -105,7 +107,7 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 		if !ok {
 			return false, nil
 		}
-		return matcher.Result(matcher.MatchStatusCode(status)), []operators.MatchHit{{Value: common.ToString(statusCode)}}
+		return matcher.Result(matcher.MatchStatusCode(status)), []operators.MatchHit{{Value: iutils.ToString(statusCode)}}
 	case operators.FaviconMatcher:
 		item, ok := r.getMatchPart(matcher.Part, data)
 		if !ok {
@@ -149,15 +151,15 @@ func (r *Request) getMatchPart(part string, data protocols.InternalEvent) (strin
 
 	if part == "all" {
 		builder := &strings.Builder{}
-		builder.WriteString(common.ToString(data["body"]))
-		builder.WriteString(common.ToString(data["all_headers"]))
+		builder.WriteString(iutils.ToString(data["body"]))
+		builder.WriteString(iutils.ToString(data["all_headers"]))
 		itemStr = builder.String()
 	} else {
 		item, ok := data[part]
 		if !ok {
 			return "", false
 		}
-		itemStr = common.ToString(item)
+		itemStr = iutils.ToString(item)
 	}
 	return itemStr, true
 }
@@ -203,17 +205,17 @@ func (r *Request) MakeResultEvent(wrapped *protocols.InternalWrappedEvent) []*pr
 
 func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *protocols.ResultEvent {
 	data := &protocols.ResultEvent{
-		TemplateID: common.ToString(wrapped.InternalEvent["template-id"]),
+		TemplateID: iutils.ToString(wrapped.InternalEvent["template-id"]),
 		//Info:             wrapped.InternalEvent["template-info"].(map[string]interface{}),
 		Type:             "http",
-		Host:             common.ToString(wrapped.InternalEvent["host"]),
-		Matched:          common.ToString(wrapped.InternalEvent["matched"]),
+		Host:             iutils.ToString(wrapped.InternalEvent["host"]),
+		Matched:          iutils.ToString(wrapped.InternalEvent["matched"]),
 		Metadata:         wrapped.OperatorsResult.PayloadValues,
 		ExtractedResults: wrapped.OperatorsResult.OutputExtracts(),
 		Timestamp:        time.Now(),
-		IP:               common.ToString(wrapped.InternalEvent["ip"]),
-		Request:          common.ToString(wrapped.InternalEvent["request"]),
-		Response:         common.ToString(wrapped.InternalEvent["response"]),
+		IP:               iutils.ToString(wrapped.InternalEvent["ip"]),
+		Request:          iutils.ToString(wrapped.InternalEvent["request"]),
+		Response:         iutils.ToString(wrapped.InternalEvent["response"]),
 	}
 	return data
 }
@@ -239,6 +241,13 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 	} else if r.HostRedirects {
 		policy = FollowSameHostRedirect
 	}
+	var proxyFunc func(*http.Request) (*url.URL, error)
+	if options.Options.ProxyURL != "" {
+		proxyURL, err := url.Parse(options.Options.ProxyURL)
+		if err == nil {
+			proxyFunc = http.ProxyURL(proxyURL)
+		}
+	}
 	connectionConfiguration := &Configuration{
 		Timeout:        options.Options.Timeout,
 		MaxRedirects:   r.MaxRedirects,
@@ -246,7 +255,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 		CookieReuse:    r.CookieReuse,
 		DisableCookie:  r.DisableCookie,
 		DialContext:    options.Options.DialContext,
-		Proxy:          options.Options.Proxy,
+		Proxy:          proxyFunc,
 	}
 	r.httpClient = createClient(connectionConfiguration)
 
@@ -294,7 +303,7 @@ func (r *Request) Compile(options *protocols.ExecuterOptions) error {
 			case []string:
 				tmp := make([]string, len(payload.([]string)))
 				for i, p := range payload.([]string) {
-					tmp[i] = common.ToString(p)
+					tmp[i] = iutils.ToString(p)
 				}
 				r.Payloads[k] = tmp
 			}
@@ -379,7 +388,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 			break
 		}
 		if len(payloads) > 0 {
-			common.Debug("payloads: %s", common.MapToString(payloads))
+			common.Debug("payloads: %s", iutils.MapToString(payloads))
 		}
 		var gotErr error
 		var skip bool
@@ -388,7 +397,7 @@ func (r *Request) ExecuteRequestWithResults(input *protocols.ScanContext, dynami
 			operators.MakeDynamicValuesCallback(gotDynamicValues, r.IterateAll, func(data map[string]interface{}) bool {
 				// Merge extracted dynamic values with original template variables
 				// to preserve user-defined variables (e.g. rand_str) across requests
-				mergedValues := common.MergeMaps(dynamicValues, data)
+				mergedValues := iutils.MergeMaps(dynamicValues, data)
 				if skip, gotErr = executeFunc(inputData, payloads, mergedValues); skip || gotErr != nil {
 					return true
 				}
@@ -460,7 +469,7 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 			finalEvent[key] = v
 		}
 	}
-	finalEvent = common.MergeMaps(finalEvent, request.Vars())
+	finalEvent = iutils.MergeMaps(finalEvent, request.Vars())
 	common.Dump(finalEvent)
 
 	event := &protocols.InternalWrappedEvent{InternalEvent: finalEvent}
@@ -473,8 +482,8 @@ func (r *Request) executeRequest(input *protocols.ScanContext, request *generate
 				event.Results = nil
 			} else {
 				event.OperatorsResult.PayloadValues = request.dynamicValues
-				event.OperatorsResult.Request = common.ToString(finalEvent["request"])
-				event.OperatorsResult.Response = common.ToString(finalEvent["response"])
+				event.OperatorsResult.Request = iutils.ToString(finalEvent["request"])
+				event.OperatorsResult.Response = iutils.ToString(finalEvent["response"])
 				event.Results = r.MakeResultEvent(event)
 			}
 			callback(event)
@@ -497,23 +506,27 @@ func (r *Request) clientForExecution(input *protocols.ScanContext) *http.Client 
 		return client
 	}
 
+	transport := GetTransport(input)
+	overrideClient := GetClient(input)
+	jar := GetCookieJar(input)
+
 	switch {
-	case input.Transport != nil && r.httpClient != nil:
+	case transport != nil && r.httpClient != nil:
 		c := *r.httpClient
-		c.Transport = input.Transport
+		c.Transport = transport
 		client = &c
-	case input.Transport != nil:
-		client = &http.Client{Transport: input.Transport}
-	case input.Client != nil:
-		return input.Client
+	case transport != nil:
+		client = &http.Client{Transport: transport}
+	case overrideClient != nil:
+		return overrideClient
 	}
 
 	if client == nil {
 		return nil
 	}
 
-	if !r.DisableCookie && input.CookieJar != nil {
-		return cloneClientWithJar(client, input.CookieJar)
+	if !r.DisableCookie && jar != nil {
+		return cloneClientWithJar(client, jar)
 	}
 
 	return client
@@ -704,6 +717,6 @@ type generatedRequest struct {
 }
 
 func (gr *generatedRequest) Vars() map[string]interface{} {
-	return common.MergeMaps(gr.meta, gr.dynamicValues)
+	return iutils.MergeMaps(gr.meta, gr.dynamicValues)
 }
 

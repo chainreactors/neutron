@@ -9,6 +9,7 @@ import (
 
 	"github.com/Knetic/govaluate"
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 )
 
 type Variable map[string]interface{}
@@ -22,9 +23,9 @@ func (variables Variable) Len() int {
 // builtin/runtime value of the same name (nuclei semantics).
 func (variables *Variable) Evaluate(values map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
-	combined := common.MergeMaps(values, nil)
+	combined := iutils.MergeMaps(values, nil)
 	for _, key := range variables.sortedKeys() {
-		evaluated := evaluateVariableValue(common.ToString((*variables)[key]), combined)
+		evaluated := evaluateVariableValue(iutils.ToString((*variables)[key]), combined)
 		result[key] = evaluated
 		combined[key] = evaluated
 	}
@@ -40,10 +41,10 @@ func (variables *Variable) StableValues() map[string]interface{} {
 
 	keys := variables.sortedKeys()
 	for _, key := range keys {
-		expr := common.ToString((*variables)[key])
+		expr := iutils.ToString((*variables)[key])
 		resolved, ok := preEvaluateVariableValue(expr, empty, processing)
 		processing[key] = resolved
-		if ok && !strings.Contains(common.ToString(resolved), common.ParenthesisOpen) {
+		if ok && !strings.Contains(iutils.ToString(resolved), common.ParenthesisOpen) {
 			frozen[key] = resolved
 		}
 	}
@@ -68,7 +69,7 @@ func evaluateVariableValue(expression string, values map[string]interface{}) str
 }
 
 func preEvaluateVariableValue(expression string, values, processing map[string]interface{}) (string, bool) {
-	finalMap := common.MergeMaps(values, processing)
+	finalMap := iutils.MergeMaps(values, processing)
 	if hasUnresolvedVariableDependency(expression, finalMap) {
 		return expression, false
 	}
@@ -86,7 +87,7 @@ func hasUnresolvedVariableDependency(expression string, values map[string]interf
 		if !ok {
 			continue
 		}
-		if strings.Contains(common.ToString(value), common.ParenthesisOpen) {
+		if strings.Contains(iutils.ToString(value), common.ParenthesisOpen) {
 			return true
 		}
 	}

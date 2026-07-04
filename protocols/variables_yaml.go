@@ -9,6 +9,7 @@ import (
 
 	"github.com/Knetic/govaluate"
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,9 +75,9 @@ type Variable struct {
 // builtin/runtime value of the same name (nuclei semantics).
 func (variables *Variable) Evaluate(values map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{}, variables.Len())
-	combined := common.MergeMaps(values, nil)
+	combined := iutils.MergeMaps(values, nil)
 	variables.ForEach(func(key string, value interface{}) {
-		evaluated := evaluateVariableValue(common.ToString(value), combined)
+		evaluated := evaluateVariableValue(iutils.ToString(value), combined)
 		result[key] = evaluated
 		combined[key] = evaluated
 	})
@@ -93,10 +94,10 @@ func (variables *Variable) StableValues() map[string]interface{} {
 	empty := map[string]interface{}{}
 
 	variables.ForEach(func(key string, value interface{}) {
-		expr := common.ToString(value)
+		expr := iutils.ToString(value)
 		resolved, ok := preEvaluateVariableValue(expr, empty, processing)
 		processing[key] = resolved
-		if ok && !strings.Contains(common.ToString(resolved), common.ParenthesisOpen) {
+		if ok && !strings.Contains(iutils.ToString(resolved), common.ParenthesisOpen) {
 			frozen[key] = resolved
 		}
 	})
@@ -117,7 +118,7 @@ func evaluateVariableValue(expression string, values map[string]interface{}) str
 }
 
 func preEvaluateVariableValue(expression string, values, processing map[string]interface{}) (string, bool) {
-	finalMap := common.MergeMaps(values, processing)
+	finalMap := iutils.MergeMaps(values, processing)
 	if hasUnresolvedVariableDependency(expression, finalMap) {
 		return expression, false
 	}
@@ -135,7 +136,7 @@ func hasUnresolvedVariableDependency(expression string, values map[string]interf
 		if !ok {
 			continue
 		}
-		if strings.Contains(common.ToString(value), common.ParenthesisOpen) {
+		if strings.Contains(iutils.ToString(value), common.ParenthesisOpen) {
 			return true
 		}
 	}

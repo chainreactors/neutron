@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"github.com/chainreactors/neutron/protocols"
 )
 
@@ -134,9 +135,9 @@ func (r *requestGenerator) Total() int {
 func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues map[string]interface{}) (*generatedRequest, error) {
 	// We get the next payload for the request.
 	var err error
-	allVars := common.MergeMaps(payloads, dynamicValues)
+	allVars := iutils.MergeMaps(payloads, dynamicValues)
 	for payloadName, payloadValue := range payloads {
-		payloads[payloadName], err = common.Evaluate(common.ToString(payloadValue), allVars)
+		payloads[payloadName], err = common.Evaluate(iutils.ToString(payloadValue), allVars)
 		if err != nil {
 			return nil, err
 		}
@@ -160,9 +161,9 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 		globalVars = r.input.GlobalVars
 	}
 	if len(globalVars) > 0 {
-		targetValues = common.MergeMaps(globalVars, targetValues)
+		targetValues = iutils.MergeMaps(globalVars, targetValues)
 	}
-	values := common.MergeMaps(targetValues, allVars)
+	values := iutils.MergeMaps(targetValues, allVars)
 	if r.request.options != nil && r.request.options.Variables.Len() > 0 {
 		variablesMap := r.request.options.Variables.Evaluate(values)
 		// Override re-evaluated random/static variables with stable globalVars
@@ -172,12 +173,12 @@ func (r *requestGenerator) Make(baseURL, reqdata string, payloads, dynamicValues
 			}
 		}
 		if len(variablesMap) > 0 {
-			allVars = common.MergeMaps(variablesMap, allVars)
-			dynamicValues = common.MergeMaps(variablesMap, dynamicValues)
-			values = common.MergeMaps(targetValues, allVars)
+			allVars = iutils.MergeMaps(variablesMap, allVars)
+			dynamicValues = iutils.MergeMaps(variablesMap, dynamicValues)
+			values = iutils.MergeMaps(targetValues, allVars)
 		}
 	}
-	reqdata, err = common.Evaluate(reqdata, common.MergeMaps(values, targetValues))
+	reqdata, err = common.Evaluate(reqdata, iutils.MergeMaps(values, targetValues))
 	if err != nil {
 		return nil, err
 	}
@@ -421,5 +422,5 @@ func generateVariables(parsed *url.URL, trailingSlash bool) map[string]interface
 		"Scheme":   parsed.Scheme,
 	}
 
-	return common.MergeMaps(httpVariables, common.GenerateDNVariables(domain))
+	return iutils.MergeMaps(httpVariables, common.GenerateDNVariables(domain))
 }

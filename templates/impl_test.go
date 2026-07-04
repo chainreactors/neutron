@@ -257,8 +257,8 @@ network:
 	if result != nil {
 		t.Logf("✅ Request executed")
 		t.Logf("   Matched: %v", result.Matched)
-		t.Logf("   Extracts: %v", result.OutputExtracts)
-		if len(result.OutputExtracts) > 0 {
+		t.Logf("   Extracts: %v", result.OutputExtracts())
+		if len(result.OutputExtracts()) > 0 {
 			t.Log("   ✅ Extractor successfully extracted data!")
 		}
 	} else {
@@ -1126,7 +1126,7 @@ http:
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, result.Extracted)
-	require.Contains(t, result.Extracts, "server_version")
+	require.Contains(t, result.ExtractsByName(), "server_version")
 	require.NotEmpty(t, result.Request)
 	require.NotEmpty(t, result.Response)
 }

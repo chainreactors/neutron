@@ -1,7 +1,7 @@
 package executer
 
 import (
-	"github.com/chainreactors/neutron/common"
+	"github.com/chainreactors/utils/iutils"
 	"github.com/chainreactors/neutron/common/dsl"
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
@@ -58,7 +58,7 @@ func (e *Executer) Execute(input *protocols.ScanContext) (*operators.Result, err
 	input.GlobalVars = computeGlobalVars(e.options)
 
 	previous := make(map[string]interface{})
-	dynamicValues := common.MergeMaps(make(map[string]interface{}), input.Payloads)
+	dynamicValues := iutils.MergeMaps(make(map[string]interface{}), input.Payloads)
 	requestIndexOffset := 0
 	for _, req := range e.requests {
 		dynamicValues["__request_index_offset"] = requestIndexOffset

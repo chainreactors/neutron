@@ -3,8 +3,6 @@ package protocols
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 )
@@ -14,30 +12,6 @@ type ScanContext struct {
 	// exported / configurable fields
 	Input    string
 	Payloads map[string]interface{}
-	// Transport, when non-nil, overrides the per-request HTTP transport for this
-	// execution only. The request's compiled http.Client (CheckRedirect, Jar,
-	// Timeout, ...) is preserved via a shallow clone; only the RoundTripper is
-	// swapped. Active-match engines should prefer this over Client — replacing
-	// the whole client drops the template's `redirects:` policy and silently
-	// turns `redirects: false` templates into follow-302 templates.
-	Transport http.RoundTripper
-	// CookieJar is a per-execution cookie jar used by HTTP requests unless
-	// disable-cookie is set on the request. NewScanContext creates one
-	// automatically so templates can share cookies within one execution while
-	// separate scan executions stay isolated, matching nuclei's contextargs
-	// pattern.
-	CookieJar http.CookieJar
-	// Client, when non-nil, overrides the per-request default HTTP client for
-	// this execution only. It lets active-match engines inject a client/transport
-	// without mutating the shared, compiled template (which is concurrency-unsafe).
-	// nil = use the request's own compiled client.
-	//
-	// Deprecated: prefer Transport. Setting Client wholesale replaces the
-	// compiled http.Client and discards CheckRedirect/Jar/Timeout — templates
-	// with `redirects: false` then silently follow 302s and lose Location-header
-	// matches. Retained only for backward compatibility; Transport takes
-	// precedence when both are set.
-	Client *http.Client
 	// callbacks or hooks
 	OnError  func(error)
 	OnResult func(e *InternalWrappedEvent)
@@ -52,6 +26,7 @@ type ScanContext struct {
 	errors   []error
 	warnings []string
 	events   []*InternalWrappedEvent
+	values   map[string]interface{}
 
 	// might not be required but better to sync
 	m sync.Mutex
@@ -61,9 +36,20 @@ type ScanContext struct {
 // own CookieJar for nuclei-compatible HTTP cookie reuse, while separate
 // executions stay isolated.
 func NewScanContext(input string, payloads map[string]interface{}) *ScanContext {
-	ctx := &ScanContext{Input: input, Payloads: payloads}
-	ctx.CookieJar = newCookieJar()
-	return ctx
+	return &ScanContext{Input: input, Payloads: payloads, values: make(map[string]interface{})}
+}
+
+func (s *ScanContext) Set(key string, val interface{}) {
+	s.m.Lock()
+	s.values[key] = val
+	s.m.Unlock()
+}
+
+func (s *ScanContext) Get(key string) (interface{}, bool) {
+	s.m.Lock()
+	v, ok := s.values[key]
+	s.m.Unlock()
+	return v, ok
 }
 
 // GenerateResult returns final results slice from all events
@@ -131,42 +117,6 @@ func aggregateResults(events []*InternalWrappedEvent) []*ResultEvent {
 		results = append(results, e.Results...)
 	}
 	return results
-}
-
-type cookieJar struct {
-	mu      sync.Mutex
-	cookies map[string][]*http.Cookie
-}
-
-func newCookieJar() http.CookieJar {
-	return &cookieJar{cookies: make(map[string][]*http.Cookie)}
-}
-
-func (j *cookieJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	host := u.Host
-	existing := j.cookies[host]
-	for _, c := range cookies {
-		found := false
-		for i, e := range existing {
-			if e.Name == c.Name {
-				existing[i] = c
-				found = true
-				break
-			}
-		}
-		if !found {
-			existing = append(existing, c)
-		}
-	}
-	j.cookies[host] = existing
-}
-
-func (j *cookieJar) Cookies(u *url.URL) []*http.Cookie {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	return j.cookies[u.Host]
 }
 
 // joinErrors joins multiple errors and returns a single error string

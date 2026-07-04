@@ -76,12 +76,12 @@ func TestSSLExtractFoldsBodyAndAllToResponse(t *testing.T) {
 func TestSSLMatchRoutesJSONToHandler(t *testing.T) {
 	var called bool
 	operators.RegisterMatcherType("json", operators.JSONMatcher, nil,
-		func(m *operators.Matcher, corpus string, _ map[string]interface{}) (bool, []string) {
+		func(m *operators.Matcher, corpus string, _ map[string]interface{}) (bool, []operators.MatchHit) {
 			called = true
 			if corpus != "RESP" {
 				t.Errorf("matcher got corpus %q, expected response 'RESP'", corpus)
 			}
-			return true, []string{corpus}
+			return true, []operators.MatchHit{{Value: corpus}}
 		})
 
 	m := &operators.Matcher{Type: "json", JSON: []string{".ok"}}

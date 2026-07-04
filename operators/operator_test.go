@@ -8,9 +8,8 @@ import (
 
 func TestResultRequestResponseFields(t *testing.T) {
 	t.Run("empty by default", func(t *testing.T) {
-		result := &Result{
-			Matched: true,
-		}
+		result := &Result{}
+		result.Matched = true
 		require.Empty(t, result.Request)
 		require.Empty(t, result.Response)
 	})
@@ -20,10 +19,10 @@ func TestResultRequestResponseFields(t *testing.T) {
 		rawResp := "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<html></html>"
 
 		result := &Result{
-			Matched:  true,
 			Request:  rawReq,
 			Response: rawResp,
 		}
+		result.Matched = true
 
 		require.Equal(t, rawReq, result.Request)
 		require.Equal(t, rawResp, result.Response)
@@ -59,14 +58,14 @@ func TestOperatorsExecute(t *testing.T) {
 		err := ops.Compile()
 		require.NoError(t, err)
 
-		matchFunc := func(data map[string]interface{}, matcher *Matcher) (bool, []string) {
+		mf := func(data map[string]interface{}, matcher *Matcher) (bool, []MatchHit) {
 			return matcher.MatchWords("hello world", data)
 		}
-		extractFunc := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
+		ef := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
 			return nil
 		}
 
-		result, ok := ops.Execute(map[string]interface{}{}, matchFunc, extractFunc)
+		result, ok := ops.Execute(map[string]interface{}{}, mf, ef)
 		require.True(t, ok)
 		require.NotNil(t, result)
 		require.True(t, result.Matched)
@@ -83,14 +82,14 @@ func TestOperatorsExecute(t *testing.T) {
 		err := ops.Compile()
 		require.NoError(t, err)
 
-		matchFunc := func(data map[string]interface{}, matcher *Matcher) (bool, []string) {
+		mf := func(data map[string]interface{}, matcher *Matcher) (bool, []MatchHit) {
 			return matcher.MatchWords("hello world", data)
 		}
-		extractFunc := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
+		ef := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
 			return nil
 		}
 
-		result, ok := ops.Execute(map[string]interface{}{}, matchFunc, extractFunc)
+		result, ok := ops.Execute(map[string]interface{}{}, mf, ef)
 		require.True(t, ok)
 		require.NotNil(t, result)
 		require.True(t, result.Matched)
@@ -107,14 +106,14 @@ func TestOperatorsExecute(t *testing.T) {
 		err := ops.Compile()
 		require.NoError(t, err)
 
-		matchFunc := func(data map[string]interface{}, matcher *Matcher) (bool, []string) {
+		mf := func(data map[string]interface{}, matcher *Matcher) (bool, []MatchHit) {
 			return matcher.MatchWords("hello world", data)
 		}
-		extractFunc := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
+		ef := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
 			return nil
 		}
 
-		result, ok := ops.Execute(map[string]interface{}{}, matchFunc, extractFunc)
+		result, ok := ops.Execute(map[string]interface{}{}, mf, ef)
 		require.False(t, ok)
 		require.Nil(t, result)
 	})
@@ -132,18 +131,18 @@ func TestOperatorsExecute(t *testing.T) {
 		err := ops.Compile()
 		require.NoError(t, err)
 
-		matchFunc := func(data map[string]interface{}, matcher *Matcher) (bool, []string) {
+		mf := func(data map[string]interface{}, matcher *Matcher) (bool, []MatchHit) {
 			return false, nil
 		}
-		extractFunc := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
+		ef := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
 			return extractor.ExtractRegex("version: 1.2")
 		}
 
-		result, ok := ops.Execute(map[string]interface{}{}, matchFunc, extractFunc)
+		result, ok := ops.Execute(map[string]interface{}{}, mf, ef)
 		require.True(t, ok)
 		require.NotNil(t, result)
 		require.True(t, result.Extracted)
-		require.Contains(t, result.Extracts, "version")
+		require.Contains(t, result.ExtractsByName(), "version")
 	})
 
 	t.Run("internal extractor is gated by failed matcher", func(t *testing.T) {
@@ -164,14 +163,14 @@ func TestOperatorsExecute(t *testing.T) {
 		err := ops.Compile()
 		require.NoError(t, err)
 
-		matchFunc := func(data map[string]interface{}, matcher *Matcher) (bool, []string) {
+		mf := func(data map[string]interface{}, matcher *Matcher) (bool, []MatchHit) {
 			return matcher.MatchWords("next=/dynamic-login", data)
 		}
-		extractFunc := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
+		ef := func(data map[string]interface{}, extractor *Extractor) map[string]struct{} {
 			return extractor.ExtractRegex("next=/dynamic-login")
 		}
 
-		result, ok := ops.Execute(map[string]interface{}{}, matchFunc, extractFunc)
+		result, ok := ops.Execute(map[string]interface{}{}, mf, ef)
 		require.False(t, ok)
 		require.Nil(t, result)
 	})
