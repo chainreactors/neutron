@@ -42,7 +42,11 @@ func NewChainExecutor(config ChainConfig) *ChainExecutor {
 }
 
 // Add registers a template by its ID and the IDs it chains to.
+// Safe to call on a nil receiver (no-op).
 func (e *ChainExecutor) Add(id string, chainIDs []string) {
+	if e == nil {
+		return
+	}
 	e.chains[id] = chainIDs
 	e.order = append(e.order, id)
 	for _, cid := range chainIDs {
@@ -52,18 +56,27 @@ func (e *ChainExecutor) Add(id string, chainIDs []string) {
 
 // Has reports whether a template with the given ID has been registered.
 func (e *ChainExecutor) Has(id string) bool {
+	if e == nil {
+		return false
+	}
 	_, ok := e.chains[id]
 	return ok
 }
 
 // IsEntrypoint reports whether id is NOT referenced as a chain target.
 func (e *ChainExecutor) IsEntrypoint(id string) bool {
+	if e == nil {
+		return false
+	}
 	return !e.chainTargets[id]
 }
 
 // Entrypoints returns all registered IDs that are not chain targets,
 // preserving insertion order.
 func (e *ChainExecutor) Entrypoints() []string {
+	if e == nil {
+		return nil
+	}
 	var eps []string
 	for _, id := range e.order {
 		if e.IsEntrypoint(id) {
@@ -75,7 +88,11 @@ func (e *ChainExecutor) Entrypoints() []string {
 
 // Execute walks the chain graph starting from startIDs.
 // Use Entrypoints() as startIDs to run only non-chain-target templates.
+// Safe to call on a nil receiver (no-op).
 func (e *ChainExecutor) Execute(startIDs []string, fn ExecuteFunc) {
+	if e == nil {
+		return
+	}
 	executed := make(map[string]bool)
 	if e.config.DepthFirst {
 		for _, id := range startIDs {
