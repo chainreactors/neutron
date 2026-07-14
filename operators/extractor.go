@@ -124,6 +124,7 @@ func (e *Extractor) CompileExtractors() error {
 
 	// Compile the regexes
 	for _, regex := range e.Regex {
+		regex = strings.TrimPrefix(regex, "(?x)")
 		compiled, err := regexp.Compile(regex)
 		if err != nil {
 			return fmt.Errorf("could not compile regex: %s", regex)

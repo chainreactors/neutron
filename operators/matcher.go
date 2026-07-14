@@ -110,6 +110,7 @@ func (m *Matcher) CompileMatchers() error {
 
 	// Compile the regexes
 	for _, regex := range m.Regex {
+		regex = strings.TrimPrefix(regex, "(?x)")
 		compiled, err := regexp.Compile(regex)
 		if err != nil {
 			return fmt.Errorf("could not Compile regex: %s", regex)
